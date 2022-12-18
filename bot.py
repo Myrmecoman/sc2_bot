@@ -94,11 +94,14 @@ class BasicBot(BotAI):
             await self.expand_now()
             self.build_order.pop(0)
         # Build orbital
-        if self.can_afford(UnitTypeId.ORBITALCOMMAND) and self.build_order[0] == UnitTypeId.ORBITALCOMMAND:
+        orbital_tech_requirement: float = self.tech_requirement_progress(UnitTypeId.ORBITALCOMMAND)
+        if orbital_tech_requirement == 1 and self.can_afford(UnitTypeId.ORBITALCOMMAND) and self.build_order[0] == UnitTypeId.ORBITALCOMMAND:
             cc: Unit
-            for cc in self.structures(UnitTypeId.COMMANDCENTER).ready.idle:
-                cc.build(UnitTypeId.ORBITALCOMMAND)
+            for cc in self.townhalls(UnitTypeId.COMMANDCENTER).idle:
+                print("\n\naaaaa\n\n")
+                cc(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND)
                 self.build_order.pop(0)
+                break
         # Build barracks reactor
         if self.can_afford(UnitTypeId.BARRACKSREACTOR) and self.build_order[0] == UnitTypeId.BARRACKSREACTOR:
             bar: Unit
