@@ -21,7 +21,6 @@ from typing import List, Tuple
 
 # a few usefull variables
 map_names = ["AcropolisLE", "DiscoBloodbathLE", "EphemeronLE", "ThunderbirdLE", "TritonLE", "WintersGateLE", "WorldofSleepersLE"]
-current_dir = str(pathlib.Path(__file__).parent.absolute())
 
 
 # bot code --------------------------------------------------------------------------------------------------------
@@ -98,7 +97,6 @@ class BasicBot(BotAI):
         if orbital_tech_requirement == 1 and self.can_afford(UnitTypeId.ORBITALCOMMAND) and self.build_order[0] == UnitTypeId.ORBITALCOMMAND:
             cc: Unit
             for cc in self.townhalls(UnitTypeId.COMMANDCENTER).idle:
-                print("\n\naaaaa\n\n")
                 cc(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND)
                 self.build_order.pop(0)
                 break
@@ -143,16 +141,36 @@ class BasicBot(BotAI):
         #    scv.gather(self.mineral_field.closest_to(self.townhalls.random))
 
 
-    async def handle_supply(self, amount=1):
-        if self.supply_left > 3 or not self.can_afford(UnitTypeId.SUPPLYDEPOT) or self.supply_cap >= 200 or len(self.build_order) != 0:
-            return
-        ccs: Units = self.townhalls
-        for i in range(amount):
-            await self.build(UnitTypeId.SUPPLYDEPOT, near=ccs.random.position.towards(self.game_info.map_center, 8))
+    async def handle_supply(self):
+        if self.supply_left < 5 and self.townhalls and self.supply_used >= 14 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 1:
+            workers: Units = self.workers.gathering
+            if workers:
+                worker: Unit = workers.furthest_to(workers.center)
+                location: Point2 = await self.find_placement(UnitTypeId.SUPPLYDEPOT, worker.position, placement_step=3)
+                if location:
+                    worker.build(UnitTypeId.SUPPLYDEPOT, location)
+                if len(self.build_order) == 0:
+                    ccs: Units = self.townhalls
+                    await self.build(UnitTypeId.SUPPLYDEPOT, near=ccs.random.position.towards(self.game_info.map_center, 8))
+
+
+    def handle_orbitals(self):
+        # Manage orbital energy and drop mules
+        for oc in self.townhalls(UnitTypeId.ORBITALCOMMAND).filter(lambda x: x.energy >= 50):
+            mfs: Units = self.mineral_field.closer_than(10, oc)
+            if mfs:
+                mf: Unit = max(mfs, key=lambda x: x.mineral_contents)
+                oc(AbilityId.CALLDOWNMULE_CALLDOWNMULE, mf)
+        # Build orbital
+        if self.can_afford(UnitTypeId.ORBITALCOMMAND) and len(self.build_order) == 0:
+            cc: Unit
+            for cc in self.townhalls(UnitTypeId.COMMANDCENTER).idle:
+                cc(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND)
+                break
 
 
     def build_worker(self):
-        if not self.can_afford(UnitTypeId.SCV) or self.townhalls.amount <= 0:
+        if not self.can_afford(UnitTypeId.SCV) or self.townhalls.amount <= 0 or self.workers.amount > 70:
             return
         ccs: Units = self.townhalls
         for cc in ccs:
@@ -179,19 +197,21 @@ class BasicBot(BotAI):
         await self.distribute_workers()
         self.handle_workers()
         self.handle_depot_status()
+        self.handle_orbitals()
         await self.early_build_order()
         await self.handle_supply()
         self.build_worker()
         self.produce()
 
-        if self.townhalls.amount <= 0 or self.supply_used == 0:
+        if self.townhalls.amount == 0 or self.supply_used == 0:
             await self.client.leave()
             return
 
 
 def launch_game():
     run_game(maps.get(map_names[random.randint(0, len(map_names) - 1)]),
-            [Bot(Race.Terran, BasicBot()), Computer(Race.Random, Difficulty.Easy)], # VeryHard, VeryEasy
+            [Bot(Race.Terran, BasicBot()), Computer(Race.Random, Difficulty.Medium)], # VeryHard, VeryEasy
             realtime=False)
+
 
 launch_game()
