@@ -27,10 +27,12 @@ map_names = ["AcropolisLE", "DiscoBloodbathLE", "EphemeronLE", "ThunderbirdLE", 
 class BasicBot(BotAI):
     def __init__(self):
         self.unit_command_uses_self_do = False
-
         # build order
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY, UnitTypeId.REFINERY,
         UnitTypeId.BARRACKSREACTOR]
+        self.building_starport = 0
+        self.building_factory = 0
+        self.building_barrack = 0
 
 
     # Return all points that need to be checked when trying to build an addon. Returns 4 points.
@@ -71,14 +73,16 @@ class BasicBot(BotAI):
             if workers and barracks_placement_position:  # if workers were found
                 worker: Unit = workers.random
                 worker.build(UnitTypeId.BARRACKS, barracks_placement_position)
+                self.building_barrack += 1
                 self.build_order.pop(0)
         # Build factory
         if self.can_afford(UnitTypeId.FACTORY) and self.build_order[0] == UnitTypeId.FACTORY:
             await self.build(UnitTypeId.FACTORY, near=ccs.ready.first.position.towards(self.game_info.map_center, 8))
+            self.building_factory += 1
             self.build_order.pop(0)
         # Build refinery
         if self.can_afford(UnitTypeId.REFINERY) and self.build_order[0] == UnitTypeId.REFINERY:
-            vgs: Units = self.vespene_geyser.closer_than(20, self.townhalls.first)
+            vgs: Units = self.vespene_geyser.closer_than(20, self.townhalls.ready.first)
             for vg in vgs:
                 if self.gas_buildings.filter(lambda unit: unit.distance_to(vg) < 1):
                     break
@@ -142,7 +146,7 @@ class BasicBot(BotAI):
 
 
     async def handle_supply(self):
-        if self.supply_left < 5 and self.townhalls and self.supply_used >= 14 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 1:
+        if self.supply_left < 5 and self.supply_used >= 14 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 1 and len(self.build_order) == 0:
             workers: Units = self.workers.gathering
             if workers:
                 worker: Unit = workers.furthest_to(workers.center)
@@ -189,11 +193,65 @@ class BasicBot(BotAI):
         for fac in self.structures(UnitTypeId.FACTORY).ready.idle:
             if self.can_afford(UnitTypeId.HELLION):
                 fac.build(UnitTypeId.HELLION)
+    
+
+    async def macro(self):
+        if len(self.build_order) != 0:
+            return
+        if self.minerals > 500:
+            await self.expand_now()
+        if self.townhalls.amount >= 2 and self.structures(UnitTypeId.STARPORT).amount + self.building_starport < 1 and self.can_afford(UnitTypeId.STARPORT):
+            self.building_starport += 1
+            await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+        if self.townhalls.amount >= 2 and self.structures(UnitTypeId.BARRACKS).amount + self.building_barrack < 2 and self.can_afford(UnitTypeId.BARRACKS):
+            self.building_barrack += 1
+            await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+        if self.townhalls.amount >= 3 and self.structures(UnitTypeId.BARRACKS).amount + self.building_barrack < 5  and self.can_afford(UnitTypeId.BARRACKS):
+            self.building_barrack += 1
+            await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+        if self.townhalls.amount >= 4 and self.structures(UnitTypeId.BARRACKS).amount + self.building_barrack < 8  and self.can_afford(UnitTypeId.BARRACKS):
+            self.building_barrack += 1
+            await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+
+
+    async def micro(self):
+        units = []
+        units.append(self.units(UnitTypeId.MARINE))
+        units.append(self.units(UnitTypeId.HELLION))
+
+        attack = True
+        pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
+        if self.supply_army >= 20:
+            enemies: Units = self.enemy_units | self.enemy_structures
+            enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(self.start_location))
+            if enemy_closest.amount > 0:
+                pos = enemy_closest[0]
+            else:
+                pos = self.enemy_start_locations[0]
+        if self.supply_army < 10:
+            pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
+            attack = False
+
+        for i in units:
+            for j in i:
+                if attack:
+                    j.attack(pos)
+                else:
+                    j.move(pos)
+    
+
+    async def on_building_construction_complete(self, Structure: Unit):
+        if Structure.type_id == UnitTypeId.BARRACKS:
+            self.building_barrack -= 1
+        if Structure.type_id == UnitTypeId.FACTORY:
+            self.building_factory -= 1
+        if Structure.type_id == UnitTypeId.STARPORT:
+            self.building_starport -= 1
 
 
     async def on_step(self, iteration: int):
 
-        time.sleep(0.05)
+        time.sleep(0.03)
         await self.distribute_workers()
         self.handle_workers()
         self.handle_depot_status()
@@ -202,6 +260,8 @@ class BasicBot(BotAI):
         await self.handle_supply()
         self.build_worker()
         self.produce()
+        await self.macro()
+        await self.micro()
 
         if self.townhalls.amount == 0 or self.supply_used == 0:
             await self.client.leave()
@@ -210,7 +270,7 @@ class BasicBot(BotAI):
 
 def launch_game():
     run_game(maps.get(map_names[random.randint(0, len(map_names) - 1)]),
-            [Bot(Race.Terran, BasicBot()), Computer(Race.Random, Difficulty.Medium)], # VeryHard, VeryEasy
+            [Bot(Race.Terran, BasicBot()), Computer(Race.Random, Difficulty.Medium)], # VeryHard, VeryEasy, Medium
             realtime=False)
 
 
