@@ -121,7 +121,7 @@ class BasicBot(BotAI):
                 depo(AbilityId.MORPH_SUPPLYDEPOT_LOWER)
         else:
             for depo in self.structures(UnitTypeId.SUPPLYDEPOT).ready:
-                for unit in self.enemy_units:
+                for unit in self.enemy_units.not_flying:
                     if unit.distance_to(depo) < 15:
                         break
                     else:
@@ -140,9 +140,6 @@ class BasicBot(BotAI):
                 worker: Units = self.workers.closer_than(10, refinery)
                 if worker:
                     worker.random.gather(refinery)
-        # Send workers back to mine if they are idle
-        #for scv in self.workers.idle:
-        #    scv.gather(self.mineral_field.closest_to(self.townhalls.random))
 
 
     async def handle_supply(self):
@@ -198,11 +195,11 @@ class BasicBot(BotAI):
     async def macro(self):
         if len(self.build_order) != 0:
             return
-        if self.minerals > 500:
+        if self.minerals > 500 and self.townhalls.amount < 15:
             await self.expand_now()
         if self.townhalls.amount >= 2 and self.structures(UnitTypeId.STARPORT).amount + self.building_starport < 1 and self.can_afford(UnitTypeId.STARPORT):
             self.building_starport += 1
-            await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+            await self.build(UnitTypeId.STARPORT, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
         if self.townhalls.amount >= 2 and self.structures(UnitTypeId.BARRACKS).amount + self.building_barrack < 2 and self.can_afford(UnitTypeId.BARRACKS):
             self.building_barrack += 1
             await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
@@ -221,14 +218,14 @@ class BasicBot(BotAI):
 
         attack = True
         pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
-        if self.supply_army >= 20:
+        if self.supply_army > 30:
             enemies: Units = self.enemy_units | self.enemy_structures
             enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(self.start_location))
             if enemy_closest.amount > 0:
                 pos = enemy_closest[0]
             else:
                 pos = self.enemy_start_locations[0]
-        if self.supply_army < 10:
+        if self.supply_army < 20:
             pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
             attack = False
 
@@ -270,7 +267,7 @@ class BasicBot(BotAI):
 
 def launch_game():
     run_game(maps.get(map_names[random.randint(0, len(map_names) - 1)]),
-            [Bot(Race.Terran, BasicBot()), Computer(Race.Random, Difficulty.Medium)], # VeryHard, VeryEasy, Medium
+            [Bot(Race.Terran, BasicBot()), Computer(Race.Random, Difficulty.Hard)], # VeryHard, VeryEasy, Medium
             realtime=False)
 
 
