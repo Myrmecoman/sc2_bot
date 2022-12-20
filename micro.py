@@ -16,12 +16,28 @@ from sc2.units import Units
 from sc2.bot_ai import BotAI
 
 
+# very basic indicator
 def should_we_fight(self : BotAI):
     nb_enemies = self.enemy_units.amount
     nb_army = self.army_count
     if nb_army / (nb_enemies + 0.01) > 1.5:
         return True
     return False
+
+
+# same as attack, except medivacs and other non attacking units don't suicide straight in the enemy lines
+def soft_attack(units : Units, unit : Unit, position_or_enemy):
+    if not unit.can_attack:
+        pos = units.not_flying.closest_to(position_or_enemy).position
+        unit.attack(pos)
+        return
+
+    unit.attack(position_or_enemy)
+
+
+# move to retreat avoiding enemies as much as possible
+def smart_move(unit : Unit, position):
+    unit.move(position)
 
 
 async def micro(self : BotAI):
@@ -54,13 +70,13 @@ async def micro(self : BotAI):
             elif i.type_id == UnitTypeId.SIEGETANKSIEGED and (enemy_closest.amount == 0 or enemy_closest.first.distance_to(i.position) >= 13):
                 i(AbilityId.UNSIEGE_UNSIEGE)
             elif enemy_closest.amount > 0:
-                i.attack(enemy_closest.first)
+                soft_attack(units, i, enemy_closest.first)
             else:
-                i.attack(pos)
+                soft_attack(units, i, pos)
         else:
             if i.type_id == UnitTypeId.SIEGETANKSIEGED and enemy_closest.amount > 0 and enemy_closest.first.distance_to(i.position) > 13:
                 i(AbilityId.UNSIEGE_UNSIEGE)
             elif enemy_closest.amount > 0 and enemy_closest.first.distance_to(i.position) <= 6:
-                i.attack(enemy_closest.first)
+                soft_attack(units, i, enemy_closest.first)
             else:
-                i.move(pos)
+                smart_move(i, pos)
