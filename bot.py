@@ -2,7 +2,6 @@ import numpy as np
 import random
 from collections import namedtuple, deque
 import pathlib
-import cv2
 import time
 from threading import Thread
 from sc2 import maps
@@ -33,6 +32,11 @@ class BasicBot(BotAI):
         self.building_starport = 0
         self.building_factory = 0
         self.building_barrack = 0
+        self.building_engi = 0
+
+
+    def can_build_structure(self, type, amount):
+        return self.structures(type).ready.amount + self.already_pending(type) < amount and self.can_afford(type) and self.tech_requirement_progress(type) == 1
 
 
     # Return all points that need to be checked when trying to build an addon. Returns 4 points.
@@ -76,7 +80,7 @@ class BasicBot(BotAI):
                 self.building_barrack += 1
                 self.build_order.pop(0)
         # Build factory
-        if self.can_afford(UnitTypeId.FACTORY) and self.build_order[0] == UnitTypeId.FACTORY:
+        if self.can_afford(UnitTypeId.FACTORY) and self.build_order[0] == UnitTypeId.FACTORY and self.tech_requirement_progress(UnitTypeId.FACTORY) == 1:
             await self.build(UnitTypeId.FACTORY, near=ccs.ready.first.position.towards(self.game_info.map_center, 8))
             self.building_factory += 1
             self.build_order.pop(0)
@@ -190,31 +194,45 @@ class BasicBot(BotAI):
         for fac in self.structures(UnitTypeId.FACTORY).ready.idle:
             if self.can_afford(UnitTypeId.HELLION):
                 fac.build(UnitTypeId.HELLION)
+        for st in self.structures(UnitTypeId.STARPORT).ready.idle:
+            if self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < 8:
+                st.build(UnitTypeId.MEDIVAC)
+    
+
+    async def handle_add_ons():
+        return
     
 
     async def macro(self):
         if len(self.build_order) != 0:
             return
-        if self.minerals > 500 and self.townhalls.amount < 15:
-            await self.expand_now()
-        if self.townhalls.amount >= 2 and self.structures(UnitTypeId.STARPORT).amount + self.building_starport < 1 and self.can_afford(UnitTypeId.STARPORT):
+        if self.townhalls.amount >= 2 and self.can_build_structure(UnitTypeId.STARPORT, 1):
             self.building_starport += 1
             await self.build(UnitTypeId.STARPORT, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
-        if self.townhalls.amount >= 2 and self.structures(UnitTypeId.BARRACKS).amount + self.building_barrack < 2 and self.can_afford(UnitTypeId.BARRACKS):
+        if self.townhalls.amount >= 2 and self.can_build_structure(UnitTypeId.FACTORY, 1):
+            self.building_factory += 1
+            await self.build(UnitTypeId.FACTORY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+        if self.townhalls.amount >= 2 and self.can_build_structure(UnitTypeId.BARRACKS, 2):
             self.building_barrack += 1
             await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
-        if self.townhalls.amount >= 3 and self.structures(UnitTypeId.BARRACKS).amount + self.building_barrack < 5  and self.can_afford(UnitTypeId.BARRACKS):
+        if self.townhalls.amount >= 3 and self.can_build_structure(UnitTypeId.BARRACKS, 5):
             self.building_barrack += 1
             await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
-        if self.townhalls.amount >= 4 and self.structures(UnitTypeId.BARRACKS).amount + self.building_barrack < 8  and self.can_afford(UnitTypeId.BARRACKS):
+        if self.townhalls.amount >= 4 and self.can_build_structure(UnitTypeId.BARRACKS, 8):
             self.building_barrack += 1
             await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+        if self.townhalls.amount >= 3 and self.can_build_structure(UnitTypeId.ENGINEERINGBAY, 2):
+            self.building_engi += 1
+            await self.build(UnitTypeId.ENGINEERINGBAY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+        if self.minerals > 500 and self.townhalls.amount < 15:
+            await self.expand_now()
 
 
     async def micro(self):
         units = []
         units.append(self.units(UnitTypeId.MARINE))
         units.append(self.units(UnitTypeId.HELLION))
+        units.append(self.units(UnitTypeId.MEDIVAC))
 
         attack = True
         pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
@@ -244,6 +262,8 @@ class BasicBot(BotAI):
             self.building_factory -= 1
         if Structure.type_id == UnitTypeId.STARPORT:
             self.building_starport -= 1
+        if Structure.type_id == UnitTypeId.ENGINEERINGBAY:
+            self.building_engi -= 1
 
 
     async def on_step(self, iteration: int):
@@ -255,10 +275,10 @@ class BasicBot(BotAI):
         self.handle_orbitals()
         await self.early_build_order()
         await self.handle_supply()
-        self.build_worker()
-        self.produce()
         await self.macro()
         await self.micro()
+        self.build_worker()
+        self.produce()
 
         if self.townhalls.amount == 0 or self.supply_used == 0:
             await self.client.leave()
