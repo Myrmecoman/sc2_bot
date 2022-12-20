@@ -13,6 +13,7 @@ from sc2.ids.unit_typeid import UnitTypeId
 from sc2.unit import Unit
 from sc2.units import Units
 from sc2.ids.ability_id import AbilityId
+from sc2.ids.upgrade_id import UpgradeId
 from sc2.position import Point2, Point3
 from typing import FrozenSet, Set
 from typing import List, Tuple
@@ -65,11 +66,9 @@ class BasicBot(BotAI):
             await self.build(UnitTypeId.SUPPLYDEPOT, near=target_depot_location)
             self.build_order.pop(0)
         # Build barracks
-        if self.can_afford(UnitTypeId.BARRACKS) and self.build_order[0] == UnitTypeId.BARRACKS and depots.ready:
-            if barracks_placement_position:
-                await self.build(UnitTypeId.BARRACKS, near=barracks_placement_position)
-                self.build_order.pop(0)
-                print("barracks")
+        if self.can_afford(UnitTypeId.BARRACKS) and self.build_order[0] == UnitTypeId.BARRACKS and self.tech_requirement_progress(UnitTypeId.BARRACKS) == 1 and barracks_placement_position:
+            await self.build(UnitTypeId.BARRACKS, near=barracks_placement_position)
+            self.build_order.pop(0)
         # Build factory
         if self.can_afford(UnitTypeId.FACTORY) and self.build_order[0] == UnitTypeId.FACTORY and self.tech_requirement_progress(UnitTypeId.FACTORY) == 1:
             await self.build(UnitTypeId.FACTORY, near=ccs.ready.first.position.towards(self.game_info.map_center, 8))
@@ -150,12 +149,13 @@ class BasicBot(BotAI):
 
 
     def handle_orbitals(self):
-        # Manage orbital energy and drop mules
-        for oc in self.townhalls(UnitTypeId.ORBITALCOMMAND).filter(lambda x: x.energy >= 50):
-            mfs: Units = self.mineral_field.closer_than(10, oc)
-            if mfs:
-                mf: Unit = max(mfs, key=lambda x: x.mineral_contents)
-                oc(AbilityId.CALLDOWNMULE_CALLDOWNMULE, mf)
+        # Manage orbital energy and drop mules if we need minerals, else keep for scanning
+        if self.minerals < 800:
+            for oc in self.townhalls(UnitTypeId.ORBITALCOMMAND).filter(lambda x: x.energy >= 50):
+                mfs: Units = self.mineral_field.closer_than(10, oc)
+                if mfs:
+                    mf: Unit = max(mfs, key=lambda x: x.mineral_contents)
+                    oc(AbilityId.CALLDOWNMULE_CALLDOWNMULE, mf)
         # Build orbital
         if self.can_afford(UnitTypeId.ORBITALCOMMAND) and len(self.build_order) == 0:
             cc: Unit
@@ -165,7 +165,7 @@ class BasicBot(BotAI):
 
 
     def build_worker(self):
-        if not self.can_afford(UnitTypeId.SCV) or self.townhalls.amount <= 0 or self.workers.amount > 70 or self.workers.amount > self.townhalls.amount * 22:
+        if not self.can_afford(UnitTypeId.SCV) or self.townhalls.amount == 0 or self.workers.amount > 70 or self.workers.amount >= self.townhalls.amount * 22:
             return
         ccs: Units = self.townhalls
         for cc in ccs:
@@ -177,10 +177,12 @@ class BasicBot(BotAI):
     def produce(self):
         for bar in self.structures(UnitTypeId.BARRACKS).ready.idle:
             if bar.has_add_on:
-                add_on = self.units.find_by_tag(bar.add_on_tag)
-                if add_on.type_id == UnitTypeId.TECHLAB and self.can_afford(UnitTypeId.MARAUDER):
+                add_on = self.structures.find_by_tag(bar.add_on_tag)
+                if add_on is None:
+                    continue
+                if add_on.type_id == UnitTypeId.BARRACKSTECHLAB and self.can_afford(UnitTypeId.MARAUDER):
                     bar.build(UnitTypeId.MARAUDER)
-                elif self.can_afford(UnitTypeId.MARINE):
+                elif add_on.type_id == UnitTypeId.BARRACKSREACTOR and self.can_afford(UnitTypeId.MARINE):
                     bar.build(UnitTypeId.MARINE)
                     if self.can_afford(UnitTypeId.MARINE):
                         bar.build(UnitTypeId.MARINE)
@@ -189,10 +191,12 @@ class BasicBot(BotAI):
 
         for fac in self.structures(UnitTypeId.FACTORY).ready.idle:
             if fac.has_add_on:
-                add_on = self.units.find_by_tag(fac.add_on_tag)
-                if add_on.type_id == UnitTypeId.TECHLAB and self.can_afford(UnitTypeId.SIEGETANK):
+                add_on = self.structures.find_by_tag(fac.add_on_tag)
+                if add_on is None:
+                    continue
+                if add_on.type_id == UnitTypeId.FACTORYTECHLAB and self.can_afford(UnitTypeId.SIEGETANK):
                     fac.build(UnitTypeId.SIEGETANK)
-                elif self.can_afford(UnitTypeId.HELLION):
+                elif add_on.type_id == UnitTypeId.FACTORYREACTOR and self.can_afford(UnitTypeId.HELLION):
                     fac.build(UnitTypeId.HELLION)
                     if self.can_afford(UnitTypeId.HELLION):
                         fac.build(UnitTypeId.HELLION)
@@ -201,10 +205,12 @@ class BasicBot(BotAI):
 
         for st in self.structures(UnitTypeId.STARPORT).ready.idle:
             if st.has_add_on:
-                add_on = self.units.find_by_tag(st.add_on_tag)
-                if add_on.type_id == UnitTypeId.TECHLAB and self.can_afford(UnitTypeId.RAVEN) and self.units(UnitTypeId.RAVEN).amount < 4:
+                add_on = self.structures.find_by_tag(st.add_on_tag)
+                if add_on is None:
+                    continue
+                if add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.RAVEN) and self.units(UnitTypeId.RAVEN).amount < 4:
                     st.build(UnitTypeId.RAVEN)
-                elif self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < 8:
+                elif add_on.type_id == UnitTypeId.STARPORTREACTOR and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < 8:
                     st.build(UnitTypeId.MEDIVAC)
                     if self.can_afford(UnitTypeId.MEDIVAC):
                         st.build(UnitTypeId.MEDIVAC)
@@ -212,24 +218,27 @@ class BasicBot(BotAI):
                 st.build(UnitTypeId.MEDIVAC)
     
 
-    def build_add_on(self, type, flying_type, add_on_type):
+    def build_add_on(self, type, add_on_type):
         # Build addon or lift if no room to build addon
         u: Unit
         for u in self.structures(type).ready.idle:
             if not u.has_add_on and self.can_afford(add_on_type):
                 addon_points = self.points_to_build_addon(u.position)
-                if all(self.in_map_bounds(addon_point) and self.in_placement_grid(addon_point)and self.in_pathing_grid(addon_point) for addon_point in addon_points):
+                if all(self.in_map_bounds(addon_point) and self.in_placement_grid(addon_point) and self.in_pathing_grid(addon_point) for addon_point in addon_points):
                     u.build(add_on_type)
                 else:
                     u(AbilityId.LIFT)
+                break
+    
 
+    def land_structures_for_addons(self):
         # Return all points that need to be checked when trying to land at a location where there is enough space to build an addon. Returns 13 points.
         def land_positions(u_position: Point2) -> List[Point2]:
             land_positions = [(u_position + Point2((x, y))).rounded for x in range(-1, 2) for y in range(-1, 2)]
             return land_positions + self.points_to_build_addon(u_position)
 
         # Find a position to land for a flying structure so that it can build an addon
-        for u in self.structures(flying_type).idle:
+        for u in self.structures.of_type({UnitTypeId.BARRACKSFLYING, UnitTypeId.FACTORYFLYING, UnitTypeId.STARPORTFLYING}).idle:
             possible_land_positions_offset = sorted((Point2((x, y)) for x in range(-10, 10) for y in range(-10, 10)), key=lambda point: point.x**2 + point.y**2,)
             offset_point: Point2 = Point2((-0.5, -0.5))
             possible_land_positions = (u.position.rounded + offset_point + p for p in possible_land_positions_offset)
@@ -248,30 +257,55 @@ class BasicBot(BotAI):
         for b in bars.ready.idle:
             if self.structures(UnitTypeId.BARRACKSREACTOR).amount + self.already_pending(UnitTypeId.BARRACKSREACTOR) < bars.amount/2:
                 if self.can_afford(UnitTypeId.REACTOR):
-                    self.build_add_on(UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, UnitTypeId.BARRACKSREACTOR)
+                    self.build_add_on(UnitTypeId.BARRACKS, UnitTypeId.BARRACKSREACTOR)
             elif self.can_afford(UnitTypeId.TECHLAB):
-                self.build_add_on(UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, UnitTypeId.BARRACKSTECHLAB)
+                self.build_add_on(UnitTypeId.BARRACKS, UnitTypeId.BARRACKSTECHLAB)
 
         fac: Units = self.structures(UnitTypeId.FACTORY)
         for f in fac.ready.idle:
             if self.structures(UnitTypeId.FACTORYTECHLAB).amount + self.already_pending(UnitTypeId.FACTORYTECHLAB) < fac.amount/2:
                 if self.can_afford(UnitTypeId.TECHLAB):
-                    self.build_add_on(UnitTypeId.FACTORY, UnitTypeId.FACTORYFLYING, UnitTypeId.FACTORYTECHLAB)
+                    self.build_add_on(UnitTypeId.FACTORY, UnitTypeId.FACTORYTECHLAB)
             elif self.can_afford(UnitTypeId.REACTOR):
-                self.build_add_on(UnitTypeId.FACTORY, UnitTypeId.FACTORYFLYING, UnitTypeId.FACTORYREACTOR)
+                self.build_add_on(UnitTypeId.FACTORY, UnitTypeId.FACTORYREACTOR)
 
         sp: Units = self.structures(UnitTypeId.STARPORT)
         for s in sp.ready.idle:
             if self.structures(UnitTypeId.STARPORTREACTOR).amount + self.already_pending(UnitTypeId.STARPORTREACTOR) < sp.amount/2:
                 if self.can_afford(UnitTypeId.REACTOR):
-                    self.build_add_on(UnitTypeId.STARPORT, UnitTypeId.STARPORTFLYING, UnitTypeId.STARPORTREACTOR)
+                    self.build_add_on(UnitTypeId.STARPORT, UnitTypeId.STARPORTREACTOR)
             elif self.can_afford(UnitTypeId.TECHLAB):
-                self.build_add_on(UnitTypeId.STARPORT, UnitTypeId.STARPORTFLYING, UnitTypeId.STARPORTTECHLAB)
+                self.build_add_on(UnitTypeId.STARPORT, UnitTypeId.STARPORTTECHLAB)
     
+
+    def handle_constructions(self):
+        for b in self.structures_without_construction_SCVs:
+            return
+    
+
+    def handle_upgrades(self):
+        engis = self.structures(UnitTypeId.ENGINEERINGBAY).ready.idle
+        for engi in engis:
+            if self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) == 0:
+                engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL1)
+            elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1) == 0:
+                engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)
+            
+            if self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL2) == 0:
+                engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL2)
+            elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2) == 0:
+                engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2)
+            
+            if self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL3) == 0:
+                engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL3)
+            elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 0:
+                engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3)
+
 
     async def macro(self):
         if len(self.build_order) != 0:
             return
+
         if self.townhalls.amount >= 2 and self.can_build_structure(UnitTypeId.STARPORT, 1):
             await self.build(UnitTypeId.STARPORT, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
         if self.townhalls.amount >= 2 and self.can_build_structure(UnitTypeId.FACTORY, 1):
@@ -284,15 +318,50 @@ class BasicBot(BotAI):
             await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
         if self.townhalls.amount >= 3 and self.can_build_structure(UnitTypeId.ENGINEERINGBAY, 2):
             await self.build(UnitTypeId.ENGINEERINGBAY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
-        if self.minerals > 500 and self.townhalls.amount < 15:
+        if (self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)) and self.can_afford(UnitTypeId.ARMORY):
+            await self.build(UnitTypeId.ARMORY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+        if self.can_afford(UnitTypeId.COMMANDCENTER) and self.townhalls.amount < 12:
             await self.expand_now()
+
+        # build refineries
+        refineries = self.structures(UnitTypeId.REFINERY)
+        active_refineries = 0
+        for r in refineries:
+            if r.vespene_contents > 0:
+                active_refineries += 1
+        if self.townhalls.amount >= 3 and active_refineries < 4 and self.can_afford(UnitTypeId.REFINERY):
+            for th in self.townhalls.ready:
+                vgs: Units = self.vespene_geyser.closer_than(10, th)
+                for vg in vgs:
+                    if await self.can_place_single(UnitTypeId.REFINERY, vg.position):
+                        workers: Units = self.workers.gathering
+                        if workers:
+                            worker: Unit = workers.closest_to(vg)
+                            worker.build_gas(vg)
+                            break
+        if self.townhalls.amount >= 4 and active_refineries < 6 and self.can_afford(UnitTypeId.REFINERY):
+            for th in self.townhalls.ready:
+                vgs: Units = self.vespene_geyser.closer_than(10, th)
+                for vg in vgs:
+                    if await self.can_place_single(UnitTypeId.REFINERY, vg.position):
+                        workers: Units = self.workers.gathering
+                        if workers:
+                            worker: Unit = workers.closest_to(vg)
+                            worker.build_gas(vg)
+                            break
 
 
     async def micro(self):
         units = []
         units.append(self.units(UnitTypeId.MARINE))
+        units.append(self.units(UnitTypeId.MARAUDER))
         units.append(self.units(UnitTypeId.HELLION))
+        units.append(self.units(UnitTypeId.SIEGETANK))
         units.append(self.units(UnitTypeId.MEDIVAC))
+        units.append(self.units(UnitTypeId.RAVEN))
+
+        if len(units) == 0:
+            return
 
         attack = True
         pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
@@ -327,8 +396,11 @@ class BasicBot(BotAI):
         await self.macro()
         await self.micro()
         self.build_worker()
-        self.handle_add_ons()
         self.produce()
+        self.land_structures_for_addons()
+        self.handle_add_ons()
+        self.handle_constructions()
+        self.handle_upgrades()
 
         if self.townhalls.amount == 0 or self.supply_used == 0:
             await self.client.leave()
@@ -336,8 +408,8 @@ class BasicBot(BotAI):
 
 
 def launch_game():
-    run_game(maps.get(map_names[random.randint(0, len(map_names) - 1)]),
-            [Bot(Race.Terran, BasicBot()), Computer(Race.Random, Difficulty.Hard)], # VeryHard, VeryEasy, Medium
+    run_game(maps.get("AcropolisLE"), # maps.get(map_names[random.randint(0, len(map_names) - 1)]),
+            [Bot(Race.Terran, BasicBot()), Computer(Race.Random, Difficulty.VeryHard)], # VeryHard, VeryEasy, Medium
             realtime=False)
 
 
