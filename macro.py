@@ -8,6 +8,27 @@ from sc2.position import Point2
 from sc2.bot_ai import BotAI
 
 
+async def build_gas(self : BotAI):
+    for th in self.townhalls.ready:
+        vgs: Units = self.vespene_geyser.closer_than(10, th)
+        for vg in vgs:
+            if await self.can_place_single(UnitTypeId.REFINERY, vg.position):
+                workers: Units = self.workers.gathering
+                if workers:
+                    worker: Unit = workers.closest_to(vg)
+                    worker.build_gas(vg)
+                    break
+
+
+async def build_cc(self : BotAI):
+    location: Point2 = await self.get_next_expansion()
+    if location:
+        worker: Unit = self.select_build_worker(location) # select the nearest worker to that location
+        worker.build(UnitTypeId.COMMANDCENTER, location)
+    else:
+        self.expand_now() # in case it won't work
+
+
 async def macro(self : BotAI):
     if len(self.build_order) != 0:
         return
@@ -29,36 +50,19 @@ async def macro(self : BotAI):
     if (self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) > 0.3 or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)) > 0.3 and can_build_structure(self, UnitTypeId.ARMORY, 1):
         await self.build(UnitTypeId.ARMORY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
     if self.can_afford(UnitTypeId.COMMANDCENTER) and self.townhalls.amount < 12 and self.already_pending(UnitTypeId.COMMANDCENTER) == 0:
-        location: Point2 = await self.get_next_expansion()
-        if location:
-            worker: Unit = self.select_build_worker(location) # select the nearest worker to that location
-            worker.build(UnitTypeId.COMMANDCENTER, location)
-        else:
-            self.expand_now() # in case it won't work
+        build_cc(self)
 
     # build refineries
     refineries = self.structures(UnitTypeId.REFINERY)
     active_refineries = 0
     for r in refineries:
-        if r.vespene_contents > 0:
+        if r.vespene_contents > 20:
             active_refineries += 1
     if self.townhalls.amount >= 3 and active_refineries < 4 and self.can_afford(UnitTypeId.REFINERY):
-        for th in self.townhalls.ready:
-            vgs: Units = self.vespene_geyser.closer_than(10, th)
-            for vg in vgs:
-                if await self.can_place_single(UnitTypeId.REFINERY, vg.position):
-                    workers: Units = self.workers.gathering
-                    if workers:
-                        worker: Unit = workers.closest_to(vg)
-                        worker.build_gas(vg)
-                        break
+        build_gas(self)
     if self.townhalls.amount >= 4 and active_refineries < 6 and self.can_afford(UnitTypeId.REFINERY):
-        for th in self.townhalls.ready:
-            vgs: Units = self.vespene_geyser.closer_than(10, th)
-            for vg in vgs:
-                if await self.can_place_single(UnitTypeId.REFINERY, vg.position):
-                    workers: Units = self.workers.gathering
-                    if workers:
-                        worker: Unit = workers.closest_to(vg)
-                        worker.build_gas(vg)
-                        break
+        build_gas(self)
+    if self.townhalls.amount >= 5 and active_refineries < 7 and self.can_afford(UnitTypeId.REFINERY):
+        build_gas(self)
+    if self.townhalls.amount >= 5 and active_refineries < 8 and self.can_afford(UnitTypeId.REFINERY) and self.minerals > 1200:
+        build_gas(self)

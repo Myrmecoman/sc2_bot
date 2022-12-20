@@ -21,7 +21,7 @@ from sc2.data import Race, Difficulty
 from sc2.bot_ai import BotAI
 from sc2.ids.unit_typeid import UnitTypeId
 
-
+# usefull later : https://github.com/DrInfy/sharpy-sc2/blob/develop/sharpy/plans/tactics/speed_mining.py
 # a few usefull variables
 map_names = ["AcropolisLE", "DiscoBloodbathLE", "EphemeronLE", "ThunderbirdLE", "TritonLE", "WintersGateLE", "WorldofSleepersLE"]
 

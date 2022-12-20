@@ -16,35 +16,51 @@ from sc2.units import Units
 from sc2.bot_ai import BotAI
 
 
+def should_we_fight(self : BotAI):
+    nb_enemies = self.enemy_units.amount
+    nb_army = self.army_count
+    if nb_army / (nb_enemies + 0.01) > 1.5:
+        return True
+    return False
+
+
 async def micro(self : BotAI):
-    units : Units = self.units.of_type({UnitTypeId.MARINE, UnitTypeId.MARAUDER, UnitTypeId.REAPER, UnitTypeId.HELLION, UnitTypeId.SIEGETANK, UnitTypeId.MEDIVAC, UnitTypeId.RAVEN})
+
+    units : Units = self.units.of_type({UnitTypeId.MARINE, UnitTypeId.MARAUDER, UnitTypeId.REAPER, UnitTypeId.GHOST, UnitTypeId.HELLION, UnitTypeId.WIDOWMINE,
+    UnitTypeId.WIDOWMINEBURROWED, UnitTypeId.CYCLONE, UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED, UnitTypeId.VIKING, UnitTypeId.LIBERATOR, UnitTypeId.MEDIVAC,
+    UnitTypeId.RAVEN, UnitTypeId.BATTLECRUISER, UnitTypeId.BANSHEE})
+
     if len(units) == 0:
         return
+
     attack = False
     pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
     enemies: Units = self.enemy_units | self.enemy_structures
-    if self.supply_army > 40:
+    if self.supply_army > 40 and should_we_fight(self):
         enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(self.start_location))
         if enemy_closest.amount > 0:
             pos = enemy_closest[0]
         else:
             pos = self.enemy_start_locations[0]
         attack = True
-    if self.supply_army < 20:
+    elif self.supply_army < 20 or attack == False:
         pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
 
     for i in units:
+        enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(i.position))
         if attack:
-            enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(i.position))
             if i.type_id == UnitTypeId.SIEGETANK and enemy_closest.amount > 0 and enemy_closest.first.distance_to(i.position) <= 12:
                 i(AbilityId.SIEGEMODE_SIEGEMODE)
-            elif i.type_id == UnitTypeId.SIEGETANKSIEGED:
+            elif i.type_id == UnitTypeId.SIEGETANKSIEGED and enemy_closest.first.distance_to(i.position) >= 13:
                 i(AbilityId.UNSIEGE_UNSIEGE)
-            if enemy_closest.amount > 0:
-                i.attack(enemy_closest.first.position)
+            elif enemy_closest.amount > 0:
+                i.attack(enemy_closest.first)
             else:
                 i.attack(pos)
         else:
-            if i.type_id == UnitTypeId.SIEGETANKSIEGED:
+            if i.type_id == UnitTypeId.SIEGETANKSIEGED and enemy_closest.amount > 0 and enemy_closest.first.distance_to(i.position) <= 13.5:
                 i(AbilityId.UNSIEGE_UNSIEGE)
-            i.move(pos)
+            elif enemy_closest.amount > 0 and enemy_closest.first.distance_to(i.position) <= 6:
+                i.attack(enemy_closest.first)
+            else:
+                i.move(pos)
