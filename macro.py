@@ -37,8 +37,12 @@ async def macro(self : BotAI):
         await self.build(UnitTypeId.STARPORT, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
     if self.townhalls.amount >= 4 and can_build_structure(self, UnitTypeId.STARPORT, 2):
         await self.build(UnitTypeId.STARPORT, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+
     if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.FACTORY, 1):
         await self.build(UnitTypeId.FACTORY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+    
+    if self.townhalls.amount >= 1 and can_build_structure(self, UnitTypeId.BARRACKS, 1):
+        await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
     if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.BARRACKS, 2):
         await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
     if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.BARRACKS, 5):

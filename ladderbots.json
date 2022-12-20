@@ -7,7 +7,7 @@
             "FileName": "run.py",
             "Args": "-O",
             "Debug": true,
-            "SurrenderPhrase": "got rekt"
+            "SurrenderPhrase": "(got rekt)"
         }
     }
 }

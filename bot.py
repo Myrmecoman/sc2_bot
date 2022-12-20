@@ -22,27 +22,29 @@ from sc2.bot_ai import BotAI
 from sc2.ids.unit_typeid import UnitTypeId
 
 # usefull later : https://github.com/DrInfy/sharpy-sc2/blob/develop/sharpy/plans/tactics/speed_mining.py
-# a few usefull variables
-map_names = ["AcropolisLE", "DiscoBloodbathLE", "EphemeronLE", "ThunderbirdLE", "TritonLE", "WintersGateLE", "WorldofSleepersLE"]
-
 
 # bot code --------------------------------------------------------------------------------------------------------
 class SmoothBrainBot(BotAI):
     def __init__(self):
         self.unit_command_uses_self_do = False
         self.distance_calculation_method = 3
+        self.worker_rushed = False
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY, UnitTypeId.REFINERY,
         UnitTypeId.BARRACKSREACTOR]
 
 
     async def on_step(self, iteration: int):
-        time.sleep(0.02)
+        time.sleep(0.05)
+        print(self.worker_rushed)
         await self.distribute_workers()
         handle_workers(self)
         handle_depot_status(self)
         handle_orbitals(self)
         await handle_supply(self)
-        await early_build_order(self)
+        if not self.worker_rushed:
+            await early_build_order(self)
+        elif len(self.build_order) != 0:
+            self.build_order = []
         await macro(self)
         build_worker(self)
         land_structures_for_addons(self)
@@ -55,20 +57,3 @@ class SmoothBrainBot(BotAI):
         if self.townhalls.amount == 0 or self.supply_used == 0:
             await self.client.leave()
             return
-
-'''
-def launch_game():
-    run_game(maps.get("AcropolisLE"), # maps.get(map_names[random.randint(0, len(map_names) - 1)]),
-            [Bot(Race.Terran, SmoothBrainBot()), Computer(Race.Random, Difficulty.VeryHard)], # VeryHard, VeryEasy, Medium
-            realtime=False)
-
-
-def launch_human_game():
-    run_game(maps.get("AcropolisLE"), # maps.get(map_names[random.randint(0, len(map_names) - 1)]),
-            [Human(Race.Terran), Bot(Race.Terran, SmoothBrainBot())], # VeryHard, VeryEasy, Medium
-            realtime=True)
-
-
-launch_game()
-#launch_human_game()
-'''

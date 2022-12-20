@@ -31,7 +31,6 @@ def soft_attack(units : Units, unit : Unit, position_or_enemy):
         pos = units.not_flying.closest_to(position_or_enemy).position
         unit.attack(pos)
         return
-
     unit.attack(position_or_enemy)
 
 
@@ -40,7 +39,58 @@ def smart_move(unit : Unit, position):
     unit.move(position)
 
 
+def are_we_worker_rushed(self : BotAI):
+    enemies: Units = self.enemy_units.visible.of_type({UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE}).sorted(lambda x: x.distance_to(self.start_location))
+    dangerous_units = 0
+    for e in enemies:
+        if e.distance_to(self.start_location) < 8:
+            dangerous_units += 1
+    if enemies.empty:
+        return 0, None
+    return dangerous_units, enemies.first.position
+
+
+def counter_worker_rush(self : BotAI):
+    w, pos = are_we_worker_rushed(self)
+    if w < 3 and not self.worker_rushed:
+        return False
+
+    self.worker_rushed = True
+    counter = 0
+    for i in self.workers:
+        if i.health <= 10:
+            mfs: Units = self.mineral_field.closer_than(10, self.townhalls.first)
+            if mfs:
+                mf: Unit = mfs.closest_to(i)
+                i.gather(mf)
+            i.move(self.mineral_field.closest_to(i.position))
+            continue
+        counter += 1
+        if counter > 2 * w: # only pull twice their amount
+            break
+        i.attack(pos)
+    if counter < 2 * w:
+        for i in self.workers.idle:
+            i.attack(pos)
+    return True
+
+
+def worker_rush_ended(self : BotAI):
+    w, _ = are_we_worker_rushed(self)
+    if w == 0 and self.worker_rushed:
+        self.worker_rushed = False
+        for i in self.workers.idle:
+            mfs: Units = self.mineral_field.closer_than(10, self.townhalls.first)
+            if mfs:
+                mf: Unit = mfs.closest_to(i)
+                i.gather(mf)
+
+
 async def micro(self : BotAI):
+
+    if counter_worker_rush(self):
+        worker_rush_ended(self)
+        return
 
     units : Units = self.units.of_type({UnitTypeId.MARINE, UnitTypeId.MARAUDER, UnitTypeId.REAPER, UnitTypeId.GHOST, UnitTypeId.HELLION, UnitTypeId.WIDOWMINE,
     UnitTypeId.WIDOWMINEBURROWED, UnitTypeId.CYCLONE, UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED, UnitTypeId.VIKING, UnitTypeId.LIBERATOR, UnitTypeId.MEDIVAC,
