@@ -15,7 +15,7 @@ from macro import macro
 from production import produce
 
 from sc2 import maps
-from sc2.player import Bot, Computer
+from sc2.player import Bot, Computer, Human
 from sc2.main import run_game
 from sc2.data import Race, Difficulty
 from sc2.bot_ai import BotAI
@@ -63,4 +63,11 @@ def launch_game():
             realtime=False)
 
 
+def launch_human_game():
+    run_game(maps.get("AcropolisLE"), # maps.get(map_names[random.randint(0, len(map_names) - 1)]),
+            [Human(Race.Terran), Bot(Race.Terran, SmoothBrainBot())], # VeryHard, VeryEasy, Medium
+            realtime=True)
+
+
 launch_game()
+#launch_human_game()

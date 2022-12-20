@@ -59,10 +59,10 @@ async def macro(self : BotAI):
         if r.vespene_contents > 20:
             active_refineries += 1
     if self.townhalls.amount >= 3 and active_refineries < 4 and self.can_afford(UnitTypeId.REFINERY):
-        build_gas(self)
+        await build_gas(self)
     if self.townhalls.amount >= 4 and active_refineries < 6 and self.can_afford(UnitTypeId.REFINERY):
-        build_gas(self)
+        await build_gas(self)
     if self.townhalls.amount >= 5 and active_refineries < 7 and self.can_afford(UnitTypeId.REFINERY):
-        build_gas(self)
+        await build_gas(self)
     if self.townhalls.amount >= 5 and active_refineries < 8 and self.can_afford(UnitTypeId.REFINERY) and self.minerals > 1200:
-        build_gas(self)
+        await build_gas(self)
