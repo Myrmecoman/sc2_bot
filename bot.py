@@ -1,8 +1,7 @@
-import numpy as np
-import random
-from collections import namedtuple, deque
-import pathlib
 import time
+import random
+
+from collections import namedtuple, deque
 from threading import Thread
 from sc2 import maps
 from sc2.player import Bot, Computer
@@ -27,7 +26,7 @@ map_names = ["AcropolisLE", "DiscoBloodbathLE", "EphemeronLE", "ThunderbirdLE", 
 class BasicBot(BotAI):
     def __init__(self):
         self.unit_command_uses_self_do = False
-        # build order
+        self.distance_calculation_method = 3
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY, UnitTypeId.REFINERY,
         UnitTypeId.BARRACKSREACTOR]
 
@@ -136,7 +135,7 @@ class BasicBot(BotAI):
 
 
     async def handle_supply(self):
-        if self.supply_left < 5 and self.supply_used >= 14 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 1 and len(self.build_order) == 0:
+        if self.supply_left < 6 and self.supply_used >= 14 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 1 and len(self.build_order) == 0:
             workers: Units = self.workers.gathering
             if workers:
                 worker: Unit = workers.furthest_to(workers.center)
@@ -301,6 +300,15 @@ class BasicBot(BotAI):
             elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 0:
                 engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3)
 
+        bartechs = self.structures(UnitTypeId.BARRACKSTECHLAB).ready.idle
+        for tech in bartechs:
+            if self.can_afford(UpgradeId.SHIELDWALL) and self.already_pending_upgrade(UpgradeId.SHIELDWALL) == 0:
+                tech.research(UpgradeId.SHIELDWALL)
+            elif self.can_afford(UpgradeId.STIMPACK) and self.already_pending_upgrade(UpgradeId.STIMPACK) == 0:
+                tech.research(UpgradeId.STIMPACK)
+            elif self.can_afford(UpgradeId.PUNISHERGRENADES) and self.already_pending_upgrade(UpgradeId.PUNISHERGRENADES) == 0:
+                tech.research(UpgradeId.PUNISHERGRENADES)
+
 
     async def macro(self):
         if len(self.build_order) != 0:
@@ -318,10 +326,13 @@ class BasicBot(BotAI):
             await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
         if self.townhalls.amount >= 3 and self.can_build_structure(UnitTypeId.ENGINEERINGBAY, 2):
             await self.build(UnitTypeId.ENGINEERINGBAY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
-        if (self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)) and self.can_afford(UnitTypeId.ARMORY):
+        if (self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)) and self.can_build_structure(UnitTypeId.ARMORY, 1):
             await self.build(UnitTypeId.ARMORY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
-        if self.can_afford(UnitTypeId.COMMANDCENTER) and self.townhalls.amount < 12:
-            await self.expand_now()
+        if self.can_afford(UnitTypeId.COMMANDCENTER) and self.townhalls.amount < 12 and self.already_pending(UnitTypeId.COMMANDCENTER) == 0:
+            location: Point2 = await self.get_next_expansion()
+            if location:
+                worker: Unit = self.select_build_worker(location) # select the nearest worker to that location
+                worker.build(UnitTypeId.COMMANDCENTER, location)
 
         # build refineries
         refineries = self.structures(UnitTypeId.REFINERY)
@@ -394,13 +405,13 @@ class BasicBot(BotAI):
         await self.early_build_order()
         await self.handle_supply()
         await self.macro()
-        await self.micro()
         self.build_worker()
-        self.produce()
         self.land_structures_for_addons()
         self.handle_add_ons()
+        self.produce()
         self.handle_constructions()
         self.handle_upgrades()
+        await self.micro()
 
         if self.townhalls.amount == 0 or self.supply_used == 0:
             await self.client.leave()
