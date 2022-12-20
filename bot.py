@@ -34,8 +34,7 @@ class SmoothBrainBot(BotAI):
 
 
     async def on_step(self, iteration: int):
-        time.sleep(0.05)
-        print(self.worker_rushed)
+        #time.sleep(0.05)
         await self.distribute_workers()
         handle_workers(self)
         handle_depot_status(self)
