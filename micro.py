@@ -51,7 +51,7 @@ async def micro(self : BotAI):
         if attack:
             if i.type_id == UnitTypeId.SIEGETANK and enemy_closest.amount > 0 and enemy_closest.first.distance_to(i.position) <= 12:
                 i(AbilityId.SIEGEMODE_SIEGEMODE)
-            elif i.type_id == UnitTypeId.SIEGETANKSIEGED and enemy_closest.first.distance_to(i.position) >= 13:
+            elif i.type_id == UnitTypeId.SIEGETANKSIEGED and (enemy_closest.amount == 0 or enemy_closest.first.distance_to(i.position) >= 13):
                 i(AbilityId.UNSIEGE_UNSIEGE)
             elif enemy_closest.amount > 0:
                 i.attack(enemy_closest.first)

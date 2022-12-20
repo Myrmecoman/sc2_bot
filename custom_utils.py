@@ -72,17 +72,15 @@ def handle_depot_status(self : BotAI):
         for depo in self.structures(UnitTypeId.SUPPLYDEPOT).ready:
             depo(AbilityId.MORPH_SUPPLYDEPOT_LOWER)
     else:
+        enemies: Units = self.enemy_units
         for depo in self.structures(UnitTypeId.SUPPLYDEPOT).ready:
-            for unit in self.enemy_units.not_flying:
-                if unit.distance_to(depo) < 15:
-                    break
-                else:
-                    depo(AbilityId.MORPH_SUPPLYDEPOT_LOWER)
+            enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(depo.position))
+            if enemy_closest.first.distance_to(depo) >= 10:
+                depo(AbilityId.MORPH_SUPPLYDEPOT_LOWER)
         for depo in self.structures(UnitTypeId.SUPPLYDEPOTLOWERED).ready:
-            for unit in self.enemy_units:
-                if unit.distance_to(depo) < 10:
-                    depo(AbilityId.MORPH_SUPPLYDEPOT_RAISE)
-                    break
+            enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(depo.position))
+            if enemy_closest.first.distance_to(depo) < 10:
+                depo(AbilityId.MORPH_SUPPLYDEPOT_RAISE)
 
 
 def handle_upgrades(self : BotAI):

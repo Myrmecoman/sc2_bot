@@ -50,7 +50,7 @@ async def macro(self : BotAI):
     if (self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) > 0.3 or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)) > 0.3 and can_build_structure(self, UnitTypeId.ARMORY, 1):
         await self.build(UnitTypeId.ARMORY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
     if self.can_afford(UnitTypeId.COMMANDCENTER) and self.townhalls.amount < 12 and self.already_pending(UnitTypeId.COMMANDCENTER) == 0:
-        build_cc(self)
+        await build_cc(self)
 
     # build refineries
     refineries = self.structures(UnitTypeId.REFINERY)
