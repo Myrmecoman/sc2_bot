@@ -56,7 +56,7 @@ class SmoothBrainBot(BotAI):
             await self.client.leave()
             return
 
-
+'''
 def launch_game():
     run_game(maps.get("AcropolisLE"), # maps.get(map_names[random.randint(0, len(map_names) - 1)]),
             [Bot(Race.Terran, SmoothBrainBot()), Computer(Race.Random, Difficulty.VeryHard)], # VeryHard, VeryEasy, Medium
@@ -71,3 +71,4 @@ def launch_human_game():
 
 launch_game()
 #launch_human_game()
+'''

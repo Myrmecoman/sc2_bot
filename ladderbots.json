@@ -1,0 +1,13 @@
+{
+    "Bots": {
+        "SmoothBrainBot": {
+            "Race": "Terran",
+            "Type": "Python",
+            "RootPath": "./",
+            "FileName": "run.py",
+            "Args": "-O",
+            "Debug": true,
+            "SurrenderPhrase": "got rekt"
+        }
+    }
+}
