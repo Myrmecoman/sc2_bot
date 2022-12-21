@@ -78,9 +78,7 @@ def micro_worker(self, unit: Unit) -> None:
 
 
 def micro_structure(self, unit: Unit) -> None:
-    if not unit.is_ready and unit.health_percentage < 0.1:
-        unit(AbilityId.CANCEL)
-    elif unit.is_vespene_geyser:
+    if unit.is_vespene_geyser:
         if unit.is_ready and unit.assigned_harvesters + 1 < self.gas_harvester_target:
             self.transfer_to_gas.extend(unit for _ in range(unit.assigned_harvesters + 1, self.gas_harvester_target))
         elif self.gas_harvester_target < unit.assigned_harvesters:
@@ -91,3 +89,12 @@ def micro_structure(self, unit: Unit) -> None:
                 self.transfer_from.extend(unit for _ in range(0, unit.surplus_harvesters))
             elif unit.surplus_harvesters < 0:
                 self.transfer_to.extend(unit for _ in range(unit.surplus_harvesters, 0))
+
+
+# Saturate refineries
+def handle_refineries(self : BotAI):
+    for refinery in self.gas_buildings:
+        if refinery.assigned_harvesters < refinery.ideal_harvesters:
+            worker: Units = self.workers.closer_than(10, refinery)
+            if worker:
+                worker.random.gather(refinery)

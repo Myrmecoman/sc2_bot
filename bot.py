@@ -16,6 +16,7 @@ from production import produce
 from speedmining import get_speedmining_positions
 from speedmining import micro_structure
 from speedmining import micro_worker
+from speedmining import handle_refineries
 
 from typing import Dict, Iterable, List, Optional, Set
 from itertools import chain
@@ -33,7 +34,6 @@ class SmoothBrainBot(BotAI):
         self.worker_rushed = False
         self.game_step: int = 2
         self.tags: Set[str] = set()
-        self.gas_harvester_target: int = 3
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY, UnitTypeId.REFINERY,
         UnitTypeId.BARRACKSREACTOR]
         super().__init__()
@@ -42,14 +42,13 @@ class SmoothBrainBot(BotAI):
     async def on_before_start(self) -> None:
         self.client.game_step = self.game_step
 
+
     async def on_start(self) -> None:
         self.speedmining_positions = get_speedmining_positions(self)
         split_workers(self)
 
 
     async def on_step(self, iteration: int):
-
-        #time.sleep(0.05)
 
         if self.townhalls.amount == 0 or self.supply_used == 0:
             await self.client.leave()
@@ -63,10 +62,14 @@ class SmoothBrainBot(BotAI):
         self.transfer_to_gas: List[Unit] = list()
         self.resource_by_tag = {unit.tag: unit for unit in chain(self.mineral_field, self.gas_buildings)}
 
+        '''
         for structure in self.structures:
             micro_structure(self, structure)
         for worker in self.workers:
             micro_worker(self, worker)
+        '''
+        await self.distribute_workers(0)
+        handle_refineries(self)
 
         handle_depot_status(self)
         handle_orbitals(self)

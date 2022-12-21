@@ -32,7 +32,7 @@ async def early_build_order(self : BotAI):
         self.build_order.pop(0)
     # Build barracks
     if self.can_afford(UnitTypeId.BARRACKS) and self.build_order[0] == UnitTypeId.BARRACKS and self.tech_requirement_progress(UnitTypeId.BARRACKS) == 1 and barracks_placement_position:
-        await self.build(UnitTypeId.BARRACKS, near=barracks_placement_position)
+        await self.build(UnitTypeId.BARRACKS, near=barracks_placement_position, build_worker=self.workers.closest_to(barracks_placement_position))
         self.build_order.pop(0)
     # Build factory
     if self.can_afford(UnitTypeId.FACTORY) and self.build_order[0] == UnitTypeId.FACTORY and self.tech_requirement_progress(UnitTypeId.FACTORY) == 1:

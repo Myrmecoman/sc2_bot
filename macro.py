@@ -2,6 +2,7 @@ from custom_utils import can_build_structure
 
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.upgrade_id import UpgradeId
+from sc2.ids.ability_id import AbilityId
 from sc2.unit import Unit
 from sc2.units import Units
 from sc2.position import Point2
@@ -30,6 +31,11 @@ async def build_cc(self : BotAI):
 
 
 async def macro(self : BotAI):
+
+    for st in self.structures:
+        if not st.is_ready and st.health_percentage < 0.1:
+            st(AbilityId.CANCEL)
+
     if len(self.build_order) != 0 or self.workers.amount == 0:
         return
 

@@ -32,5 +32,5 @@ if __name__ == "__main__":
         print("Starting local game...")
         run_game(maps.get("AcropolisLE"), # maps.get(map_names[random.randint(0, len(map_names) - 1)]),
         #[enemy, enemycheat], realtime=False)
-        [bot, enemycheat], realtime=False)
+        [bot, enemy], realtime=False)
         #[human, bot], realtime=True)

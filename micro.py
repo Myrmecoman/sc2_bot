@@ -1,5 +1,4 @@
 import time
-import random
 
 from collections import namedtuple, deque
 from sc2.main import run_game

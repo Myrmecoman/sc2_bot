@@ -39,10 +39,10 @@ def get_intersections(p0: Point2, r0: float, p1: Point2, r1: float) -> Iterable[
 class Pool12AllIn(BotAI):
 
     def __init__(self) -> None:
-        self.pool_drone: Optional[Unit] = None
         self.tags: Set[str] = set()
         self.gas_harvester_target: int = 3
         self.game_step: int = 2
+        self.pool = None
         super().__init__()
 
     async def on_before_start(self) -> None:
@@ -50,13 +50,14 @@ class Pool12AllIn(BotAI):
 
     async def on_start(self) -> None:
         self.geyser = self.vespene_geyser.closest_to(self.start_location)
-        self.pool_position = await self.get_pool_position()
         self.speedmining_positions = self.get_speedmining_positions()
         self.split_workers()
 
     async def on_step(self, iteration: int) -> None:
         self.client.game_step = self.game_step
         self.army_type = UnitTypeId.ZERGLING
+        if self.structures(UnitTypeId.SPAWNINGPOOL).amount > 0:
+            self.pool = self.structures(UnitTypeId.SPAWNINGPOOL).first
 
         self.transfer_from: List[Unit] = list()
         self.transfer_to: List[Unit] = list()
@@ -66,7 +67,6 @@ class Pool12AllIn(BotAI):
         self.idle_hatches: List[Unit] = list()
         self.drone: Optional[Unit] = None
         self.hatch_morphing: Optional[Unit] = None
-        self.pool: Optional[Unit] = None
         self.abilities: Counter[AbilityId] = Counter(o.ability.exact_id for u in self.all_own_units for o in u.orders)
         self.invisible_enemy_start_locations: List[Point2] = [p for p in self.enemy_start_locations if not self.is_visible(p)]
         self.resource_by_tag = {unit.tag: unit for unit in chain(self.mineral_field, self.gas_buildings)}
@@ -85,7 +85,7 @@ class Pool12AllIn(BotAI):
 
         self.inject_larvae()
 
-        if self.build_order():
+        if await self.build_order():
             build_army = True
             if self.vespene < 96 and self.abilities[AbilityId.RESEARCH_ZERGLINGMETABOLICBOOST] < 1 and UpgradeId.ZERGLINGMOVEMENTSPEED not in self.state.upgrades:
                 self.gas_harvester_target = 3
@@ -93,13 +93,10 @@ class Pool12AllIn(BotAI):
                 self.gas_harvester_target = 0
             self.macro(build_army)
 
-    def build_order(self) -> bool:
+    async def build_order(self) -> bool:
         if not self.pool and self.abilities[AbilityId.ZERGBUILD_SPAWNINGPOOL] < 1:
-            if 200 <= self.minerals and self.pool_drone:
-                self.pool_drone.build(UnitTypeId.SPAWNINGPOOL, self.pool_position)
-            elif 170 <= self.minerals and not self.pool_drone and self.drone:
-                self.pool_drone = self.drone
-                self.pool_drone.move(self.pool_position)
+            if 200 <= self.minerals:
+                await self.build(UnitTypeId.SPAWNINGPOOL, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 2))
         elif self.supply_used < 13:
             self.train(UnitTypeId.DRONE)
         elif self.gas_buildings.amount < 1 and self.abilities[AbilityId.ZERGBUILD_EXTRACTOR] < 1:
@@ -164,7 +161,7 @@ class Pool12AllIn(BotAI):
 
     def micro_worker(self, unit: Unit) -> None:
         if unit.is_idle:
-            if any(self.mineral_field) and (not self.pool_drone or self.pool_drone.tag != unit.tag):
+            if any(self.mineral_field):
                 townhall = self.townhalls.closest_to(unit)
                 patch = self.mineral_field.closest_to(townhall)
                 unit.gather(patch)
@@ -248,15 +245,6 @@ class Pool12AllIn(BotAI):
                     target = min(points, key=lambda p: p.distance_to(self.start_location), default=target)
                 targets[resource.position] = target
         return targets
-
-    async def get_pool_position(self) -> Point2:
-        """find position for the spawning pool"""
-        for i in range(100):
-            position = self.start_location.towards_with_random_angle(self.game_info.map_center, -9)
-            position.rounded.offset(HALF_OFFSET)
-            if await self.can_place_single(UnitTypeId.SPAWNINGPOOL, position):
-                return position
-        raise Exception('could not find pool position')
 
     def split_workers(self) -> None:
         """distribute initial workers on mineral patches"""
