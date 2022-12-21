@@ -11,13 +11,14 @@ from training_bots.worker_rush import WorkerRushBot
 from sc2 import maps
 from sc2.data import Difficulty, Race
 from sc2.main import run_game
-from sc2.player import Bot, Computer
+from sc2.player import Bot, Computer, Human
 
 map_names = ["AcropolisLE", "DiscoBloodbathLE", "EphemeronLE", "ThunderbirdLE", "TritonLE", "WintersGateLE", "WorldofSleepersLE"]
 bot = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBot")
-#enemy = Bot(Race.Terran, WorkerRushBot())
-enemy = Bot(Race.Zerg, Pool12AllIn())
-#enemyvanilla = Computer(Race.Random, Difficulty.CheatVision)
+enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
+#enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")
+enemycheat = Computer(Race.Random, Difficulty.VeryHard) # CheaterVision
+human = Human(Race.Terran, "Hooman", True)
 
 # Start game
 if __name__ == "__main__":
@@ -30,4 +31,6 @@ if __name__ == "__main__":
         # Local game
         print("Starting local game...")
         run_game(maps.get("AcropolisLE"), # maps.get(map_names[random.randint(0, len(map_names) - 1)]),
-        [bot, enemy], realtime=False)
+        #[enemy, enemycheat], realtime=False)
+        [bot, enemycheat], realtime=False)
+        #[human, bot], realtime=True)

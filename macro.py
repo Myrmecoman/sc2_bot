@@ -30,7 +30,7 @@ async def build_cc(self : BotAI):
 
 
 async def macro(self : BotAI):
-    if len(self.build_order) != 0:
+    if len(self.build_order) != 0 or self.workers.amount == 0:
         return
 
     if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.STARPORT, 1):
@@ -49,10 +49,13 @@ async def macro(self : BotAI):
         await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
     if self.townhalls.amount >= 4 and can_build_structure(self, UnitTypeId.BARRACKS, 8):
         await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+
     if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.ENGINEERINGBAY, 2):
         await self.build(UnitTypeId.ENGINEERINGBAY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+
     if (self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) > 0.3 or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)) > 0.3 and can_build_structure(self, UnitTypeId.ARMORY, 1):
         await self.build(UnitTypeId.ARMORY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+
     if self.can_afford(UnitTypeId.COMMANDCENTER) and self.townhalls.amount < 12 and self.already_pending(UnitTypeId.COMMANDCENTER) == 0:
         await build_cc(self)
 

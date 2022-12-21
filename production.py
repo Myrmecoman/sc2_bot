@@ -43,9 +43,9 @@ def produce(self : BotAI):
                 continue
             if add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.RAVEN) and self.units(UnitTypeId.RAVEN).amount < 4:
                 st.build(UnitTypeId.RAVEN)
-            elif add_on.type_id == UnitTypeId.STARPORTREACTOR and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < 8:
+            elif add_on.type_id == UnitTypeId.STARPORTREACTOR and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < 6:
                 st.build(UnitTypeId.MEDIVAC)
                 if self.can_afford(UnitTypeId.MEDIVAC):
                     st.build(UnitTypeId.MEDIVAC)
-        elif self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < 8:
+        elif self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < 6:
             st.build(UnitTypeId.MEDIVAC)

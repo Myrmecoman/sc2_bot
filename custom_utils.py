@@ -84,6 +84,15 @@ def handle_depot_status(self : BotAI):
 
 
 def handle_upgrades(self : BotAI):
+    bartechs = self.structures(UnitTypeId.BARRACKSTECHLAB).ready.idle
+    for tech in bartechs:
+        if self.can_afford(UpgradeId.SHIELDWALL) and self.already_pending_upgrade(UpgradeId.SHIELDWALL) == 0:
+            tech.research(UpgradeId.SHIELDWALL)
+        elif self.can_afford(UpgradeId.STIMPACK) and self.already_pending_upgrade(UpgradeId.STIMPACK) == 0:
+            tech.research(UpgradeId.STIMPACK)
+        elif self.can_afford(UpgradeId.PUNISHERGRENADES) and self.already_pending_upgrade(UpgradeId.PUNISHERGRENADES) == 0:
+            tech.research(UpgradeId.PUNISHERGRENADES)
+
     engis = self.structures(UnitTypeId.ENGINEERINGBAY).ready.idle
     for engi in engis:
         if self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) == 0:
@@ -101,36 +110,15 @@ def handle_upgrades(self : BotAI):
         elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 0:
             engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3)
 
-    bartechs = self.structures(UnitTypeId.BARRACKSTECHLAB).ready.idle
-    for tech in bartechs:
-        if self.can_afford(UpgradeId.SHIELDWALL) and self.already_pending_upgrade(UpgradeId.SHIELDWALL) == 0:
-            tech.research(UpgradeId.SHIELDWALL)
-        elif self.can_afford(UpgradeId.STIMPACK) and self.already_pending_upgrade(UpgradeId.STIMPACK) == 0:
-            tech.research(UpgradeId.STIMPACK)
-        elif self.can_afford(UpgradeId.PUNISHERGRENADES) and self.already_pending_upgrade(UpgradeId.PUNISHERGRENADES) == 0:
-            tech.research(UpgradeId.PUNISHERGRENADES)
-
-
-def handle_workers(self : BotAI):
-    # Saturate refineries
-    for refinery in self.gas_buildings:
-        if refinery.assigned_harvesters < refinery.ideal_harvesters:
-            worker: Units = self.workers.closer_than(10, refinery)
-            if worker:
-                worker.random.gather(refinery)
-
 
 async def handle_supply(self : BotAI):
-    if self.supply_left < 6 and self.supply_used >= 14 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 1 and len(self.build_order) == 0:
+    if self.supply_left < 6 and self.supply_used >= 14 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 2 and len(self.build_order) == 0:
         workers: Units = self.workers.gathering
         if workers:
             worker: Unit = workers.furthest_to(workers.center)
             location: Point2 = await self.find_placement(UnitTypeId.SUPPLYDEPOT, worker.position, placement_step=3)
             if location:
                 worker.build(UnitTypeId.SUPPLYDEPOT, location)
-            if len(self.build_order) == 0:
-                ccs: Units = self.townhalls
-                await self.build(UnitTypeId.SUPPLYDEPOT, near=ccs.random.position.towards(self.game_info.map_center, 8))
 
 
 def handle_orbitals(self : BotAI):
@@ -143,7 +131,6 @@ def handle_orbitals(self : BotAI):
                 oc(AbilityId.CALLDOWNMULE_CALLDOWNMULE, mf)
     # Build orbital
     if self.can_afford(UnitTypeId.ORBITALCOMMAND) and len(self.build_order) == 0:
-        cc: Unit
         for cc in self.townhalls(UnitTypeId.COMMANDCENTER).idle:
             cc(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND)
             break
@@ -172,6 +159,7 @@ def build_add_on(self : BotAI, type, add_on_type):
             break
 
 
+# TODO
 def handle_constructions(self : BotAI):
     for b in self.structures_without_construction_SCVs:
         return

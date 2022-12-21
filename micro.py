@@ -2,34 +2,25 @@ import time
 import random
 
 from collections import namedtuple, deque
-from threading import Thread
-from sc2 import maps
-from sc2.player import Bot, Computer
 from sc2.main import run_game
 from sc2.data import Race, Difficulty
 from sc2.bot_ai import BotAI
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.ability_id import AbilityId
-from sc2.ids.upgrade_id import UpgradeId
 from sc2.unit import Unit
 from sc2.units import Units
 from sc2.bot_ai import BotAI
-
-
-# very basic indicator
-def should_we_fight(self : BotAI):
-    nb_enemies = self.enemy_units.amount
-    nb_army = self.army_count
-    if nb_army / (nb_enemies + 0.01) > 1.5:
-        return True
-    return False
+from typing import Dict, Iterable, List, Optional, Set
 
 
 # same as attack, except medivacs and other non attacking units don't suicide straight in the enemy lines
 def soft_attack(units : Units, unit : Unit, position_or_enemy):
     if not unit.can_attack:
-        pos = units.not_flying.closest_to(position_or_enemy).position
-        unit.attack(pos)
+        if units.not_flying.amount > 0:
+            pos = units.not_flying.closest_to(position_or_enemy).position
+            unit.attack(pos)
+        else:
+            unit.attack(position_or_enemy)
         return
     unit.attack(position_or_enemy)
 
@@ -59,11 +50,12 @@ def counter_worker_rush(self : BotAI):
     counter = 0
     for i in self.workers:
         if i.health <= 10:
-            mfs: Units = self.mineral_field.closer_than(10, self.townhalls.first)
+            mfs: Units = self.mineral_field.closer_than(12, self.start_location)
             if mfs:
-                mf: Unit = mfs.closest_to(i)
+                mf: Unit = mfs.furthest_to(i)
                 i.gather(mf)
-            i.move(self.mineral_field.closest_to(i.position))
+            else:
+                i.move(self.mineral_field.closest_to(i))
             continue
         counter += 1
         if counter > 2 * w: # only pull twice their amount
@@ -71,6 +63,8 @@ def counter_worker_rush(self : BotAI):
         i.attack(pos)
     if counter < 2 * w:
         for i in self.workers.idle:
+            i.attack(pos)
+        for i in self.workers.gathering:
             i.attack(pos)
     return True
 
@@ -84,6 +78,17 @@ def worker_rush_ended(self : BotAI):
             if mfs:
                 mf: Unit = mfs.closest_to(i)
                 i.gather(mf)
+
+
+# very basic indicator
+def should_we_fight(self : BotAI):
+    nb_enemies = self.enemy_units.amount
+    nb_army = self.army_count
+    if nb_army / (nb_enemies + 0.01) > 1.5: # if army is big enough, can attack
+        return True
+    if self.enemy_units.closest_distance_to(self.structures.closest_to(self.game_info.map_center)) < 15: # if being attacked, defend
+        return True
+    return False
 
 
 async def micro(self : BotAI):
@@ -130,3 +135,18 @@ async def micro(self : BotAI):
                 soft_attack(units, i, enemy_closest.first)
             else:
                 smart_move(i, pos)
+
+
+# distribute initial workers on mineral patches
+def split_workers(self) -> None:
+    minerals = self.expansion_locations_dict[self.start_location].mineral_field.sorted_by_distance_to(self.start_location)
+    self.close_minerals = {m.tag for m in minerals[0:4]}
+    assigned: Set[int] = set()
+    for i in range(self.workers.amount):
+        patch = minerals[i % len(minerals)]
+        if i < len(minerals):
+            worker = self.workers.tags_not_in(assigned).closest_to(patch) # first, each patch gets one worker closest to it
+        else:
+            worker = self.workers.tags_not_in(assigned).furthest_to(patch) # the remaining workers get longer paths, this usually results in double stacking without having to spam orders
+        worker.gather(patch)
+        assigned.add(worker.tag)
