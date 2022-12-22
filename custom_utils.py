@@ -38,7 +38,7 @@ def land_structures_for_addons(self : BotAI):
             land_and_addon_points: List[Point2] = land_positions(target_land_position)
 
             authorized = True
-            for i in self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT}):
+            for i in self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT, UnitTypeId.ENGINEERINGBAY, UnitTypeId.ARMORY}):
                 if abs(i.position.x - target_land_position.position.x) < 7:
                     authorized = False
 

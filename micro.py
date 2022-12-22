@@ -92,6 +92,10 @@ def should_we_fight(self : BotAI):
     return False
 
 
+def are_we_idle_at_enemy_base(self):
+    return self.enemy_structures.amount == 0 and self.enemy_units.amount == 0 and self.units.closest_distance_to(self.enemy_start_locations[0]) < 3
+
+
 async def micro(self : BotAI):
 
     if counter_worker_rush(self):
@@ -104,6 +108,24 @@ async def micro(self : BotAI):
 
     if len(units) == 0:
         return
+    
+    if are_we_idle_at_enemy_base(self):
+        if len(self.scouting_units) != 0:
+            return
+        counter = 0
+        for i in self.expansion_locations:
+            if counter >= self.units.amount:
+                break
+            self.scouting_units.append((self.units[counter], i, False))
+            self.units[counter].attack(i)
+            counter += 1
+        for i in range(len(self.scouting_units)):
+            if self.scouting_units[i][0].distance_to(self.scouting_units[i][1]) < 1 and self.scouting_units[i][2] == False:
+                self.scouting_units[i] = (self.scouting_units[i][0], self.scouting_units[i][1], True)
+                self.scouting_units[i][0].attack(self.scouting_units[i][1].towards(self.game_info.map_center, -9))
+        return
+    
+    self.scouting_units = []
 
     attack = False
     pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
@@ -121,16 +143,16 @@ async def micro(self : BotAI):
     for i in units:
         enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(i.position))
         if attack:
-            if i.type_id == UnitTypeId.SIEGETANK and enemy_closest.amount > 0 and enemy_closest.first.distance_to(i.position) <= 12:
+            if i.type_id == UnitTypeId.SIEGETANK and enemy_closest.not_flying.amount > 0 and enemy_closest.not_flying.first.distance_to(i.position) <= 12:
                 i(AbilityId.SIEGEMODE_SIEGEMODE)
-            elif i.type_id == UnitTypeId.SIEGETANKSIEGED and (enemy_closest.amount == 0 or enemy_closest.first.distance_to(i.position) >= 13):
+            elif i.type_id == UnitTypeId.SIEGETANKSIEGED and (enemy_closest.not_flying.amount == 0 or enemy_closest.not_flying.first.distance_to(i.position) >= 13):
                 i(AbilityId.UNSIEGE_UNSIEGE)
             elif enemy_closest.amount > 0:
                 soft_attack(units, i, enemy_closest.first)
             else:
                 soft_attack(units, i, pos)
         else:
-            if i.type_id == UnitTypeId.SIEGETANKSIEGED and enemy_closest.amount > 0 and enemy_closest.first.distance_to(i.position) > 13:
+            if i.type_id == UnitTypeId.SIEGETANKSIEGED and enemy_closest.not_flying.amount > 0 and enemy_closest.not_flying.first.distance_to(i.position) > 13:
                 i(AbilityId.UNSIEGE_UNSIEGE)
             elif enemy_closest.amount > 0 and enemy_closest.first.distance_to(i.position) <= 6:
                 soft_attack(units, i, enemy_closest.first)
