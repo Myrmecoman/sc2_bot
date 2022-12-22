@@ -25,8 +25,11 @@ def soft_attack(units : Units, unit : Unit, position_or_enemy):
 
 
 # move to retreat avoiding enemies as much as possible
-def smart_move(unit : Unit, position):
+def smart_move(self : BotAI, unit : Unit, position):
     unit.move(position)
+    # generate map of area covered by units
+    self.client
+    
 
 
 def are_we_worker_rushed(self : BotAI):
@@ -133,7 +136,7 @@ async def micro(self : BotAI):
             elif enemy_closest.amount > 0 and enemy_closest.first.distance_to(i.position) <= 6:
                 soft_attack(units, i, enemy_closest.first)
             else:
-                smart_move(i, pos)
+                smart_move(self, i, pos)
 
 
 # distribute initial workers on mineral patches

@@ -1,5 +1,6 @@
 # pylint: disable=E0401
 import sys
+import random
 
 from __init__ import run_ladder_game
 
@@ -30,7 +31,7 @@ if __name__ == "__main__":
     else:
         # Local game
         print("Starting local game...")
-        run_game(maps.get("AcropolisLE"), # maps.get(map_names[random.randint(0, len(map_names) - 1)]),
+        run_game(maps.get(map_names[random.randint(0, len(map_names) - 1)]),
         #[enemy, enemycheat], realtime=False)
-        [bot, enemy], realtime=False)
+        [bot, enemycheat], realtime=False)
         #[human, bot], realtime=True)

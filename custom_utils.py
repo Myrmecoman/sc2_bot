@@ -6,10 +6,13 @@ from sc2.units import Units
 from sc2.position import Point2, Point3
 from typing import List, Tuple
 from sc2.bot_ai import BotAI
+import math
 
 
-def can_build_structure(self : BotAI, type, amount):
-        return self.structures(type).ready.amount + self.already_pending(type) < amount and self.can_afford(type) and self.tech_requirement_progress(type) == 1
+def can_build_structure(self : BotAI, type, fly_type, amount):
+    if fly_type is not None:
+        return self.structures(type).ready.amount + self.already_pending(type) + self.structures(fly_type).amount < amount and self.can_afford(type) and self.tech_requirement_progress(type) == 1
+    return self.structures(type).ready.amount + self.already_pending(type) < amount and self.can_afford(type) and self.tech_requirement_progress(type) == 1
 
 
 # Return all points that need to be checked when trying to build an addon. Returns 4 points.
@@ -28,12 +31,18 @@ def land_structures_for_addons(self : BotAI):
 
     # Find a position to land for a flying structure so that it can build an addon
     for u in self.structures.of_type({UnitTypeId.BARRACKSFLYING, UnitTypeId.FACTORYFLYING, UnitTypeId.STARPORTFLYING}).idle:
-        possible_land_positions_offset = sorted((Point2((x, y)) for x in range(-10, 10) for y in range(-10, 10)), key=lambda point: point.x**2 + point.y**2,)
+        possible_land_positions_offset = sorted((Point2((x, y)) for x in range(-22, 22) for y in range(-7, 7)), key=lambda point: point.x**2 + point.y**2,)
         offset_point: Point2 = Point2((-0.5, -0.5))
         possible_land_positions = (u.position.rounded + offset_point + p for p in possible_land_positions_offset)
         for target_land_position in possible_land_positions:
             land_and_addon_points: List[Point2] = land_positions(target_land_position)
-            if all(self.in_map_bounds(land_pos) and self.in_placement_grid(land_pos) and self.in_pathing_grid(land_pos) for land_pos in land_and_addon_points):
+
+            authorized = True
+            for i in self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT}):
+                if abs(i.position.x - target_land_position.position.x) < 7:
+                    authorized = False
+
+            if authorized and all(self.in_map_bounds(land_pos) and self.in_placement_grid(land_pos) and self.in_pathing_grid(land_pos) for land_pos in land_and_addon_points):
                 u(AbilityId.LAND, target_land_position)
                 break
     
@@ -111,14 +120,34 @@ def handle_upgrades(self : BotAI):
             engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3)
 
 
+HALF_OFFSET = Point2((.5, .5))
 async def handle_supply(self : BotAI):
     if self.supply_left < 6 and self.supply_used >= 14 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 2 and len(self.build_order) == 0:
-        workers: Units = self.workers.gathering
-        if workers:
-            worker: Unit = workers.furthest_to(workers.center)
-            location: Point2 = await self.find_placement(UnitTypeId.SUPPLYDEPOT, worker.position, placement_step=3)
-            if location:
-                worker.build(UnitTypeId.SUPPLYDEPOT, location)
+        # try all ccs and find average position of its mineral fields
+        for cc in self.townhalls:
+            mfs: Units = self.mineral_field.closer_than(10, cc)
+            if mfs.amount == 0:
+                continue
+            x = 0
+            y = 0
+            for i in mfs:
+                x += i.position.x
+                y += i.position.y
+            x = x // mfs.amount
+            y = y // mfs.amount
+            # try to place at a few positions
+            for i in range(20):
+                position = cc.position.towards_with_random_angle(Point2((x, y)), 8, (math.pi / 3))
+                position_further = cc.position.towards_with_random_angle(Point2((x, y)), 11, (math.pi / 3))
+                position.rounded.offset(HALF_OFFSET)
+                position_further.rounded.offset(HALF_OFFSET)
+                if await self.can_place_single(UnitTypeId.SUPPLYDEPOT, position):
+                    await self.build(UnitTypeId.SUPPLYDEPOT, near=position, max_distance=4)
+                    return
+                if await self.can_place_single(UnitTypeId.SUPPLYDEPOT, position_further):
+                    await self.build(UnitTypeId.SUPPLYDEPOT, near=position_further, max_distance=4)
+                    return
+        print("Could not place depot")
 
 
 def handle_orbitals(self : BotAI):

@@ -34,6 +34,7 @@ class SmoothBrainBot(BotAI):
         self.worker_rushed = False
         self.game_step: int = 2
         self.tags: Set[str] = set()
+        self.first_barracks = None
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY, UnitTypeId.REFINERY,
         UnitTypeId.BARRACKSREACTOR]
         super().__init__()

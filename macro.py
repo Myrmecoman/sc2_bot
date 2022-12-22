@@ -30,6 +30,45 @@ async def build_cc(self : BotAI):
         await self.expand_now() # in case it won't work
 
 
+async def try_build_on_line(self : BotAI, type : UnitTypeId, prod_structures : Units, shift = 0):
+    for i in prod_structures:
+        if await self.can_place_single(type, Point2((i.position.x + shift, i.position.y + 3))) and await self.can_place_single(type, Point2((i.position.x + shift, i.position.y + 6))):
+            await self.build(type, near=Point2((i.position.x + shift, i.position.y + 3)))
+            return True
+        if await self.can_place_single(type, Point2((i.position.x + shift, i.position.y - 3))) and await self.can_place_single(type, Point2((i.position.x + shift, i.position.y - 6))):
+            await self.build(type, near=Point2((i.position.x + shift, i.position.y - 3)))
+            return True
+    return False
+
+
+async def smart_build(self : BotAI, type : UnitTypeId):
+    prod_structures : Units = self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT, UnitTypeId.ENGINEERINGBAY, UnitTypeId.ARMORY})
+
+    if prod_structures.amount == 0:
+        await self.build(type, near=self.main_base_ramp.barracks_correct_placement)
+        return
+
+    if prod_structures.amount == 1:
+        self.first_barracks = prod_structures.first
+
+    # build as a line from any started line
+    if await try_build_on_line(self, type, prod_structures):
+        return
+    
+    # else try to build on right or left alternatively
+    if await try_build_on_line(self, type, prod_structures, -7):
+        return
+    if await try_build_on_line(self, type, prod_structures, 7):
+        return
+    
+    # else well try further
+    if await try_build_on_line(self, type, prod_structures, -14):
+        return
+    if await try_build_on_line(self, type, prod_structures, 14):
+        return
+    Exception("No place found")
+
+
 async def macro(self : BotAI):
 
     for st in self.structures:
@@ -39,28 +78,28 @@ async def macro(self : BotAI):
     if len(self.build_order) != 0 or self.workers.amount == 0:
         return
 
-    if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.STARPORT, 1):
-        await self.build(UnitTypeId.STARPORT, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
-    if self.townhalls.amount >= 4 and can_build_structure(self, UnitTypeId.STARPORT, 2):
-        await self.build(UnitTypeId.STARPORT, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+    if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTFLYING, 1):
+        await smart_build(self, UnitTypeId.STARPORT)
+    if self.townhalls.amount >= 4 and can_build_structure(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTFLYING, 2):
+        await smart_build(self, UnitTypeId.STARPORT)
 
-    if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.FACTORY, 1):
-        await self.build(UnitTypeId.FACTORY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+    if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.FACTORY, UnitTypeId.FACTORYFLYING, 1):
+        await smart_build(self, UnitTypeId.FACTORY)
     
-    if self.townhalls.amount >= 1 and can_build_structure(self, UnitTypeId.BARRACKS, 1):
-        await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
-    if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.BARRACKS, 2):
-        await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
-    if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.BARRACKS, 5):
-        await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
-    if self.townhalls.amount >= 4 and can_build_structure(self, UnitTypeId.BARRACKS, 8):
-        await self.build(UnitTypeId.BARRACKS, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+    if self.townhalls.amount >= 1 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 1):
+        await smart_build(self, UnitTypeId.BARRACKS)
+    if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 2):
+        await smart_build(self, UnitTypeId.BARRACKS)
+    if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 5):
+        await smart_build(self, UnitTypeId.BARRACKS)
+    if self.townhalls.amount >= 4 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 8):
+        await smart_build(self, UnitTypeId.BARRACKS)
 
-    if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.ENGINEERINGBAY, 2):
-        await self.build(UnitTypeId.ENGINEERINGBAY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+    if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.ENGINEERINGBAY, None, 2):
+        await smart_build(self, UnitTypeId.ENGINEERINGBAY)
 
-    if (self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) > 0.3 or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)) > 0.3 and can_build_structure(self, UnitTypeId.ARMORY, 1):
-        await self.build(UnitTypeId.ARMORY, near=self.townhalls.ready.first.position.towards(self.game_info.map_center, 8))
+    if (self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) > 0.3 or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)) > 0.3 and can_build_structure(self, UnitTypeId.ARMORY, None, 1):
+        await smart_build(self, UnitTypeId.ARMORY)
 
     if self.can_afford(UnitTypeId.COMMANDCENTER) and self.townhalls.amount < 12 and self.already_pending(UnitTypeId.COMMANDCENTER) == 0:
         await build_cc(self)

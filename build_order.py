@@ -1,4 +1,5 @@
 from custom_utils import points_to_build_addon
+from macro import smart_build
 
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.ability_id import AbilityId
@@ -32,11 +33,11 @@ async def early_build_order(self : BotAI):
         self.build_order.pop(0)
     # Build barracks
     if self.can_afford(UnitTypeId.BARRACKS) and self.build_order[0] == UnitTypeId.BARRACKS and self.tech_requirement_progress(UnitTypeId.BARRACKS) == 1 and barracks_placement_position:
-        await self.build(UnitTypeId.BARRACKS, near=barracks_placement_position, build_worker=self.workers.closest_to(barracks_placement_position))
+        await smart_build(self, UnitTypeId.BARRACKS)
         self.build_order.pop(0)
     # Build factory
     if self.can_afford(UnitTypeId.FACTORY) and self.build_order[0] == UnitTypeId.FACTORY and self.tech_requirement_progress(UnitTypeId.FACTORY) == 1:
-        await self.build(UnitTypeId.FACTORY, near=ccs.ready.first.position.towards(self.game_info.map_center, 8))
+        await smart_build(self, UnitTypeId.FACTORY)
         self.build_order.pop(0)
     # Build refinery
     if self.can_afford(UnitTypeId.REFINERY) and self.build_order[0] == UnitTypeId.REFINERY:
