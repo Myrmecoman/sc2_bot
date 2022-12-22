@@ -108,16 +108,43 @@ def handle_upgrades(self : BotAI):
             engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL1)
         elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1) == 0:
             engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)
-
-        if self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL2) == 0:
+        elif self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL2) == 0:
             engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL2)
         elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2) == 0:
-            engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2)
-            
-        if self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL3) == 0:
+            engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2)  
+        elif self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL3) == 0:
             engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL3)
         elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 0:
             engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3)
+        elif self.can_afford(UpgradeId.TERRANBUILDINGARMOR) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1:
+            engi.research(UpgradeId.TERRANBUILDINGARMOR)
+        elif self.can_afford(UpgradeId.HISECAUTOTRACKING) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1:
+            engi.research(UpgradeId.HISECAUTOTRACKING)
+    
+    if self.minerals < 1000 or self.vespene < 1000:
+        return
+
+    armories = self.structures(UnitTypeId.ARMORY).ready.idle
+    for armo in armories:
+        if self.can_afford(UpgradeId.TERRANVEHICLEWEAPONSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANVEHICLEWEAPONSLEVEL1) == 0:
+            armo.research(UpgradeId.TERRANVEHICLEWEAPONSLEVEL1)
+        elif self.can_afford(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1) == 0:
+            armo.research(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1)
+        elif self.can_afford(UpgradeId.TERRANVEHICLEWEAPONSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANVEHICLEWEAPONSLEVEL2) == 0:
+            armo.research(UpgradeId.TERRANVEHICLEWEAPONSLEVEL2)
+        elif self.can_afford(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL2) == 0:
+            armo.research(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL2)
+        elif self.can_afford(UpgradeId.TERRANVEHICLEWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANVEHICLEWEAPONSLEVEL3) == 0:
+            armo.research(UpgradeId.TERRANVEHICLEWEAPONSLEVEL3)
+        elif self.can_afford(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL3) == 0:
+            armo.research(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL3)
+        elif self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL1) == 0:
+            armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL1)
+        elif self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL2) == 0:
+            armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL2)
+        elif self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL3) == 0:
+            armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL3)
+
 
 
 HALF_OFFSET = Point2((.5, .5))
