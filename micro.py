@@ -103,7 +103,7 @@ async def micro(self : BotAI):
         return
 
     units : Units = self.units.of_type({UnitTypeId.MARINE, UnitTypeId.MARAUDER, UnitTypeId.REAPER, UnitTypeId.GHOST, UnitTypeId.HELLION, UnitTypeId.WIDOWMINE,
-    UnitTypeId.WIDOWMINEBURROWED, UnitTypeId.CYCLONE, UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED, UnitTypeId.VIKING, UnitTypeId.LIBERATOR, UnitTypeId.MEDIVAC,
+    UnitTypeId.WIDOWMINEBURROWED, UnitTypeId.CYCLONE, UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED, UnitTypeId.VIKINGFIGHTER, UnitTypeId.VIKINGASSAULT, UnitTypeId.LIBERATOR, UnitTypeId.MEDIVAC,
     UnitTypeId.RAVEN, UnitTypeId.BATTLECRUISER, UnitTypeId.BANSHEE})
 
     if len(units) == 0:
