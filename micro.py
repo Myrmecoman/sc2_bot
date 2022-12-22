@@ -25,25 +25,28 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy):
             unit.attack(position_or_enemy)
         return
     
+    dangers : Units = self.enemy_units.exclude_type({UnitTypeId.LARVA, UnitTypeId.EGG})
+    # dangerous_structures = self.enemy_structures({UnitTypeId.PHOTONCANNON, UnitTypeId.BUNKER, UnitTypeId.MISSILETURRET, UnitTypeId.SPORECRAWLER, UnitTypeId.SPINECRAWLER}) # to be used
+
     if unit.can_attack_both:
-        if self.enemy_units.amount == 0:
+        if dangers.amount == 0:
             unit.attack(position_or_enemy)
             return
-        closest_enemy = self.enemy_units.closest_to(unit)
+        closest_enemy = dangers.closest_to(unit)
         kite_attack(unit, closest_enemy)
 
     elif unit.can_attack_ground:
-        if self.enemy_units.not_flying.amount == 0:
+        if dangers.not_flying.amount == 0:
             unit.attack(position_or_enemy)
             return
-        closest_enemy = self.enemy_units.not_flying.closest_to(unit)
+        closest_enemy = dangers.not_flying.closest_to(unit)
         kite_attack(unit, closest_enemy)
 
     elif unit.can_attack_air:
-        if self.enemy_units.flying.amount == 0:
+        if dangers.flying.amount == 0:
             unit.attack(position_or_enemy)
             return
-        closest_enemy = self.enemy_units.flying.closest_to(unit)
+        closest_enemy = dangers.flying.closest_to(unit)
         kite_attack(unit, closest_enemy)
 
 

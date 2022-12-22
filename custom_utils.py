@@ -38,7 +38,7 @@ def land_structures_for_addons(self : BotAI):
             land_and_addon_points: List[Point2] = land_positions(target_land_position)
 
             authorized = True
-            for i in self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT, UnitTypeId.ENGINEERINGBAY, UnitTypeId.ARMORY}):
+            for i in self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT}):
                 if abs(i.position.x - target_land_position.position.x) < 7:
                     authorized = False
 
@@ -144,7 +144,6 @@ def handle_upgrades(self : BotAI):
             armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL2)
         elif self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL3) == 0:
             armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL3)
-
 
 
 HALF_OFFSET = Point2((.5, .5))

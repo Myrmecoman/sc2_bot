@@ -7,6 +7,7 @@ from sc2.unit import Unit
 from sc2.units import Units
 from sc2.position import Point2
 from sc2.bot_ai import BotAI
+import math
 
 
 async def build_gas(self : BotAI):
@@ -42,7 +43,7 @@ async def try_build_on_line(self : BotAI, type : UnitTypeId, prod_structures : U
 
 
 async def smart_build(self : BotAI, type : UnitTypeId):
-    prod_structures : Units = self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT, UnitTypeId.ENGINEERINGBAY, UnitTypeId.ARMORY})
+    prod_structures : Units = self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT})
 
     if prod_structures.amount == 0:
         await self.build(type, near=self.main_base_ramp.barracks_correct_placement)
@@ -68,6 +69,34 @@ async def smart_build(self : BotAI, type : UnitTypeId):
         return
     Exception("No place found")
 
+
+HALF_OFFSET = Point2((.5, .5))
+async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId):
+    # try all ccs and find average position of its mineral fields
+    for cc in self.townhalls:
+        mfs: Units = self.mineral_field.closer_than(10, cc)
+        if mfs.amount == 0:
+            continue
+        x = 0
+        y = 0
+        for i in mfs:
+            x += i.position.x
+            y += i.position.y
+        x = x // mfs.amount
+        y = y // mfs.amount
+        # try to place at a few positions
+        for i in range(20):
+            position = cc.position.towards_with_random_angle(Point2((x, y)), 9, (math.pi / 3))
+            position_further = cc.position.towards_with_random_angle(Point2((x, y)), 12, (math.pi / 3))
+            position.rounded.offset(HALF_OFFSET)
+            position_further.rounded.offset(HALF_OFFSET)
+            if await self.can_place_single(type, position):
+                await self.build(type, near=position, max_distance=4)
+                return
+            if await self.can_place_single(type, position_further):
+                await self.build(type, near=position_further, max_distance=4)
+                return
+        print("Could not place tech building behind mineral lines")
 
 async def macro(self : BotAI):
 
@@ -96,10 +125,10 @@ async def macro(self : BotAI):
         await smart_build(self, UnitTypeId.BARRACKS)
 
     if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.ENGINEERINGBAY, None, 2):
-        await smart_build(self, UnitTypeId.ENGINEERINGBAY)
+        await smart_build_behind_mineral(self, UnitTypeId.ENGINEERINGBAY)
 
     if (self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) > 0.3 or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)) > 0.3 and can_build_structure(self, UnitTypeId.ARMORY, None, 1):
-        await smart_build(self, UnitTypeId.ARMORY)
+        await smart_build_behind_mineral(self, UnitTypeId.ARMORY)
 
     if self.can_afford(UnitTypeId.COMMANDCENTER) and self.townhalls.amount < 15 and (self.already_pending(UnitTypeId.COMMANDCENTER) == 0 or self.minerals > 2000):
         await build_cc(self)
