@@ -27,8 +27,6 @@ async def build_cc(self : BotAI):
     if location:
         worker: Unit = self.select_build_worker(location) # select the nearest worker to that location
         worker.build(UnitTypeId.COMMANDCENTER, location)
-    else:
-        await self.expand_now() # in case it won't work
 
 
 async def try_build_on_line(self : BotAI, type : UnitTypeId, prod_structures : Units, shift = 0):

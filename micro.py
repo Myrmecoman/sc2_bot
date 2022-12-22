@@ -26,7 +26,7 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy):
         return
     
     dangers : Units = self.enemy_units.exclude_type({UnitTypeId.LARVA, UnitTypeId.EGG})
-    # dangerous_structures = self.enemy_structures({UnitTypeId.PHOTONCANNON, UnitTypeId.BUNKER, UnitTypeId.MISSILETURRET, UnitTypeId.SPORECRAWLER, UnitTypeId.SPINECRAWLER}) # to be used
+    # dangerous_structures = self.enemy_structures({UnitTypeId.PHOTONCANNON, UnitTypeId.BUNKER, UnitTypeId.MISSILETURRET, UnitTypeId.SPORECRAWLER, UnitTypeId.SPINECRAWLER}) # to be used later
 
     if unit.can_attack_both:
         if dangers.amount == 0:
