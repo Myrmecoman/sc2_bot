@@ -1,8 +1,3 @@
-import time
-
-from collections import namedtuple, deque
-from sc2.main import run_game
-from sc2.data import Race, Difficulty
 from sc2.bot_ai import BotAI
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.ability_id import AbilityId
@@ -12,8 +7,16 @@ from sc2.bot_ai import BotAI
 from typing import Dict, Iterable, List, Optional, Set
 
 
+# hit and run
+def kite_attack(unit : Unit, enemy):
+    if unit.weapon_cooldown == 0:
+        unit.attack(enemy)
+    else:
+        unit.move(unit.position.towards(enemy, -1))
+
+
 # same as attack, except medivacs and other non attacking units don't suicide straight in the enemy lines
-def soft_attack(units : Units, unit : Unit, position_or_enemy):
+def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy):
     if not unit.can_attack:
         if units.not_flying.amount > 0:
             pos = units.not_flying.closest_to(position_or_enemy).position
@@ -21,15 +24,34 @@ def soft_attack(units : Units, unit : Unit, position_or_enemy):
         else:
             unit.attack(position_or_enemy)
         return
-    unit.attack(position_or_enemy)
+    
+    if unit.can_attack_both:
+        if self.enemy_units.amount == 0:
+            unit.attack(position_or_enemy)
+            return
+        closest_enemy = self.enemy_units.closest_to(unit)
+        kite_attack(unit, closest_enemy)
+
+    elif unit.can_attack_ground:
+        if self.enemy_units.not_flying.amount == 0:
+            unit.attack(position_or_enemy)
+            return
+        closest_enemy = self.enemy_units.not_flying.closest_to(unit)
+        kite_attack(unit, closest_enemy)
+
+    elif unit.can_attack_air:
+        if self.enemy_units.flying.amount == 0:
+            unit.attack(position_or_enemy)
+            return
+        closest_enemy = self.enemy_units.flying.closest_to(unit)
+        kite_attack(unit, closest_enemy)
 
 
 # move to retreat avoiding enemies as much as possible
 def smart_move(self : BotAI, unit : Unit, position):
     unit.move(position)
     # generate map of area covered by units
-    self.client
-    
+    # TODO
 
 
 def are_we_worker_rushed(self : BotAI):
@@ -96,6 +118,22 @@ def are_we_idle_at_enemy_base(self):
     return self.enemy_structures.amount == 0 and self.enemy_units.amount == 0 and self.units.closest_distance_to(self.enemy_start_locations[0]) < 3
 
 
+def go_scout_bases(self):
+    if len(self.scouting_units) != 0:
+        return
+    counter = 0
+    for i in self.expansion_locations:
+        if counter >= self.units.amount:
+            break
+        self.scouting_units.append((self.units[counter], i, False))
+        self.units[counter].attack(i)
+        counter += 1
+    for i in range(len(self.scouting_units)):
+        if self.scouting_units[i][0].distance_to(self.scouting_units[i][1]) < 1 and self.scouting_units[i][2] == False:
+            self.scouting_units[i] = (self.scouting_units[i][0], self.scouting_units[i][1], True)
+            self.scouting_units[i][0].attack(self.scouting_units[i][1].towards(self.game_info.map_center, -9))
+
+
 async def micro(self : BotAI):
 
     if counter_worker_rush(self):
@@ -110,21 +148,8 @@ async def micro(self : BotAI):
         return
     
     if are_we_idle_at_enemy_base(self):
-        if len(self.scouting_units) != 0:
-            return
-        counter = 0
-        for i in self.expansion_locations:
-            if counter >= self.units.amount:
-                break
-            self.scouting_units.append((self.units[counter], i, False))
-            self.units[counter].attack(i)
-            counter += 1
-        for i in range(len(self.scouting_units)):
-            if self.scouting_units[i][0].distance_to(self.scouting_units[i][1]) < 1 and self.scouting_units[i][2] == False:
-                self.scouting_units[i] = (self.scouting_units[i][0], self.scouting_units[i][1], True)
-                self.scouting_units[i][0].attack(self.scouting_units[i][1].towards(self.game_info.map_center, -9))
+        go_scout_bases(self)
         return
-    
     self.scouting_units = []
 
     attack = False
@@ -148,14 +173,12 @@ async def micro(self : BotAI):
             elif i.type_id == UnitTypeId.SIEGETANKSIEGED and (enemy_closest.not_flying.amount == 0 or enemy_closest.not_flying.first.distance_to(i.position) >= 13):
                 i(AbilityId.UNSIEGE_UNSIEGE)
             elif enemy_closest.amount > 0:
-                soft_attack(units, i, enemy_closest.first)
+                smart_attack(self, units, i, enemy_closest.first)
             else:
-                soft_attack(units, i, pos)
+                smart_attack(self, units, i, pos)
         else:
             if i.type_id == UnitTypeId.SIEGETANKSIEGED and enemy_closest.not_flying.amount > 0 and enemy_closest.not_flying.first.distance_to(i.position) > 13:
                 i(AbilityId.UNSIEGE_UNSIEGE)
-            elif enemy_closest.amount > 0 and enemy_closest.first.distance_to(i.position) <= 6:
-                soft_attack(units, i, enemy_closest.first)
             else:
                 smart_move(self, i, pos)
 
