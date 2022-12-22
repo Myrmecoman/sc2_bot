@@ -149,6 +149,10 @@ def handle_upgrades(self : BotAI):
 
 HALF_OFFSET = Point2((.5, .5))
 async def handle_supply(self : BotAI):
+
+    if self.supply_cap >= 200:
+        return
+
     if self.supply_left < 6 and self.supply_used >= 14 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 2 and len(self.build_order) == 0:
         # try all ccs and find average position of its mineral fields
         for cc in self.townhalls:

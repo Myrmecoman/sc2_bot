@@ -20,7 +20,7 @@ bot = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBot")
 #enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
 #enemy = Bot(Race.Terran, Lift(), "Lift")
 enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")
-enemycheat = Computer(Race.Zerg, Difficulty.CheatVision)
+enemycheat = Computer(Race.Zerg, Difficulty.CheatInsane)
 human = Human(Race.Terran, "Hooman", True)
 
 # Start game
