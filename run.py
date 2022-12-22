@@ -14,11 +14,11 @@ from sc2.data import Difficulty, Race
 from sc2.main import run_game
 from sc2.player import Bot, Computer, Human
 
-map_names = ["AcropolisLE", "DiscoBloodbathLE", "EphemeronLE", "ThunderbirdLE", "TritonLE", "WintersGateLE", "WorldofSleepersLE"]
+map_names = ["BerlingradAIE", "HardwireAIE", "InsideAndOutAIE", "MoondanceAIE", "StargazersAIE", "WaterfallAIE"]
 bot = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBot")
 enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
 #enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")
-enemycheat = Computer(Race.Random, Difficulty.VeryHard) # CheaterVision
+enemycheat = Computer(Race.Random, Difficulty.CheatVision)
 human = Human(Race.Terran, "Hooman", True)
 
 # Start game

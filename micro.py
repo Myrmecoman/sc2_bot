@@ -84,12 +84,11 @@ def worker_rush_ended(self : BotAI):
 
 # very basic indicator
 def should_we_fight(self : BotAI):
-    nb_enemies = self.enemy_units.amount
-    nb_army = self.army_count
-    if nb_army / (nb_enemies + 0.01) > 1.5: # if army is big enough, can attack
-        return True
-    if self.enemy_units.closest_distance_to(self.structures.closest_to(self.game_info.map_center)) < 15: # if being attacked, defend
-        return True
+    if self.enemy_units.amount == 0:
+        return False
+    for i in self.structures:
+        if i.position.distance_to_closest(self.enemy_units) < 18:
+            return True
     return False
 
 
@@ -109,7 +108,7 @@ async def micro(self : BotAI):
     attack = False
     pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
     enemies: Units = self.enemy_units | self.enemy_structures
-    if self.supply_army > 40 and should_we_fight(self):
+    if self.supply_army >= 40 or should_we_fight(self):
         enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(self.start_location))
         if enemy_closest.amount > 0:
             pos = enemy_closest[0]

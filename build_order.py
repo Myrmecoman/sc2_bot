@@ -1,5 +1,6 @@
 from custom_utils import points_to_build_addon
 from macro import smart_build
+from macro import build_gas
 
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.ability_id import AbilityId
@@ -41,16 +42,8 @@ async def early_build_order(self : BotAI):
         self.build_order.pop(0)
     # Build refinery
     if self.can_afford(UnitTypeId.REFINERY) and self.build_order[0] == UnitTypeId.REFINERY:
-        vgs: Units = self.vespene_geyser.closer_than(20, self.townhalls.ready.first)
-        for vg in vgs:
-            if self.gas_buildings.filter(lambda unit: unit.distance_to(vg) < 1):
-                break
-            worker: Unit = self.select_build_worker(vg.position)
-            if worker is None:
-                break
-            worker.build_gas(vg)
-            self.build_order.pop(0)
-            break
+        await build_gas(self)
+        self.build_order.pop(0)
     # Build command center
     if self.can_afford(UnitTypeId.COMMANDCENTER) and self.build_order[0] == UnitTypeId.COMMANDCENTER:
         await self.expand_now()

@@ -10,8 +10,8 @@ from sc2.bot_ai import BotAI
 
 
 async def build_gas(self : BotAI):
-    for th in self.townhalls.ready:
-        vgs: Units = self.vespene_geyser.closer_than(10, th)
+    for cc in self.townhalls.ready:
+        vgs: Units = self.vespene_geyser.closer_than(12, cc)
         for vg in vgs:
             if await self.can_place_single(UnitTypeId.REFINERY, vg.position):
                 workers: Units = self.workers.gathering
