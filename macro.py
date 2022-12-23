@@ -23,11 +23,11 @@ async def build_gas(self : BotAI):
 
 
 async def build_cc(self : BotAI):
-    if self.workers.amount == 0:
-        return
     location: Point2 = await self.get_next_expansion()
     if location:
         worker: Unit = self.select_build_worker(location) # select the nearest worker to that location
+        if worker is None:
+            return
         worker.build(UnitTypeId.COMMANDCENTER, location)
 
 
@@ -98,11 +98,28 @@ async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId):
                 return
         print("Could not place tech building behind mineral lines")
 
+
+def repair_buildings(self : BotAI):
+    for i in self.structures.ready:
+        if i.health_percentage > 0.9:
+            continue
+        sorted_workers = self.workers.sorted(lambda x: x.distance_to(i))
+        if sorted_workers.amount > 0 and sorted_workers.first.distance_to(i) < 20:
+            sorted_workers[0](AbilityId.EFFECT_REPAIR_SCV, i)
+        if sorted_workers.amount > 1:
+            sorted_workers[1](AbilityId.EFFECT_REPAIR_SCV, i)
+        if i.health_percentage < 0.4 and sorted_workers.amount > 2:
+            sorted_workers[2](AbilityId.EFFECT_REPAIR_SCV, i)
+        if i.health_percentage < 0.4 and sorted_workers.amount > 3:
+            sorted_workers[3](AbilityId.EFFECT_REPAIR_SCV, i)
+
+
 async def macro(self : BotAI):
 
     for st in self.structures:
         if not st.is_ready and st.health_percentage < 0.1:
             st(AbilityId.CANCEL)
+    repair_buildings(self)
 
     if len(self.build_order) != 0 or self.workers.amount == 0:
         return
