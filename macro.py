@@ -23,6 +23,8 @@ async def build_gas(self : BotAI):
 
 
 async def build_cc(self : BotAI):
+    if self.workers.amount == 0:
+        return
     location: Point2 = await self.get_next_expansion()
     if location:
         worker: Unit = self.select_build_worker(location) # select the nearest worker to that location
