@@ -45,6 +45,19 @@ def land_structures_for_addons(self : BotAI):
             if authorized and all(self.in_map_bounds(land_pos) and self.in_placement_grid(land_pos) and self.in_pathing_grid(land_pos) for land_pos in land_and_addon_points):
                 u(AbilityId.LAND, target_land_position)
                 break
+
+
+def build_add_on(self : BotAI, type, add_on_type):
+    # Build addon or lift if no room to build addon
+    u: Unit
+    for u in self.structures(type).ready.idle:
+        if not u.has_add_on and self.can_afford(add_on_type):
+            addon_points = points_to_build_addon(u.position)
+            if all(self.in_map_bounds(addon_point) and self.in_placement_grid(addon_point) and self.in_pathing_grid(addon_point) for addon_point in addon_points):
+                u.build(add_on_type)
+            elif self.enemy_units.closest_distance_to(u) > 15: # only lift if there are no threats
+                u(AbilityId.LIFT)
+            break
     
 
 def handle_add_ons(self : BotAI):
@@ -84,11 +97,11 @@ def handle_depot_status(self : BotAI):
         enemies: Units = self.enemy_units
         for depo in self.structures(UnitTypeId.SUPPLYDEPOT).ready:
             enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(depo.position))
-            if enemy_closest.first.distance_to(depo) >= 10:
+            if enemy_closest.first.distance_to(depo) >= 12:
                 depo(AbilityId.MORPH_SUPPLYDEPOT_LOWER)
         for depo in self.structures(UnitTypeId.SUPPLYDEPOTLOWERED).ready:
             enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(depo.position))
-            if enemy_closest.first.distance_to(depo) < 10:
+            if enemy_closest.first.distance_to(depo) < 12:
                 depo(AbilityId.MORPH_SUPPLYDEPOT_RAISE)
 
 
@@ -203,22 +216,3 @@ def build_worker(self : BotAI):
         if cc.is_idle:
             cc.train(UnitTypeId.SCV)
             break
-
-
-def build_add_on(self : BotAI, type, add_on_type):
-    # Build addon or lift if no room to build addon
-    u: Unit
-    for u in self.structures(type).ready.idle:
-        if not u.has_add_on and self.can_afford(add_on_type):
-            addon_points = points_to_build_addon(u.position)
-            if all(self.in_map_bounds(addon_point) and self.in_placement_grid(addon_point) and self.in_pathing_grid(addon_point) for addon_point in addon_points):
-                u.build(add_on_type)
-            else:
-                u(AbilityId.LIFT)
-            break
-
-
-# TODO
-def handle_constructions(self : BotAI):
-    for b in self.structures_without_construction_SCVs:
-        return

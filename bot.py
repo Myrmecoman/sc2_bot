@@ -7,7 +7,6 @@ from custom_utils import handle_depot_status
 from custom_utils import handle_upgrades
 from custom_utils import handle_supply
 from custom_utils import handle_orbitals
-from custom_utils import handle_constructions
 from build_order import early_build_order
 from micro import micro
 from micro import split_workers
@@ -92,6 +91,5 @@ class SmoothBrainBot(BotAI):
         land_structures_for_addons(self)
         handle_add_ons(self)
         produce(self)
-        handle_constructions(self)
         handle_upgrades(self)
         await micro(self)

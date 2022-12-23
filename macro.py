@@ -7,6 +7,7 @@ from sc2.unit import Unit
 from sc2.units import Units
 from sc2.position import Point2
 from sc2.bot_ai import BotAI
+from sc2.data import Race
 import math
 
 
@@ -45,11 +46,14 @@ async def try_build_on_line(self : BotAI, type : UnitTypeId, prod_structures : U
 async def smart_build(self : BotAI, type : UnitTypeId):
     prod_structures : Units = self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT})
 
-    if prod_structures.amount == 0:
+    if prod_structures.amount == 0 and self.main_base_ramp.barracks_correct_placement:
         worker: Unit = self.select_build_worker(self.main_base_ramp.barracks_correct_placement) # select the nearest worker to that location
         if worker is None:
             return
-        worker.build(type, self.main_base_ramp.barracks_correct_placement)
+        if self.enemy_race == Race.Zerg:
+            worker.build(type, self.main_base_ramp.barracks_in_middle)
+        else:
+            worker.build(type, self.main_base_ramp.barracks_correct_placement)
         return
 
     if prod_structures.amount == 1:
@@ -131,7 +135,7 @@ def repair_buildings(self : BotAI):
         self.worker_assigned_to_repair[key] = new_value
 
         i = self.structures.find_by_tag(key)
-        if total_repairing >= 4 or (i.health_percentage >= 0.4 and total_repairing >= 2):
+        if total_repairing >= 4 or (i.health_percentage >= 0.5 and total_repairing >= 2):
             continue
         
         sorted_workers = self.workers.sorted(lambda x: x.distance_to(i))
@@ -142,7 +146,7 @@ def repair_buildings(self : BotAI):
                 wo(AbilityId.EFFECT_REPAIR_SCV, i)
                 self.worker_assigned_to_repair[key].append(wo.tag)
                 total_repairing = len(self.worker_assigned_to_repair[key])
-            if wo.distance_to(i) < 25 and total_repairing < 4 and i.health_percentage < 0.4:
+            if wo.distance_to(i) < 25 and total_repairing < 4 and i.health_percentage < 0.5:
                 wo(AbilityId.EFFECT_REPAIR_SCV, i)
                 self.worker_assigned_to_repair[key].append(wo.tag)
                 total_repairing = len(self.worker_assigned_to_repair[key])
