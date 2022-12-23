@@ -111,7 +111,7 @@ def repair_buildings(self : BotAI):
     # adding tag if needs to be repaired, else remove it
     for i in self.structures.ready:
         if i.health_percentage > 0.9:
-            if i.tag in self.worker_assigned_to_repair:
+            if i.tag in self.worker_assigned_to_repair.keys():
                 self.worker_assigned_to_repair.pop(i.tag)
             continue
         if i.tag in self.worker_assigned_to_repair:
@@ -119,31 +119,32 @@ def repair_buildings(self : BotAI):
         self.worker_assigned_to_repair[i.tag] = []
     
     for key in self.worker_assigned_to_repair.keys():
-
-        if self.structures.find_by_tag(key) is None:
+        if self.structures.find_by_tag(key) is None: # the building died
             continue
         total_repairing = len(self.worker_assigned_to_repair[key])
         
         # removing dead SCVs from the lists
         new_value = []
         for i in range(total_repairing):
-            if self.units.filter(lambda unit: unit.type_id == UnitTypeId.SCV).find_by_tag(self.worker_assigned_to_repair[key][i]) is not None:
-                new_value.append(self.worker_assigned_to_repair[key][i])
+            worker_tag = self.worker_assigned_to_repair[key][i]
+            if self.units.of_type({UnitTypeId.SCV}).find_by_tag(worker_tag) is not None:
+                new_value.append(worker_tag)
         self.worker_assigned_to_repair[key] = new_value
+        total_repairing = len(self.worker_assigned_to_repair[key])
 
         i = self.structures.find_by_tag(key)
         if total_repairing >= 4 or (i.health_percentage >= 0.5 and total_repairing >= 2):
             continue
         
-        sorted_workers = self.workers.sorted(lambda x: x.distance_to(i))
+        sorted_workers : Units = self.workers.sorted(lambda x: x.distance_to(i))
         for wo in sorted_workers:
-            if wo.is_repairing:
+            if wo.is_repairing or wo.is_constructing_scv:
                 continue
-            if wo.distance_to(i) < 25 and total_repairing < 2:
+            if wo.distance_to(i) < 30 and total_repairing < 2:
                 wo(AbilityId.EFFECT_REPAIR_SCV, i)
                 self.worker_assigned_to_repair[key].append(wo.tag)
                 total_repairing = len(self.worker_assigned_to_repair[key])
-            if wo.distance_to(i) < 25 and total_repairing < 4 and i.health_percentage < 0.5:
+            if wo.distance_to(i) < 30 and total_repairing < 4 and i.health_percentage < 0.5:
                 wo(AbilityId.EFFECT_REPAIR_SCV, i)
                 self.worker_assigned_to_repair[key].append(wo.tag)
                 total_repairing = len(self.worker_assigned_to_repair[key])
@@ -156,13 +157,9 @@ def cancel_building(self : BotAI):
 
 
 def resume_building_construction(self : BotAI):
-
-    if self.enemy_units.amount == 0:
-        return
-
     # checking if it is actually safe to resume construction
     for i in self.structures:
-        if self.enemy_units.closest_distance_to(i) < 12:
+        if self.enemy_units.amount != 0 and self.enemy_units.closest_distance_to(i) < 12:
             return
 
     for i in self.structures_without_construction_SCVs:

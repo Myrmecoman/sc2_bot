@@ -17,9 +17,9 @@ from sc2.player import Bot, Computer, Human
 
 map_names = ["BerlingradAIE", "HardwireAIE", "InsideAndOutAIE", "MoondanceAIE", "StargazersAIE", "WaterfallAIE"]
 bot = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBot")
-enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
+#enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
 #enemy = Bot(Race.Terran, Lift(), "Lift")
-#enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")
+enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")
 enemycheat = Computer(Race.Zerg, Difficulty.CheatVision) # CheatInsane, CheatVision
 human = Human(Race.Terran, "Hooman", True)
 
@@ -35,5 +35,5 @@ if __name__ == "__main__":
         print("Starting local game...")
         run_game(maps.get(map_names[random.randint(0, len(map_names) - 1)]),
         #[enemy, enemycheat], realtime=False)
-        [bot, enemycheat], realtime=False)
+        [bot, enemy], realtime=False)
         #[human, bot], realtime=True)
