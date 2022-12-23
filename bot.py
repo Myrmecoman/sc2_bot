@@ -43,6 +43,7 @@ class SmoothBrainBot(BotAI):
 
     async def on_before_start(self) -> None:
         self.client.game_step = self.game_step
+        self.client.raw_affects_selection = True
 
 
     async def on_start(self) -> None:
