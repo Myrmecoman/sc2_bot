@@ -155,7 +155,7 @@ async def micro(self : BotAI):
         worker_rush_ended(self)
         return
 
-    units : Units = self.units.exclude_type({UnitTypeId.SCV})
+    units : Units = self.units.exclude_type({UnitTypeId.SCV, UnitTypeId.MULE})
     if len(units) == 0:
         return
     
