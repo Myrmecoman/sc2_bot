@@ -173,7 +173,7 @@ def go_scout_bases(self : BotAI):
     self.produce_from_factories = False
     self.produce_from_barracks = False
     
-    for i in vikings.idle:
+    for i in vikings:
         not_first = False
         for corner in self.map_corners:
             i.attack(corner, not_first)
