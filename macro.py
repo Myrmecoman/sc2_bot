@@ -56,9 +56,6 @@ async def smart_build(self : BotAI, type : UnitTypeId):
             worker.build(type, self.main_base_ramp.barracks_correct_placement)
         return
 
-    if prod_structures.amount == 1:
-        self.first_barracks = prod_structures.first
-
     # build as a line from any started line
     if await try_build_on_line(self, type, prod_structures):
         return
@@ -216,6 +213,8 @@ async def macro(self : BotAI):
     for r in refineries:
         if r.vespene_contents > 20:
             active_refineries += 1
+    if self.townhalls.amount >= 2 and active_refineries < 2 and self.can_afford(UnitTypeId.REFINERY):
+        await build_gas(self)
     if self.townhalls.amount >= 3 and active_refineries < 4 and self.can_afford(UnitTypeId.REFINERY):
         await build_gas(self)
     if self.townhalls.amount >= 4 and active_refineries < 6 and self.can_afford(UnitTypeId.REFINERY):

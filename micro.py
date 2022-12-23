@@ -4,6 +4,7 @@ from sc2.ids.ability_id import AbilityId
 from sc2.unit import Unit
 from sc2.units import Units
 from sc2.bot_ai import BotAI
+from sc2.position import Point2
 from typing import Dict, Iterable, List, Optional, Set
 
 
@@ -145,20 +146,38 @@ def are_we_idle_at_enemy_base(self):
     return self.enemy_structures.amount == 0 and self.enemy_units.amount == 0 and self.units.closest_distance_to(self.enemy_start_locations[0]) < 3
 
 
-def go_scout_bases(self):
-    if len(self.scouting_units) != 0:
+def go_scout_bases(self : BotAI):
+    if self.time - self.scouted_at_time < 90:
         return
+    
+    self.scouted_at_time = self.time
     counter = 0
+    ground_units = self.units.filter(lambda unit: unit.can_attack_ground)
     for i in self.expansion_locations:
-        if counter >= self.units.amount:
+        if counter >= ground_units.amount:
             break
-        self.scouting_units.append((self.units[counter], i, False))
-        self.units[counter].attack(i)
+        ground_units[counter].attack(i)
+        ground_units[counter].attack(i.towards(self.game_info.map_center, -9), True)
         counter += 1
-    for i in range(len(self.scouting_units)):
-        if self.scouting_units[i][0].distance_to(self.scouting_units[i][1]) < 1 and self.scouting_units[i][2] == False:
-            self.scouting_units[i] = (self.scouting_units[i][0], self.scouting_units[i][1], True)
-            self.scouting_units[i][0].attack(self.scouting_units[i][1].towards(self.game_info.map_center, -9))
+    vikings = self.units.of_type({UnitTypeId.VIKINGFIGHTER})
+
+    # kill the tanks if we can't buy vikings and produce only vikings from starports
+    counter = 0
+    for i in self.units.of_type({UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED}):
+        marauders = self.units.of_type({UnitTypeId.MARAUDER})
+        marines = self.units.of_type({UnitTypeId.MARINE})
+        if marauders.amount > 0:
+            marauders.random.attack(i)
+        if marines.amount > 0:
+            marines.random.attack(i)
+    self.produce_from_factories = False
+    self.produce_from_barracks = False
+    
+    for i in vikings.idle:
+        not_first = False
+        for corner in self.map_corners:
+            i.attack(corner, not_first)
+            not_first = True
 
 
 async def micro(self : BotAI):
@@ -174,7 +193,10 @@ async def micro(self : BotAI):
     if are_we_idle_at_enemy_base(self):
         go_scout_bases(self)
         return
-    self.scouting_units = []
+    
+    self.produce_from_starports = True
+    self.produce_from_factories = True
+    self.produce_from_barracks = True
 
     attack = False
     pos = self.townhalls.closest_to(self.enemy_start_locations[0]).position.towards(self.enemy_start_locations[0], 10)

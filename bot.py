@@ -24,6 +24,7 @@ from itertools import chain
 from sc2.bot_ai import BotAI
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.unit import Unit
+from sc2.position import Point2
 
 
 # bot code --------------------------------------------------------------------------------------------------------
@@ -34,12 +35,14 @@ class SmoothBrainBot(BotAI):
         self.worker_rushed = False
         self.game_step: int = 2
         self.tags: Set[str] = set()
-        self.first_barracks = None
         self.attack_with_all_worker = False
         self.scouting_units = []
         self.worker_assigned_to_repair = {}
-        self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY, UnitTypeId.REFINERY,
-        UnitTypeId.BARRACKSREACTOR]
+        self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY]
+        self.produce_from_starports = True
+        self.produce_from_factories = True
+        self.produce_from_barracks = True
+        self.scouted_at_time = -1000
         super().__init__()
 
 
@@ -47,6 +50,11 @@ class SmoothBrainBot(BotAI):
         self.client.game_step = self.game_step
         self.client.raw_affects_selection = True
         adjust_production_values(self)
+        top_right = Point2((self.game_info.playable_area.right, self.game_info.playable_area.top))
+        bottom_right = Point2((self.game_info.playable_area.right, 0))
+        bottom_left = Point2((0, 0))
+        top_left = Point2((0, self.game_info.playable_area.top))
+        self.map_corners = [top_right, bottom_right, bottom_left, top_left]
 
 
     async def on_start(self) -> None:
