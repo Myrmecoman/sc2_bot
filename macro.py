@@ -100,6 +100,10 @@ async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId):
 
 
 def repair_buildings(self : BotAI):
+
+    if self.worker_rushed:
+        return
+
     for i in self.structures.ready:
         if i.health_percentage > 0.9:
             continue

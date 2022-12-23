@@ -70,25 +70,35 @@ def smart_move(self : BotAI, unit : Unit, position, enemies : Units):
 
 
 def are_we_worker_rushed(self : BotAI):
+
+    if self.time > 300:
+        return 0, None
+
     enemies: Units = self.enemy_units.visible.of_type({UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE}).sorted(lambda x: x.distance_to(self.start_location))
-    dangerous_units = 0
-    for e in enemies:
-        if e.distance_to(self.start_location) < 8:
-            dangerous_units += 1
+    
     if enemies.empty:
         return 0, None
+
+    dangerous_units = 0
+    for s in self.structures:
+        max_dangerous_units = 0
+        for e in enemies:
+            if e.distance_to(s) < 8:
+                max_dangerous_units += 1
+        if max_dangerous_units > dangerous_units:
+            dangerous_units = max_dangerous_units
     return dangerous_units, enemies.first.position
 
 
 def counter_worker_rush(self : BotAI):
     w, pos = are_we_worker_rushed(self)
-    if w < 3 and not self.worker_rushed:
+    if (w < 3 and not self.worker_rushed) or w == 0:
         return False
 
     self.worker_rushed = True
     counter = 0
     for i in self.workers:
-        if i.health <= 10:
+        if i.health <= 10 and not self.attack_with_all_worker:
             mfs: Units = self.mineral_field.closer_than(12, self.start_location)
             if mfs:
                 mf: Unit = mfs.furthest_to(i)
@@ -97,14 +107,15 @@ def counter_worker_rush(self : BotAI):
                 i.move(self.mineral_field.closest_to(i))
             continue
         counter += 1
-        if counter > 2 * w: # only pull twice their amount
+        if counter > w + 2: # only pull their amount + 2
             break
         i.attack(pos)
-    if counter < 2 * w:
-        for i in self.workers.idle:
+    if counter <= w + 2:
+        self.attack_with_all_worker = True
+        for i in self.workers:
             i.attack(pos)
-        for i in self.workers.gathering:
-            i.attack(pos)
+    else:
+        self.attack_with_all_worker = False
     return True
 
 
@@ -112,6 +123,7 @@ def worker_rush_ended(self : BotAI):
     w, _ = are_we_worker_rushed(self)
     if w == 0 and self.worker_rushed:
         self.worker_rushed = False
+        self.attack_with_all_worker = False
         for i in self.workers.idle:
             mfs: Units = self.mineral_field.closer_than(10, self.townhalls.first)
             if mfs:

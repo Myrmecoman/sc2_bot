@@ -35,6 +35,7 @@ class SmoothBrainBot(BotAI):
         self.game_step: int = 2
         self.tags: Set[str] = set()
         self.first_barracks = None
+        self.attack_with_all_worker = False
         self.scouting_units = []
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY, UnitTypeId.REFINERY,
         UnitTypeId.BARRACKSREACTOR]
