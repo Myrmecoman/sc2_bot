@@ -10,7 +10,7 @@ from typing import Dict, Iterable, List, Optional, Set
 
 # hit and run
 def kite_attack(unit : Unit, enemy : Unit, unit_range):
-    if unit.weapon_cooldown == 0 or unit.distance_to(enemy) > unit_range:
+    if unit.weapon_cooldown == 0 or unit.distance_to(enemy) > unit_range + 1:
         unit.attack(enemy)
     else:
         unit.move(unit.position.towards(enemy, -1))
@@ -75,19 +75,14 @@ def are_we_worker_rushed(self : BotAI):
     if self.time > 300:
         return 0, None
 
-    enemies: Units = self.enemy_units.visible.of_type({UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE}).sorted(lambda x: x.distance_to(self.start_location))
-    
+    enemies: Units = self.enemy_units.visible.of_type({UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE})
     if enemies.empty:
         return 0, None
 
     dangerous_units = 0
-    for s in self.structures.ready:
-        max_dangerous_units = 0
-        for e in enemies:
-            if e.distance_to(s) < 8:
-                max_dangerous_units += 1
-        if max_dangerous_units > dangerous_units:
-            dangerous_units = max_dangerous_units
+    for e in enemies:
+        if e.distance_to(self.start_location) < 10:
+            dangerous_units += 1
     return dangerous_units, enemies.first.position
 
 
