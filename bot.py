@@ -13,6 +13,7 @@ from micro import micro
 from micro import split_workers
 from macro import macro
 from production import produce
+from production import adjust_production_values
 from speedmining import get_speedmining_positions
 from speedmining import micro_structure
 from speedmining import micro_worker
@@ -46,6 +47,7 @@ class SmoothBrainBot(BotAI):
     async def on_before_start(self) -> None:
         self.client.game_step = self.game_step
         self.client.raw_affects_selection = True
+        adjust_production_values(self)
 
 
     async def on_start(self) -> None:

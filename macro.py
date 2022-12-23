@@ -46,7 +46,10 @@ async def smart_build(self : BotAI, type : UnitTypeId):
     prod_structures : Units = self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT})
 
     if prod_structures.amount == 0:
-        await self.build(type, near=self.main_base_ramp.barracks_correct_placement)
+        worker: Unit = self.select_build_worker(self.main_base_ramp.barracks_correct_placement) # select the nearest worker to that location
+        if worker is None:
+            return
+        worker.build(type, self.main_base_ramp.barracks_correct_placement)
         return
 
     if prod_structures.amount == 1:

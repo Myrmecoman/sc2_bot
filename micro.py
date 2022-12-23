@@ -25,7 +25,7 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
             unit.attack(position_or_enemy)
         return
     
-    if unit.type_id == UnitTypeId.SIEGETANK and enemies.not_flying.amount > 0 and enemies.not_flying.closest_distance_to(unit) <= 12.5:
+    if unit.type_id == UnitTypeId.SIEGETANK and enemies.not_flying.amount > 0 and enemies.not_flying.closest_distance_to(unit) <= 13:
         unit(AbilityId.SIEGEMODE_SIEGEMODE)
         return
     elif unit.type_id == UnitTypeId.SIEGETANKSIEGED and (enemies.not_flying.amount == 0 or enemies.not_flying.closest_distance_to(unit) >= 14):
@@ -136,7 +136,7 @@ def should_we_fight(self : BotAI):
     if self.enemy_units.amount == 0:
         return False
     for i in self.structures:
-        if i.position.distance_to_closest(self.enemy_units) < 18:
+        if i.position.distance_to_closest(self.enemy_units) < 24:
             return True
     return False
 
@@ -177,7 +177,7 @@ async def micro(self : BotAI):
     self.scouting_units = []
 
     attack = False
-    pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
+    pos = self.townhalls.closest_to(self.enemy_start_locations[0]).position.towards(self.enemy_start_locations[0], 10)
     enemies: Units = self.enemy_units | self.enemy_structures
     if self.supply_army >= 40 or should_we_fight(self):
         if enemies.amount > 0:
@@ -185,8 +185,6 @@ async def micro(self : BotAI):
         else:
             pos = self.enemy_start_locations[0]
         attack = True
-    elif self.supply_army < 20 or attack == False:
-        pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
 
     for i in units:
         if attack:

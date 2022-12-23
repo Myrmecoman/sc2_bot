@@ -1,7 +1,21 @@
-from sc2.main import run_game
-from sc2.data import Race, Difficulty
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.bot_ai import BotAI
+from sc2.data import Race
+
+
+MAX_MEDIVACS = 6
+MAX_RAVENS = 4
+MAX_VIKINGS = 8
+
+
+def adjust_production_values(self : BotAI):
+    global MAX_MEDIVACS
+    global MAX_RAVENS
+    global MAX_VIKINGS
+
+    if self.enemy_race == Race.Terran:
+        MAX_MEDIVACS = 2
+        MAX_VIKINGS = 16
 
 
 def produce(self : BotAI):
@@ -41,21 +55,21 @@ def produce(self : BotAI):
             add_on = self.structures.find_by_tag(st.add_on_tag)
             if add_on is None:
                 continue
-            if add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.RAVEN) and self.units(UnitTypeId.RAVEN).amount < 4:
+            if add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.RAVEN) and self.units(UnitTypeId.RAVEN).amount < MAX_RAVENS:
                 st.build(UnitTypeId.RAVEN)
-            elif add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < 6:
+            elif add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < MAX_MEDIVACS:
                 st.build(UnitTypeId.MEDIVAC)
-            elif add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < 8:
+            elif add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < MAX_VIKINGS:
                 st.build(UnitTypeId.VIKINGFIGHTER)
-            elif add_on.type_id == UnitTypeId.STARPORTREACTOR and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < 6:
+            elif add_on.type_id == UnitTypeId.STARPORTREACTOR and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < MAX_MEDIVACS:
                 st.build(UnitTypeId.MEDIVAC)
                 if self.can_afford(UnitTypeId.MEDIVAC):
                     st.build(UnitTypeId.MEDIVAC)
-            elif add_on.type_id == UnitTypeId.STARPORTREACTOR and self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < 8:
+            elif add_on.type_id == UnitTypeId.STARPORTREACTOR and self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < MAX_VIKINGS:
                 st.build(UnitTypeId.VIKINGFIGHTER)
                 if self.can_afford(UnitTypeId.VIKINGFIGHTER):
                     st.build(UnitTypeId.VIKINGFIGHTER)
-        elif self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < 6:
+        elif self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < MAX_MEDIVACS:
             st.build(UnitTypeId.MEDIVAC)
-        elif self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < 8:
+        elif self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < MAX_VIKINGS:
             st.build(UnitTypeId.VIKINGFIGHTER)
