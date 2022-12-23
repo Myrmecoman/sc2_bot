@@ -8,8 +8,8 @@ from typing import Dict, Iterable, List, Optional, Set
 
 
 # hit and run
-def kite_attack(unit : Unit, enemy):
-    if unit.weapon_cooldown == 0:
+def kite_attack(unit : Unit, enemy : Unit, unit_range):
+    if unit.weapon_cooldown == 0 or unit.distance_to(enemy) > unit_range:
         unit.attack(enemy)
     else:
         unit.move(unit.position.towards(enemy, -1))
@@ -40,21 +40,21 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
             unit.attack(position_or_enemy)
             return
         closest_enemy = dangers.closest_to(unit)
-        kite_attack(unit, closest_enemy)
+        kite_attack(unit, closest_enemy, unit.ground_range)
         return
     if unit.can_attack_ground:
         if dangers.not_flying.amount == 0:
             unit.attack(position_or_enemy)
             return
         closest_enemy = dangers.not_flying.closest_to(unit)
-        kite_attack(unit, closest_enemy)
+        kite_attack(unit, closest_enemy, unit.ground_range)
         return
     if unit.can_attack_air:
         if dangers.flying.amount == 0:
             unit.attack(position_or_enemy)
             return
         closest_enemy = dangers.flying.closest_to(unit)
-        kite_attack(unit, closest_enemy)
+        kite_attack(unit, closest_enemy, unit.air_range)
         return
 
 
@@ -80,7 +80,7 @@ def are_we_worker_rushed(self : BotAI):
         return 0, None
 
     dangerous_units = 0
-    for s in self.structures:
+    for s in self.structures.ready:
         max_dangerous_units = 0
         for e in enemies:
             if e.distance_to(s) < 8:

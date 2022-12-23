@@ -1,6 +1,7 @@
 from custom_utils import points_to_build_addon
 from macro import smart_build
 from macro import build_gas
+from macro import build_cc
 
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.ability_id import AbilityId
@@ -14,6 +15,9 @@ from sc2.bot_ai import BotAI
 async def early_build_order(self : BotAI):
 
     if len(self.build_order) == 0:
+        return
+    if self.structures_without_construction_SCVs.amount > 0:
+        self.build_order = []
         return
 
     # getting ramp wall positions
@@ -44,9 +48,17 @@ async def early_build_order(self : BotAI):
     if self.can_afford(UnitTypeId.REFINERY) and self.build_order[0] == UnitTypeId.REFINERY:
         await build_gas(self)
         self.build_order.pop(0)
+    # move SCV to next expansion
+    if self.build_order[0] == UnitTypeId.COMMANDCENTER:
+        location: Point2 = await self.get_next_expansion()
+        if location:
+            worker: Unit = self.select_build_worker(location) # select the nearest worker to that location
+            if worker is None:
+                return
+            worker.move(location)
     # Build command center
     if self.can_afford(UnitTypeId.COMMANDCENTER) and self.build_order[0] == UnitTypeId.COMMANDCENTER:
-        await self.expand_now()
+        await build_cc(self)
         self.build_order.pop(0)
     # Build orbital
     orbital_tech_requirement: float = self.tech_requirement_progress(UnitTypeId.ORBITALCOMMAND)

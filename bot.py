@@ -37,6 +37,7 @@ class SmoothBrainBot(BotAI):
         self.first_barracks = None
         self.attack_with_all_worker = False
         self.scouting_units = []
+        self.worker_assigned_to_repair = {}
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY, UnitTypeId.REFINERY,
         UnitTypeId.BARRACKSREACTOR]
         super().__init__()
