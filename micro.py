@@ -16,13 +16,20 @@ def kite_attack(unit : Unit, enemy):
 
 
 # same as attack, except medivacs and other non attacking units don't suicide straight in the enemy lines
-def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy):
+def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, enemies : Units):
     if not unit.can_attack:
         if units.not_flying.amount > 0:
             pos = units.not_flying.closest_to(position_or_enemy).position
             unit.attack(pos)
         else:
             unit.attack(position_or_enemy)
+        return
+    
+    if unit.type_id == UnitTypeId.SIEGETANK and enemies.not_flying.amount > 0 and enemies.not_flying.closest_distance_to(unit) <= 12.5:
+        unit(AbilityId.SIEGEMODE_SIEGEMODE)
+        return
+    elif unit.type_id == UnitTypeId.SIEGETANKSIEGED and (enemies.not_flying.amount == 0 or enemies.not_flying.closest_distance_to(unit) >= 14):
+        unit(AbilityId.UNSIEGE_UNSIEGE)
         return
     
     dangers : Units = self.enemy_units.exclude_type({UnitTypeId.LARVA, UnitTypeId.EGG})
@@ -34,24 +41,29 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy):
             return
         closest_enemy = dangers.closest_to(unit)
         kite_attack(unit, closest_enemy)
-
-    elif unit.can_attack_ground:
+        return
+    if unit.can_attack_ground:
         if dangers.not_flying.amount == 0:
             unit.attack(position_or_enemy)
             return
         closest_enemy = dangers.not_flying.closest_to(unit)
         kite_attack(unit, closest_enemy)
-
-    elif unit.can_attack_air:
+        return
+    if unit.can_attack_air:
         if dangers.flying.amount == 0:
             unit.attack(position_or_enemy)
             return
         closest_enemy = dangers.flying.closest_to(unit)
         kite_attack(unit, closest_enemy)
+        return
 
 
 # move to retreat avoiding enemies as much as possible
-def smart_move(self : BotAI, unit : Unit, position):
+def smart_move(self : BotAI, unit : Unit, position, enemies : Units):
+
+    if unit.type_id == UnitTypeId.SIEGETANKSIEGED and enemies.not_flying.amount > 0 and enemies.not_flying.closest_distance_to(unit) > 13:
+            unit(AbilityId.UNSIEGE_UNSIEGE)
+
     unit.move(position)
     # generate map of area covered by units
     # TODO
@@ -143,10 +155,7 @@ async def micro(self : BotAI):
         worker_rush_ended(self)
         return
 
-    units : Units = self.units.of_type({UnitTypeId.MARINE, UnitTypeId.MARAUDER, UnitTypeId.REAPER, UnitTypeId.GHOST, UnitTypeId.HELLION, UnitTypeId.WIDOWMINE,
-    UnitTypeId.WIDOWMINEBURROWED, UnitTypeId.CYCLONE, UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED, UnitTypeId.VIKINGFIGHTER, UnitTypeId.VIKINGASSAULT, UnitTypeId.LIBERATOR, UnitTypeId.MEDIVAC,
-    UnitTypeId.RAVEN, UnitTypeId.BATTLECRUISER, UnitTypeId.BANSHEE})
-
+    units : Units = self.units.exclude_type({UnitTypeId.SCV})
     if len(units) == 0:
         return
     
@@ -159,9 +168,8 @@ async def micro(self : BotAI):
     pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
     enemies: Units = self.enemy_units | self.enemy_structures
     if self.supply_army >= 40 or should_we_fight(self):
-        enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(self.start_location))
-        if enemy_closest.amount > 0:
-            pos = enemy_closest[0]
+        if enemies.amount > 0:
+            pos = enemies.closest_to(self.start_location)
         else:
             pos = self.enemy_start_locations[0]
         attack = True
@@ -169,21 +177,10 @@ async def micro(self : BotAI):
         pos = self.townhalls.closest_to(self.game_info.map_center).position.towards(self.game_info.map_center, 10)
 
     for i in units:
-        enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(i.position))
         if attack:
-            if i.type_id == UnitTypeId.SIEGETANK and enemy_closest.not_flying.amount > 0 and enemy_closest.not_flying.first.distance_to(i.position) <= 12:
-                i(AbilityId.SIEGEMODE_SIEGEMODE)
-            elif i.type_id == UnitTypeId.SIEGETANKSIEGED and (enemy_closest.not_flying.amount == 0 or enemy_closest.not_flying.first.distance_to(i.position) >= 13):
-                i(AbilityId.UNSIEGE_UNSIEGE)
-            elif enemy_closest.amount > 0:
-                smart_attack(self, units, i, enemy_closest.first)
-            else:
-                smart_attack(self, units, i, pos)
+            smart_attack(self, units, i, pos, enemies)
         else:
-            if i.type_id == UnitTypeId.SIEGETANKSIEGED and enemy_closest.not_flying.amount > 0 and enemy_closest.not_flying.first.distance_to(i.position) > 13:
-                i(AbilityId.UNSIEGE_UNSIEGE)
-            else:
-                smart_move(self, i, pos)
+            smart_move(self, i, pos, enemies)
 
 
 # distribute initial workers on mineral patches
