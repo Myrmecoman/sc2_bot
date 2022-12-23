@@ -104,13 +104,13 @@ def repair_buildings(self : BotAI):
         if i.health_percentage > 0.9:
             continue
         sorted_workers = self.workers.sorted(lambda x: x.distance_to(i))
-        if sorted_workers.amount > 0 and sorted_workers.first.distance_to(i) < 20:
+        if sorted_workers.amount > 0 and sorted_workers[0].distance_to(i) < 20:
             sorted_workers[0](AbilityId.EFFECT_REPAIR_SCV, i)
-        if sorted_workers.amount > 1:
+        if sorted_workers.amount > 1 and sorted_workers[1].distance_to(i) < 20:
             sorted_workers[1](AbilityId.EFFECT_REPAIR_SCV, i)
-        if i.health_percentage < 0.4 and sorted_workers.amount > 2:
+        if i.health_percentage < 0.4 and sorted_workers.amount > 2 and sorted_workers[2].distance_to(i) < 20:
             sorted_workers[2](AbilityId.EFFECT_REPAIR_SCV, i)
-        if i.health_percentage < 0.4 and sorted_workers.amount > 3:
+        if i.health_percentage < 0.4 and sorted_workers.amount > 3 and sorted_workers[3].distance_to(i) < 20:
             sorted_workers[3](AbilityId.EFFECT_REPAIR_SCV, i)
 
 
