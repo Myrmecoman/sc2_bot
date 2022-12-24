@@ -6,16 +6,19 @@ from sc2.data import Race
 MAX_MEDIVACS = 6
 MAX_RAVENS = 4
 MAX_VIKINGS = 8
+MAX_BC = 0
 
 
 def adjust_production_values(self : BotAI):
     global MAX_MEDIVACS
     global MAX_RAVENS
     global MAX_VIKINGS
+    global MAX_BC
 
     if self.enemy_race == Race.Terran:
         MAX_MEDIVACS = 2
         MAX_VIKINGS = 16
+        MAX_BC = 2
 
 
 def produce(self : BotAI):
@@ -28,6 +31,8 @@ def produce(self : BotAI):
                     continue
                 if add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.RAVEN) and self.units(UnitTypeId.RAVEN).amount < MAX_RAVENS:
                     st.build(UnitTypeId.RAVEN)
+                elif add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.structures(UnitTypeId.FUSIONCORE).amount > 0 and self.can_afford(UnitTypeId.BATTLECRUISER) and self.units(UnitTypeId.BATTLECRUISER).amount < MAX_BC:
+                    st.build(UnitTypeId.BATTLECRUISER)
                 elif add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < MAX_MEDIVACS:
                     st.build(UnitTypeId.MEDIVAC)
                 elif add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < MAX_VIKINGS:

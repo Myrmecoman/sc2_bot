@@ -205,6 +205,9 @@ async def macro(self : BotAI):
     if (self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) > 0.3 or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)) > 0.3 and can_build_structure(self, UnitTypeId.ARMORY, None, 1):
         await smart_build_behind_mineral(self, UnitTypeId.ARMORY)
 
+    if (self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL3) == 1 or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3)) == 1 and can_build_structure(self, UnitTypeId.FUSIONCORE, None, 1):
+        await smart_build_behind_mineral(self, UnitTypeId.FUSIONCORE)
+
     if self.can_afford(UnitTypeId.COMMANDCENTER) and self.townhalls.amount < 15 and (self.already_pending(UnitTypeId.COMMANDCENTER) == 0 or self.minerals > 2000):
         await build_cc(self)
 

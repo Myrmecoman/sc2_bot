@@ -18,7 +18,20 @@ def kite_attack(unit : Unit, enemy : Unit, unit_range):
 
 # same as attack, except medivacs and other non attacking units don't suicide straight in the enemy lines
 def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, enemies : Units):
+
+    # if the position cannot be reached by ground units and we are a viking at the designated position, land
+    if not self.in_pathing_grid(position_or_enemy):
+        if unit.type_id == UnitTypeId.VIKINGFIGHTER:
+            if unit.position.distance_to(position_or_enemy) < 8:
+                unit(AbilityId.MORPH_VIKINGASSAULTMODE)
+            else:
+                unit.move(position_or_enemy)
+            return
+
+    # handle medivacs and ravens
     if not unit.can_attack:
+        if unit.type_id == UnitTypeId.MEDIVAC:
+            unit(AbilityId.EFFECT_MEDIVACIGNITEAFTERBURNERS)
         if units.not_flying.amount > 0:
             pos = units.not_flying.closest_to(position_or_enemy).position
             unit.attack(pos)
@@ -26,6 +39,7 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
             unit.attack(position_or_enemy)
         return
     
+    # handle tanks
     if unit.type_id == UnitTypeId.SIEGETANK and enemies.not_flying.amount > 0 and enemies.not_flying.closest_distance_to(unit) <= 13:
         unit(AbilityId.SIEGEMODE_SIEGEMODE)
         return
@@ -34,27 +48,28 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
         return
     
     dangers : Units = self.enemy_units.exclude_type({UnitTypeId.LARVA, UnitTypeId.EGG})
-    # dangerous_structures = self.enemy_structures({UnitTypeId.PHOTONCANNON, UnitTypeId.BUNKER, UnitTypeId.MISSILETURRET, UnitTypeId.SPORECRAWLER, UnitTypeId.SPINECRAWLER}) # to be used later
+    enemy_structures : Units = self.enemy_structures
 
+    # everything else
     if unit.can_attack_both:
-        if dangers.amount == 0:
+        if (dangers | enemy_structures).amount == 0:
             unit.attack(position_or_enemy)
             return
-        closest_enemy = dangers.closest_to(unit)
+        closest_enemy = (dangers | enemy_structures).closest_to(unit)
         kite_attack(unit, closest_enemy, unit.ground_range)
         return
     if unit.can_attack_ground:
-        if dangers.not_flying.amount == 0:
+        if (dangers.not_flying | enemy_structures).amount == 0:
             unit.attack(position_or_enemy)
             return
-        closest_enemy = dangers.not_flying.closest_to(unit)
+        closest_enemy = (dangers.not_flying | enemy_structures).closest_to(unit)
         kite_attack(unit, closest_enemy, unit.ground_range)
         return
     if unit.can_attack_air:
-        if dangers.flying.amount == 0:
+        if (dangers.flying | enemy_structures).amount == 0:
             unit.attack(position_or_enemy)
             return
-        closest_enemy = dangers.flying.closest_to(unit)
+        closest_enemy = (dangers.flying | enemy_structures).closest_to(unit)
         kite_attack(unit, closest_enemy, unit.air_range)
         return
 

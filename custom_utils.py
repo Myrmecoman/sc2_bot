@@ -55,7 +55,7 @@ def build_add_on(self : BotAI, type, add_on_type):
             addon_points = points_to_build_addon(u.position)
             if all(self.in_map_bounds(addon_point) and self.in_placement_grid(addon_point) and self.in_pathing_grid(addon_point) for addon_point in addon_points):
                 u.build(add_on_type)
-            elif self.enemy_units.amount == 0 or self.enemy_units.closest_distance_to(u) > 15: # only lift if there are no threats
+            elif self.enemy_units.not_flying.amount == 0 or self.enemy_units.not_flying.closest_distance_to(u) > 18: # only lift if there are no threats
                 u(AbilityId.LIFT)
             break
     

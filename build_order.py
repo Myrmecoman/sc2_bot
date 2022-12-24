@@ -11,7 +11,7 @@ from sc2.position import Point2, Point3
 from typing import FrozenSet, Set
 from sc2.bot_ai import BotAI
 
-MOVE_TO_DEPOT = False
+MOVE_TO_DEPOT = -1
 async def early_build_order(self : BotAI):
     global MOVE_TO_DEPOT
 
@@ -30,14 +30,17 @@ async def early_build_order(self : BotAI):
         depot_placement_positions: Set[Point2] = {d for d in depot_placement_positions if depots.closest_distance_to(d) > 1}
 
     # move scv to depot position
-    if self.build_order[0] == UnitTypeId.SUPPLYDEPOT and len(depot_placement_positions) < 2 and MOVE_TO_DEPOT == False:
+    if self.build_order[0] == UnitTypeId.SUPPLYDEPOT and len(depot_placement_positions) < 2:
         location: Point2 = next(iter(depot_placement_positions))
         if location:
-            worker: Unit = self.select_build_worker(location) # select the nearest worker to that location
-            if worker is None:
-                return
-            worker.move(location)
-            MOVE_TO_DEPOT = True
+            if MOVE_TO_DEPOT == -1:
+                worker: Unit = self.select_build_worker(location) # select the nearest worker to that location
+                if worker is None:
+                    return
+                worker.move(location)
+                MOVE_TO_DEPOT = worker.tag
+            else:
+                self.workers.find_by_tag(MOVE_TO_DEPOT).move(location)
     # Build depots
     if self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.build_order[0] == UnitTypeId.SUPPLYDEPOT:
         target_depot_location: Point2 = depot_placement_positions.pop()
