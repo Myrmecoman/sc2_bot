@@ -26,6 +26,7 @@ class Lift(BotAI):
             self.structures.first(AbilityId.LIFT)
         else:
             self.structures.first.move(corners[max_index])
+            #self.structures.first.move(top_left)
         
         for i in self.workers:
             i.move(self.start_location)

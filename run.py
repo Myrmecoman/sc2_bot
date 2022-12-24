@@ -20,8 +20,8 @@ from sc2.player import Bot, Computer, Human
 map_names = ["BerlingradAIE", "HardwireAIE", "InsideAndOutAIE", "MoondanceAIE", "StargazersAIE", "WaterfallAIE"]
 bot = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBot")
 #enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
-#enemy = Bot(Race.Terran, Lift(), "Lift")
-enemy = Bot(Race.Terran, LiftTopRight(), "LiftTopRight")
+enemy = Bot(Race.Terran, Lift(), "Lift")
+#enemy = Bot(Race.Terran, LiftTopRight(), "LiftTopRight")
 #enemy = Bot(Race.Terran, PFrush(), "PFrush")
 #enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")
 enemycheat = Computer(Race.Random, Difficulty.CheatVision) # CheatInsane, CheatVision

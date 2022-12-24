@@ -169,7 +169,6 @@ def go_scout_bases(self : BotAI):
         ground_units[counter].attack(i)
         ground_units[counter].attack(i.towards(self.game_info.map_center, -9), True)
         counter += 1
-    vikings = self.units.of_type({UnitTypeId.VIKINGFIGHTER})
 
     # kill the tanks if we can't buy vikings and produce only vikings from starports
     counter = 0
@@ -183,10 +182,14 @@ def go_scout_bases(self : BotAI):
     self.produce_from_factories = False
     self.produce_from_barracks = False
     
+    # shift used to split vikings around
+    vikings = self.units.of_type({UnitTypeId.VIKINGFIGHTER})
+    shift = 0
     for i in vikings:
         not_first = False
-        for corner in self.map_corners:
-            i.attack(corner, not_first)
+        shift = (shift + 1) % 4
+        for x in range(len(self.map_corners)):
+            i.attack(self.map_corners[(x + shift) % 4], not_first)
             not_first = True
 
 
