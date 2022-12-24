@@ -38,6 +38,7 @@ class SmoothBrainBot(BotAI):
         self.attack_with_all_worker = False
         self.scouting_units = []
         self.worker_assigned_to_repair = {}
+        self.worker_assigned_to_follow = {}
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY]
         self.produce_from_starports = True
         self.produce_from_factories = True

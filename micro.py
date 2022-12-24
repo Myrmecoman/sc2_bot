@@ -175,11 +175,42 @@ def go_scout_bases(self : BotAI):
             not_first = True
 
 
+def prevent_PF_rush(self : BotAI):
+    enemy_flying_structures : Units = self.enemy_structures.of_type({UnitTypeId.COMMANDCENTERFLYING})
+    if enemy_flying_structures.amount == 0 or self.workers.gathering.amount == 0:
+        return
+
+    # updating all flying buildings
+    for i in enemy_flying_structures:
+        if not i.tag in self.worker_assigned_to_follow.keys():
+            self.worker_assigned_to_follow[i.tag] = -1
+    keys = [i for i in self.worker_assigned_to_follow.keys()]
+    for i in keys:
+        if enemy_flying_structures.find_by_tag(i) is None:
+            #if self.workers.find_by_tag(self.worker_assigned_to_follow[i]) is not None:
+            #    self.workers.find_by_tag(self.worker_assigned_to_follow[i]).gather
+            self.worker_assigned_to_follow.pop(i)
+
+    # if no worker assigned, give one and remember it
+    for i in self.structures:
+        closest_enemy_struct = enemy_flying_structures.closest_to(i)
+        if closest_enemy_struct.distance_to(i) > 14:
+            continue
+        if self.worker_assigned_to_follow[closest_enemy_struct.tag] != -1:
+            self.workers.find_by_tag(self.worker_assigned_to_follow[closest_enemy_struct.tag]).move(closest_enemy_struct.position)
+            continue
+        closest_worker : Unit = self.workers.gathering.closest_to(closest_enemy_struct)
+        closest_worker.move(closest_enemy_struct.position)
+        self.worker_assigned_to_follow[closest_enemy_struct.tag] = closest_worker.tag
+
+
 async def micro(self : BotAI):
 
     if counter_worker_rush(self):
         worker_rush_ended(self)
         return
+
+    prevent_PF_rush(self)
 
     units : Units = self.units.exclude_type({UnitTypeId.SCV, UnitTypeId.MULE})
     if len(units) == 0:

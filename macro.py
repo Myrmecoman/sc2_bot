@@ -110,7 +110,11 @@ def repair_buildings(self : BotAI):
 
     # adding tag if needs to be repaired, else remove it
     for i in self.structures.ready:
-        if i.health_percentage > 0.9:
+        nb_enemy_workers_around = 0
+        for w in self.enemy_units.of_type({UnitTypeId.SCV, UnitTypeId.PROBE, UnitTypeId.DRONE}):
+            if w.distance_to(i) < 5:
+                nb_enemy_workers_around += 1
+        if i.health_percentage > 0.9 or nb_enemy_workers_around > 2:
             if i.tag in self.worker_assigned_to_repair.keys():
                 self.worker_assigned_to_repair.pop(i.tag)
             continue
