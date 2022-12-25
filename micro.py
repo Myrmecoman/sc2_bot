@@ -233,7 +233,9 @@ def defend_building_workers(self : BotAI):
             self.worker_assigned_to_defend[i.tag] = -1
     keys = [i for i in self.worker_assigned_to_defend.keys()]
     for i in keys:
-        if self.workers.find_by_tag(i) is None:
+        if self.workers.find_by_tag(i) is None or enemy_workers.closer_than(10, self.workers.find_by_tag(i)).amount > 1:
+            if self.worker_assigned_to_defend[i] != -1:
+                self.workers.find_by_tag(self.worker_assigned_to_defend[i]).move(self.townhalls.first)
             self.worker_assigned_to_defend.pop(i)
     
     # if no worker assigned, give one and remember it
