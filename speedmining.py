@@ -1,7 +1,6 @@
 import numpy as np
 import math
 from sc2.ids.unit_typeid import UnitTypeId
-from sc2.ids.upgrade_id import UpgradeId
 from sc2.ids.ability_id import AbilityId
 from sc2.unit import Unit
 from sc2.units import Units
@@ -98,3 +97,18 @@ def handle_refineries(self : BotAI):
             worker: Units = self.workers.closer_than(10, refinery)
             if worker:
                 worker.random.gather(refinery)
+
+
+# distribute initial workers on mineral patches
+def split_workers(self) -> None:
+    minerals = self.expansion_locations_dict[self.start_location].mineral_field.sorted_by_distance_to(self.start_location)
+    self.close_minerals = {m.tag for m in minerals[0:4]}
+    assigned: Set[int] = set()
+    for i in range(self.workers.amount):
+        patch = minerals[i % len(minerals)]
+        if i < len(minerals):
+            worker = self.workers.tags_not_in(assigned).closest_to(patch) # first, each patch gets one worker closest to it
+        else:
+            worker = self.workers.tags_not_in(assigned).furthest_to(patch) # the remaining workers get longer paths, this usually results in double stacking without having to spam orders
+        worker.gather(patch)
+        assigned.add(worker.tag)

@@ -205,8 +205,6 @@ def prevent_PF_rush(self : BotAI):
     keys = [i for i in self.worker_assigned_to_follow.keys()]
     for i in keys:
         if enemy_flying_structures.find_by_tag(i) is None:
-            #if self.workers.find_by_tag(self.worker_assigned_to_follow[i]) is not None:
-            #    self.workers.find_by_tag(self.worker_assigned_to_follow[i]).gather
             self.worker_assigned_to_follow.pop(i)
 
     # if no worker assigned, give one and remember it
@@ -222,6 +220,31 @@ def prevent_PF_rush(self : BotAI):
         self.worker_assigned_to_follow[closest_enemy_struct.tag] = closest_worker.tag
 
 
+def defend_building_workers(self : BotAI):
+    enemy_workers = self.enemy_units.of_type({UnitTypeId.SCV, UnitTypeId.PROBE, UnitTypeId.DRONE})
+    if enemy_workers.amount == 0 or self.workers.gathering.amount == 0:
+        return
+
+    # updating all threatened workers
+    for i in self.workers:
+        if not i.is_constructing_scv or enemy_workers.closest_distance_to(i) > 10:
+            continue
+        if not i.tag in self.worker_assigned_to_defend.keys() or self.workers.find_by_tag(self.worker_assigned_to_defend[i.tag]) is None:
+            self.worker_assigned_to_defend[i.tag] = -1
+    keys = [i for i in self.worker_assigned_to_defend.keys()]
+    for i in keys:
+        if self.workers.find_by_tag(i) is None:
+            self.worker_assigned_to_defend.pop(i)
+    
+    # if no worker assigned, give one and remember it
+    for i in self.worker_assigned_to_defend.keys():
+        if self.worker_assigned_to_defend[i] != -1:
+            continue
+        closest_worker = self.workers.gathering.closest_to(self.workers.find_by_tag(i))
+        closest_worker.attack(self.workers.find_by_tag(i).position)
+        self.worker_assigned_to_defend[i] = closest_worker.tag
+
+
 async def micro(self : BotAI):
 
     if counter_worker_rush(self):
@@ -229,6 +252,7 @@ async def micro(self : BotAI):
         return
 
     prevent_PF_rush(self)
+    defend_building_workers(self)
 
     units : Units = self.units.exclude_type({UnitTypeId.SCV, UnitTypeId.MULE})
     if len(units) == 0:
@@ -257,18 +281,3 @@ async def micro(self : BotAI):
             smart_attack(self, units, i, pos, enemies)
         else:
             smart_move(self, i, pos, enemies)
-
-
-# distribute initial workers on mineral patches
-def split_workers(self) -> None:
-    minerals = self.expansion_locations_dict[self.start_location].mineral_field.sorted_by_distance_to(self.start_location)
-    self.close_minerals = {m.tag for m in minerals[0:4]}
-    assigned: Set[int] = set()
-    for i in range(self.workers.amount):
-        patch = minerals[i % len(minerals)]
-        if i < len(minerals):
-            worker = self.workers.tags_not_in(assigned).closest_to(patch) # first, each patch gets one worker closest to it
-        else:
-            worker = self.workers.tags_not_in(assigned).furthest_to(patch) # the remaining workers get longer paths, this usually results in double stacking without having to spam orders
-        worker.gather(patch)
-        assigned.add(worker.tag)

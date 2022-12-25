@@ -193,7 +193,7 @@ async def handle_supply(self : BotAI):
         print("Could not place depot")
 
 
-def handle_orbitals(self : BotAI):
+def handle_command_centers(self : BotAI):
     # Manage orbital energy and drop mules if we need minerals, else keep for scanning
     if self.minerals < 800:
         for oc in self.townhalls(UnitTypeId.ORBITALCOMMAND).filter(lambda x: x.energy >= 50):

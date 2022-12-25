@@ -6,13 +6,13 @@ from custom_utils import handle_add_ons
 from custom_utils import handle_depot_status
 from custom_utils import handle_upgrades
 from custom_utils import handle_supply
-from custom_utils import handle_orbitals
+from custom_utils import handle_command_centers
 from build_order import early_build_order
 from micro import micro
-from micro import split_workers
 from macro import macro
 from production import produce
 from production import adjust_production_values
+from speedmining import split_workers
 from speedmining import get_speedmining_positions
 from speedmining import micro_structure
 from speedmining import micro_worker
@@ -31,7 +31,7 @@ from sc2.position import Point2
 class SmoothBrainBot(BotAI):
     def __init__(self):
         self.unit_command_uses_self_do = False
-        self.distance_calculation_method = 3
+        self.distance_calculation_method = 2
         self.worker_rushed = False
         self.game_step: int = 2
         self.tags: Set[str] = set()
@@ -39,6 +39,7 @@ class SmoothBrainBot(BotAI):
         self.scouting_units = []
         self.worker_assigned_to_repair = {}
         self.worker_assigned_to_follow = {}
+        self.worker_assigned_to_defend = {}
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY]
         self.produce_from_starports = True
         self.produce_from_factories = True
@@ -59,6 +60,7 @@ class SmoothBrainBot(BotAI):
 
 
     async def on_start(self) -> None:
+        self.client.game_step = self.game_step
         self.speedmining_positions = get_speedmining_positions(self)
         split_workers(self)
 
@@ -68,8 +70,6 @@ class SmoothBrainBot(BotAI):
         if self.townhalls.amount == 0 or self.supply_used == 0:
             await self.client.leave()
             return
-
-        self.client.game_step = self.game_step
 
         self.transfer_from: List[Unit] = list()
         self.transfer_to: List[Unit] = list()
@@ -87,7 +87,7 @@ class SmoothBrainBot(BotAI):
         handle_refineries(self)
 
         handle_depot_status(self)
-        handle_orbitals(self)
+        handle_command_centers(self)
         await handle_supply(self)
 
         if not self.worker_rushed:
