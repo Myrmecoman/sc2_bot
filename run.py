@@ -23,9 +23,9 @@ bot = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBot")
 enemycheat = Computer(Race.Random, Difficulty.CheatInsane) # CheatInsane, CheatVision
 human = Human(Race.Terran, "Human", True)
 
-enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
+#enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
 #enemy = Bot(Race.Terran, SingleWorker(), "SingleWorker")
-#enemy = Bot(Race.Terran, Lift(), "Lift")
+enemy = Bot(Race.Terran, Lift(), "Lift")
 #enemy = Bot(Race.Terran, LiftTopRight(), "LiftTopRight")
 #enemy = Bot(Race.Terran, PFrush(), "PFrush")
 #enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")
@@ -44,5 +44,5 @@ if __name__ == "__main__":
         maps.get("sc2-ai-cup-2022"), 
         #maps.get(map_names[random.randint(0, len(map_names) - 1)]),
         #[enemy, enemycheat], realtime=False)
-        [bot, enemy], realtime=True)
+        [bot, enemy], realtime=False)
         #[human, bot], realtime=True)
