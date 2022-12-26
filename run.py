@@ -23,9 +23,10 @@ bot = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBot")
 enemycheat = Computer(Race.Random, Difficulty.CheatInsane) # CheatInsane, CheatVision
 human = Human(Race.Terran, "Human", True)
 
+enemy = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBotEnemy")
 #enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
 #enemy = Bot(Race.Terran, SingleWorker(), "SingleWorker")
-enemy = Bot(Race.Terran, Lift(), "Lift")
+#enemy = Bot(Race.Terran, Lift(), "Lift")
 #enemy = Bot(Race.Terran, LiftTopRight(), "LiftTopRight")
 #enemy = Bot(Race.Terran, PFrush(), "PFrush")
 #enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")

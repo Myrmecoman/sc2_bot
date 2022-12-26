@@ -33,7 +33,7 @@ async def early_build_order(self : BotAI):
     if self.build_order[0] == UnitTypeId.SUPPLYDEPOT and len(depot_placement_positions) < 2:
         location: Point2 = next(iter(depot_placement_positions))
         if location:
-            if MOVE_TO_DEPOT == -1:
+            if MOVE_TO_DEPOT == -1 or self.workers.find_by_tag(MOVE_TO_DEPOT) is None:
                 worker: Unit = self.select_build_worker(location) # select the nearest worker to that location
                 if worker is None:
                     return
