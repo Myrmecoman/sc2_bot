@@ -37,16 +37,11 @@ async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId):
         x = x // mfs.amount
         y = y // mfs.amount
         # try to place at a few positions
-        for i in range(20):
-            position = cc.position.towards_with_random_angle(Point2((x, y)), 9, (math.pi / 3))
-            position_further = cc.position.towards_with_random_angle(Point2((x, y)), 12, (math.pi / 3))
+        for i in range(30):
+            position = cc.position.towards_with_random_angle(Point2((x, y)), 11, (math.pi / 3))
             position.rounded.offset(HALF_OFFSET)
-            position_further.rounded.offset(HALF_OFFSET)
             if await self.can_place_single(type, position):
                 await self.build(type, near=position, max_distance=4)
-                return
-            if await self.can_place_single(type, position_further):
-                await self.build(type, near=position_further, max_distance=4)
                 return
         print("Could not place tech building behind mineral lines")
 
@@ -128,9 +123,9 @@ async def macro(self : BotAI):
     resume_building_construction(self)
 
     if self.townhalls.amount >= 1 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 5):
-        await smart_build(self, UnitTypeId.BARRACKS)
+        await smart_build_behind_mineral(self, UnitTypeId.BARRACKS)
     if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 9):
-        await smart_build(self, UnitTypeId.BARRACKS)
+        await smart_build_behind_mineral(self, UnitTypeId.BARRACKS)
 
     if self.can_afford(UnitTypeId.COMMANDCENTER) and self.townhalls.amount < 3 and (self.already_pending(UnitTypeId.COMMANDCENTER) == 0 or self.minerals > 2000):
         await build_cc(self)

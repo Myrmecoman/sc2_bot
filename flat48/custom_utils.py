@@ -37,7 +37,7 @@ async def handle_supply(self : BotAI):
     if self.supply_cap >= 200:
         return
 
-    if self.supply_left < 6 and self.supply_used >= 14 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 1:
+    if self.supply_left < 6 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 1:
         # try all ccs and find average position of its mineral fields
         for cc in self.townhalls:
             mfs: Units = self.mineral_field.closer_than(10, cc)

@@ -23,9 +23,9 @@ bot = Bot(Race.Terran, SmoothBrainFlat48(), "SmoothBrainFlat48")
 enemycheat = Computer(Race.Random, Difficulty.CheatInsane) # CheatInsane, CheatVision
 human = Human(Race.Terran, "Human", True)
 
-enemy = Bot(Race.Terran, SmoothBrainFlat48(), "SmoothBrainBotEnemy")
+#enemy = Bot(Race.Terran, SmoothBrainFlat48(), "SmoothBrainBotEnemy")
 #enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
-#enemy = Bot(Race.Terran, SingleWorker(), "SingleWorker")
+enemy = Bot(Race.Terran, SingleWorker(), "SingleWorker")
 #enemy = Bot(Race.Terran, Lift(), "Lift")
 #enemy = Bot(Race.Terran, LiftTopRight(), "LiftTopRight")
 #enemy = Bot(Race.Terran, PFrush(), "PFrush")
@@ -41,5 +41,4 @@ if __name__ == "__main__":
     else:
         # Local game
         print("Starting local game...")
-        run_game(
-        maps.get("Flat482Spawns"), [bot, enemy], realtime=False)
+        run_game(maps.get("Flat482Spawns"), [bot, enemy], realtime=True)
