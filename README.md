@@ -9,10 +9,11 @@ If you are a novice bot writter I suggest you pick some ideas from this bot and 
 
 # TODO
 
-Speedmining
-Detect if single workers are attacking to defend with 2.
-Repairing not full life mechanical units.
-Pickup and drop units on non pathable places.
-Better stutter steps for bio units (instead of just going back).
-Army grouping and bio splitting before attacking.
-Prevent flying units from going in range of units that can attack them.
+Speedmining.<br/>
+Detect if single workers are attacking to defend with 2.<br/>
+Repairing not full life mechanical units.<br/>
+Pickup and drop units on non pathable places.<br/>
+Better stutter steps for bio units (instead of just going back).<br/>
+Army grouping and bio splitting before attacking.<br/>
+Prevent flying units from going in range of units that can attack them.<br/>
+Better unit production (counter enemy army).<br/>
