@@ -31,7 +31,7 @@ def get_intersections(p0: Point2, r0: float, p1: Point2, r1: float) -> Iterable[
 
 
 # fix workers bumping into adjacent minerals by slightly shifting the move commands
-def get_speedmining_positions(self) -> Dict[Point2, Point2]:
+def get_speedmining_positions(self : BotAI) -> Dict[Point2, Point2]:
     targets = dict()
     worker_radius = self.workers[0].radius
     expansions: Dict[Point2, Units] = self.expansion_locations_dict
@@ -40,67 +40,97 @@ def get_speedmining_positions(self) -> Dict[Point2, Point2]:
             mining_radius = resource.radius + worker_radius
             target = resource.position.towards(base, mining_radius)
             for resource2 in resources.closer_than(mining_radius, target):
-                points = get_intersections(resource.position, mining_radius, resource2.position,
-                                            resource2.radius + worker_radius)
+                points = get_intersections(resource.position, mining_radius, resource2.position, resource2.radius + worker_radius)
                 target = min(points, key=lambda p: p.distance_to(self.start_location), default=target)
             targets[resource.position] = target
     return targets
 
 
-def micro_worker(self, unit: Unit) -> None:
-    if unit.is_idle:
-        if any(self.mineral_field):
-            townhall = self.townhalls.closest_to(unit)
+def micro_worker(self : BotAI) -> None:
+
+    if self.townhalls.ready.amount <= 0:
+        return
+
+    for unit in self.workers:
+        if unit.is_idle:
+            townhall = self.townhalls.ready.closest_to(unit)
             patch = self.mineral_field.closest_to(townhall)
             unit.gather(patch)
-    elif any(self.transfer_from) and any(self.transfer_to) and unit.order_target == self.transfer_from[0].tag:
-        patch = self.mineral_field.closest_to(self.transfer_to.pop(0))
-        self.transfer_from.pop(0)
-        unit.gather(patch)
-    elif any(self.transfer_from_gas) and unit.order_target in self.gas_buildings.tags and not unit.is_carrying_resource:
-        unit.stop()
-        self.transfer_from_gas.pop(0)
-    elif any(self.transfer_to_gas) and not unit.is_carrying_resource and len(unit.orders) < 2 and unit.order_target not in self.close_minerals:
-        unit.gather(self.transfer_to_gas.pop(0))
-    if len(unit.orders) == 1: # speedmine
-        target = None
-        if unit.is_returning:
-            target = self.townhalls.closest_to(unit)
-            move_target = target.position.towards(unit.position, target.radius + unit.radius)
-        elif unit.is_gathering:
-            target = self.resource_by_tag.get(unit.order_target)
-            if target:
-                move_target = self.speedmining_positions[target.position]
-        if target and 2 * unit.radius < unit.distance_to(move_target) < SPEEDMINING_DISTANCE:
-            unit.move(move_target)
-            unit(AbilityId.SMART, target, True)
-
-
-def micro_structure(self, unit: Unit) -> None:
-    if unit.is_vespene_geyser:
-        if unit.is_ready and unit.assigned_harvesters + 1 < self.gas_harvester_target:
-            self.transfer_to_gas.extend(unit for _ in range(unit.assigned_harvesters + 1, self.gas_harvester_target))
-        elif self.gas_harvester_target < unit.assigned_harvesters:
-            self.transfer_from_gas.extend(unit for _ in range(self.gas_harvester_target, unit.assigned_harvesters))
-    elif unit.type_id == UnitTypeId.COMMANDCENTER or unit.type_id == UnitTypeId.ORBITALCOMMAND or unit.type_id == UnitTypeId.PLANETARYFORTRESS:
-        if unit.is_ready:
-            if 0 < unit.surplus_harvesters:
-                self.transfer_from.extend(unit for _ in range(0, unit.surplus_harvesters))
-            elif unit.surplus_harvesters < 0:
-                self.transfer_to.extend(unit for _ in range(unit.surplus_harvesters, 0))
+        if len(unit.orders) == 1: # speedmine
+            target = None
+            if unit.is_returning and not unit.is_carrying_vespene:
+                target = self.townhalls.ready.closest_to(unit)
+                move_target = target.position.towards(unit.position, target.radius + unit.radius)
+            elif unit.is_gathering:
+                target : Unit = self.resource_by_tag.get(unit.order_target)
+                if target and not target.is_vespene_geyser:
+                    move_target = self.speedmining_positions[target.position]
+            if target and not target.is_vespene_geyser and 2 * unit.radius < unit.distance_to(move_target) < SPEEDMINING_DISTANCE:
+                unit.move(move_target)
+                unit(AbilityId.SMART, target, True)
 
 
 # Saturate refineries
 def handle_refineries(self : BotAI):
     for refinery in self.gas_buildings:
         if refinery.assigned_harvesters < refinery.ideal_harvesters:
-            worker: Units = self.workers.closer_than(10, refinery)
-            if worker:
-                worker.random.gather(refinery)
+            workers: Units = self.workers.closer_than(10, refinery)
+            if workers:
+                for w in workers:
+                    if not w.is_carrying_minerals and not w.is_carrying_vespene:
+                        w.gather(refinery)
+                        return
+        if refinery.assigned_harvesters > refinery.ideal_harvesters or self.workers.amount <= 5:
+            workers: Units = self.workers.closer_than(2, refinery)
+            if workers:
+                for w in workers:
+                    if w.is_carrying_vespene:
+                        w.gather(self.resources.mineral_field.closest_to(w), True)
+                        return
+
+
+def dispatch_workers(self : BotAI):
+    # remove destroyed command centers from keys
+    keys_to_delete = []
+    for key in self.townhall_saturations.keys():
+        if self.townhalls.ready.find_by_tag(key) is None:
+            keys_to_delete.append(key)
+    for i in keys_to_delete:
+        del self.townhall_saturations[i]
+
+    # add new command centers to keys and update its saturations
+    maxes : Dict = {}
+    for cc in self.townhalls.ready:
+        if not cc.tag in self.townhall_saturations.keys():
+            self.townhall_saturations[cc.tag] = []
+        if len(self.townhall_saturations[cc.tag]) >= 40:
+            self.townhall_saturations[cc.tag].pop(0)
+        self.townhall_saturations[cc.tag].append(cc.assigned_harvesters)
+        maxes[cc.tag] = max(self.townhall_saturations[cc.tag])
+    
+    # dispatch workers somewhere else if command center has too much of them
+    for key in maxes.keys():
+        cc1 = self.townhalls.ready.find_by_tag(key)
+        if maxes[key] + 1 > cc1.ideal_harvesters:
+            for key2 in maxes.keys():
+                if key2 == key:
+                    continue
+                cc2 = self.townhalls.ready.find_by_tag(key2)
+                if maxes[key2] + 1 < cc2.ideal_harvesters: # get workers gathering mineral from cc1 and move them to cc2
+                    for w in self.workers.closer_than(10, cc1).gathering:
+                        if self.mineral_field.closer_than(10, cc1).find_by_tag(w.order_target) is not None:
+                            w.gather(w.position.closest(self.mineral_field.closer_than(10, cc2)))
+                            maxes[key] -= 1
+                            for i in range(len(self.townhall_saturations[key])):
+                                self.townhall_saturations[key][i] -= 1
+                            maxes[key2] += 1
+                            for i in range(len(self.townhall_saturations[key2])):
+                                self.townhall_saturations[key2][i] += 1
+                            break
 
 
 # distribute initial workers on mineral patches
-def split_workers(self) -> None:
+def split_workers(self : BotAI) -> None:
     minerals = self.expansion_locations_dict[self.start_location].mineral_field.sorted_by_distance_to(self.start_location)
     self.close_minerals = {m.tag for m in minerals[0:4]}
     assigned: Set[int] = set()

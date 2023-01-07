@@ -77,7 +77,7 @@ async def smart_build(self : BotAI, type : UnitTypeId):
 HALF_OFFSET = Point2((.5, .5))
 async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId):
     # try all ccs and find average position of its mineral fields
-    for cc in self.townhalls:
+    for cc in self.townhalls.ready:
         mfs: Units = self.mineral_field.closer_than(10, cc)
         if mfs.amount == 0:
             continue

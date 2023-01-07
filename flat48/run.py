@@ -41,4 +41,4 @@ if __name__ == "__main__":
     else:
         # Local game
         print("Starting local game...")
-        run_game(maps.get("Flat482Spawns"), [bot, enemy], realtime=True)
+        run_game(maps.get("Flat482Spawns"), [bot, enemy], realtime=False)

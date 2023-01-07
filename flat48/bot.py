@@ -9,7 +9,6 @@ from production import produce
 from speedmining import split_workers
 from speedmining import get_speedmining_positions
 from speedmining import micro_worker
-from speedmining import handle_refineries
 
 from typing import Dict, Iterable, List, Optional, Set
 from itertools import chain
@@ -66,8 +65,6 @@ class SmoothBrainFlat48(BotAI):
 
         for worker in self.workers:
             micro_worker(self, worker)
-        #await self.distribute_workers(0)
-        handle_refineries(self)
 
         handle_depot_status(self)
         await handle_supply(self)

@@ -90,15 +90,6 @@ def micro_structure(self, unit: Unit) -> None:
                 self.transfer_to.extend(unit for _ in range(unit.surplus_harvesters, 0))
 
 
-# Saturate refineries
-def handle_refineries(self : BotAI):
-    for refinery in self.gas_buildings:
-        if refinery.assigned_harvesters < refinery.ideal_harvesters:
-            worker: Units = self.workers.closer_than(10, refinery)
-            if worker:
-                worker.random.gather(refinery)
-
-
 # distribute initial workers on mineral patches
 def split_workers(self) -> None:
     minerals = self.expansion_locations_dict[self.start_location].mineral_field.sorted_by_distance_to(self.start_location)
