@@ -20,13 +20,15 @@ def kite_attack(unit : Unit, enemy : Unit, unit_range):
 def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, enemies : Units):
 
     # if the position cannot be reached by ground units and we are a viking at the designated position, land
-    if not self.in_pathing_grid(position_or_enemy):
+    if not self.in_pathing_grid(position_or_enemy) and isinstance(position_or_enemy, Unit) and not position_or_enemy.is_flying:
         if unit.type_id == UnitTypeId.VIKINGFIGHTER:
             if unit.position.distance_to(position_or_enemy) < 8:
                 unit(AbilityId.MORPH_VIKINGASSAULTMODE)
             else:
                 unit.move(position_or_enemy)
             return
+    if any(enemies.flying) and unit.type_id == UnitTypeId.VIKINGASSAULT:
+        unit(AbilityId.MORPH_VIKINGFIGHTERMODE)
 
     # handle medivacs and ravens
     if not unit.can_attack:

@@ -129,9 +129,9 @@ def handle_upgrades(self : BotAI):
             engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL3)
         elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 0:
             engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3)
-        elif self.can_afford(UpgradeId.TERRANBUILDINGARMOR) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1:
+        elif self.can_afford(UpgradeId.TERRANBUILDINGARMOR) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.TERRANBUILDINGARMOR) == 0:
             engi.research(UpgradeId.TERRANBUILDINGARMOR)
-        elif self.can_afford(UpgradeId.HISECAUTOTRACKING) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1:
+        elif self.can_afford(UpgradeId.HISECAUTOTRACKING) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.HISECAUTOTRACKING) == 0:
             engi.research(UpgradeId.HISECAUTOTRACKING)
     
     if self.minerals < 800 or self.vespene < 800:
@@ -157,6 +157,10 @@ def handle_upgrades(self : BotAI):
             armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL2)
         elif self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL3) == 0:
             armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL3)
+    
+    cores = self.structures(UnitTypeId.FUSIONCORE).ready.idle
+    for core in cores:
+        continue # not sure if we should buy any upgrade from fusion core since we play bio
 
 
 HALF_OFFSET = Point2((.5, .5))
