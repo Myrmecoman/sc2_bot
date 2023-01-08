@@ -134,7 +134,7 @@ def handle_upgrades(self : BotAI):
         elif self.can_afford(UpgradeId.HISECAUTOTRACKING) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.HISECAUTOTRACKING) == 0:
             engi.research(UpgradeId.HISECAUTOTRACKING)
     
-    if self.minerals < 800 or self.vespene < 800:
+    if self.minerals < 600 or self.vespene < 600:
         return
 
     armories = self.structures(UnitTypeId.ARMORY).ready.idle
