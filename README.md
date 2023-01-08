@@ -9,7 +9,6 @@ If you are a novice bot writter I suggest you pick some ideas from this bot and 
 
 # TODO
 
-Speedmining.<br/>
 Detect if single workers are attacking to defend with 2.<br/>
 Repairing not full life mechanical units.<br/>
 Pickup and drop units on non pathable places.<br/>
