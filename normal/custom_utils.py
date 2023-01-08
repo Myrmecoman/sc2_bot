@@ -82,11 +82,18 @@ def handle_add_ons(self : BotAI):
 
     sp: Units = self.structures(UnitTypeId.STARPORT)
     for s in sp.ready.idle:
-        if self.structures(UnitTypeId.STARPORTREACTOR).amount + self.already_pending(UnitTypeId.STARPORTREACTOR) < sp.amount/2:
-            if self.can_afford(UnitTypeId.REACTOR):
+        if not self.build_starport_techlab_first:
+            if self.structures(UnitTypeId.STARPORTREACTOR).amount + self.already_pending(UnitTypeId.STARPORTREACTOR) < sp.amount/2:
+                if self.can_afford(UnitTypeId.REACTOR):
+                    build_add_on(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTREACTOR)
+            elif self.can_afford(UnitTypeId.TECHLAB):
+                build_add_on(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTTECHLAB)
+        else:
+            if self.structures(UnitTypeId.STARPORTTECHLAB).amount + self.already_pending(UnitTypeId.STARPORTTECHLAB) < sp.amount/2:
+                if self.can_afford(UnitTypeId.TECHLAB):
+                    build_add_on(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTTECHLAB)
+            elif self.can_afford(UnitTypeId.REACTOR):
                 build_add_on(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTREACTOR)
-        elif self.can_afford(UnitTypeId.TECHLAB):
-            build_add_on(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTTECHLAB)
 
 
 def handle_depot_status(self : BotAI):

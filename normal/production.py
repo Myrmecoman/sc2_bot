@@ -19,6 +19,13 @@ def adjust_production_values(self : BotAI):
         MAX_MEDIVACS = 2
         MAX_VIKINGS = 16
         MAX_BC = 2
+        MAX_RAVENS = 4
+    
+    if self.enemy_race == Race.Zerg:
+        MAX_MEDIVACS = 6
+        MAX_VIKINGS = 4
+        MAX_BC = 2
+        MAX_RAVENS = 2
 
 
 def produce(self : BotAI):

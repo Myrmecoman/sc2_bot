@@ -18,13 +18,12 @@ from speedmining import micro_worker
 from speedmining import handle_refineries
 from speedmining import dispatch_workers
 
-from typing import Dict, Iterable, List, Optional, Set
 from itertools import chain
 
 from sc2.bot_ai import BotAI
 from sc2.ids.unit_typeid import UnitTypeId
-from sc2.unit import Unit
 from sc2.position import Point2
+from sc2.data import Race
 
 
 # bot code --------------------------------------------------------------------------------------------------------
@@ -32,20 +31,20 @@ class SmoothBrainBot(BotAI):
     def __init__(self):
         self.unit_command_uses_self_do = False
         self.distance_calculation_method = 2
-        self.worker_rushed = False          # tells if we are worker rushed
         self.game_step: int = 2
-        self.tags: Set[str] = set()
-        self.attack_with_all_worker = False # in case of worker rushes
-        self.scouting_units = []            # lists units assigned to scout so that we do not cancel their orders
-        self.worker_assigned_to_repair = {} # lists workers assigned to repair
-        self.worker_assigned_to_follow = {} # lists workers assigned to follow objects (used to prevent Planetary Fortress rushes)
-        self.worker_assigned_to_defend = {} # lists workers assigned to defend other workers during construction
-        self.townhall_saturations = {}      # lists the mineral saturation of townhalls in queues of 40 frames, we consider the townhall saturated if max_number + 1 >= ideal_number
+        self.build_starport_techlab_first = False # against zerg, we better make a quick raven to counter burrowed roach all-ins
+        self.worker_rushed = False                # tells if we are worker rushed
+        self.attack_with_all_worker = False       # in case of worker rushes
+        self.scouting_units = []                  # lists units assigned to scout so that we do not cancel their orders
+        self.worker_assigned_to_repair = {}       # lists workers assigned to repair
+        self.worker_assigned_to_follow = {}       # lists workers assigned to follow objects (used to prevent Planetary Fortress rushes)
+        self.worker_assigned_to_defend = {}       # lists workers assigned to defend other workers during construction
+        self.townhall_saturations = {}            # lists the mineral saturation of townhalls in queues of 40 frames, we consider the townhall saturated if max_number + 1 >= ideal_number
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY]
         self.produce_from_starports = True
         self.produce_from_factories = True
         self.produce_from_barracks = True
-        self.scouted_at_time = -1000        # save moment at which we scouted, so that we don't re-send units every frame
+        self.scouted_at_time = -1000              # save moment at which we scouted, so that we don't re-send units every frame
         super().__init__()
 
 
@@ -61,6 +60,8 @@ class SmoothBrainBot(BotAI):
 
 
     async def on_start(self) -> None:
+        if self.enemy_race == Race.Zerg:
+            self.build_starport_techlab_first = True
         self.client.game_step = self.game_step
         self.speedmining_positions = get_speedmining_positions(self)
         split_workers(self)
