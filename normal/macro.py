@@ -1,4 +1,5 @@
 from custom_utils import can_build_structure
+from custom_utils import get_safest_expansion
 
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.upgrade_id import UpgradeId
@@ -24,11 +25,12 @@ async def build_gas(self : BotAI):
 
 
 async def build_cc(self : BotAI):
-    location: Point2 = await self.get_next_expansion()
+    location: Point2 = await get_safest_expansion(self)
     if location:
         worker: Unit = self.select_build_worker(location) # select the nearest worker to that location
         if worker is None:
             return
+        self.worker_assigned_to_expand[worker.tag] = worker
         worker.build(UnitTypeId.COMMANDCENTER, location)
 
 

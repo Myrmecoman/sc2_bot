@@ -40,6 +40,7 @@ class SmoothBrainBot(BotAI):
         self.worker_assigned_to_repair = {}       # lists workers assigned to repair
         self.worker_assigned_to_follow = {}       # lists workers assigned to follow objects (used to prevent Planetary Fortress rushes)
         self.worker_assigned_to_defend = {}       # lists workers assigned to defend other workers during construction
+        self.worker_assigned_to_expand = {}       # lists workers assigned to expand /!\ not used yet
         self.townhall_saturations = {}            # lists the mineral saturation of townhalls in queues of 40 frames, we consider the townhall saturated if max_number + 1 >= ideal_number
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY]
         self.produce_from_starports = True
