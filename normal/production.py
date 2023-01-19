@@ -1,31 +1,5 @@
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.bot_ai import BotAI
-from sc2.data import Race
-
-
-MAX_MEDIVACS = 6
-MAX_RAVENS = 4
-MAX_VIKINGS = 8
-MAX_BC = 0
-
-
-def adjust_production_values(self : BotAI):
-    global MAX_MEDIVACS
-    global MAX_RAVENS
-    global MAX_VIKINGS
-    global MAX_BC
-
-    if self.enemy_race == Race.Terran:
-        MAX_MEDIVACS = 2
-        MAX_VIKINGS = 16
-        MAX_BC = 2
-        MAX_RAVENS = 4
-    
-    if self.enemy_race == Race.Zerg:
-        MAX_MEDIVACS = 6
-        MAX_VIKINGS = 4
-        MAX_BC = 2
-        MAX_RAVENS = 2
 
 
 def produce(self : BotAI):
@@ -36,25 +10,25 @@ def produce(self : BotAI):
                 add_on = self.structures.find_by_tag(st.add_on_tag)
                 if add_on is None:
                     continue
-                if add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.RAVEN) and self.units(UnitTypeId.RAVEN).amount < MAX_RAVENS:
+                if add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.RAVEN) and self.units(UnitTypeId.RAVEN).amount < self.army_advisor.max_ravens:
                     st.build(UnitTypeId.RAVEN)
-                elif add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.structures(UnitTypeId.FUSIONCORE).amount > 0 and self.can_afford(UnitTypeId.BATTLECRUISER) and self.units(UnitTypeId.BATTLECRUISER).amount < MAX_BC:
+                elif add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.structures(UnitTypeId.FUSIONCORE).amount > 0 and self.can_afford(UnitTypeId.BATTLECRUISER) and self.units(UnitTypeId.BATTLECRUISER).amount < self.army_advisor.max_battlecruisers:
                     st.build(UnitTypeId.BATTLECRUISER)
-                elif add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < MAX_MEDIVACS:
+                elif add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < self.army_advisor.max_medivacs:
                     st.build(UnitTypeId.MEDIVAC)
-                elif add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < MAX_VIKINGS:
+                elif add_on.type_id == UnitTypeId.STARPORTTECHLAB and self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < self.army_advisor.max_vikings:
                     st.build(UnitTypeId.VIKINGFIGHTER)
-                elif add_on.type_id == UnitTypeId.STARPORTREACTOR and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < MAX_MEDIVACS:
+                elif add_on.type_id == UnitTypeId.STARPORTREACTOR and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < self.army_advisor.max_medivacs:
                     st.build(UnitTypeId.MEDIVAC)
                     if self.can_afford(UnitTypeId.MEDIVAC):
                         st.build(UnitTypeId.MEDIVAC)
-                elif add_on.type_id == UnitTypeId.STARPORTREACTOR and self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < MAX_VIKINGS:
+                elif add_on.type_id == UnitTypeId.STARPORTREACTOR and self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < self.army_advisor.max_vikings:
                     st.build(UnitTypeId.VIKINGFIGHTER)
                     if self.can_afford(UnitTypeId.VIKINGFIGHTER):
                         st.build(UnitTypeId.VIKINGFIGHTER)
-            elif self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < MAX_MEDIVACS:
+            elif self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < self.army_advisor.max_medivacs:
                 st.build(UnitTypeId.MEDIVAC)
-            elif self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < MAX_VIKINGS:
+            elif self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < self.army_advisor.max_vikings:
                 st.build(UnitTypeId.VIKINGFIGHTER)
     
     if self.produce_from_factories:
@@ -73,19 +47,40 @@ def produce(self : BotAI):
                 fac.build(UnitTypeId.HELLION)
 
     if self.produce_from_barracks:
-        for bar in self.structures(UnitTypeId.BARRACKS).ready.idle:
-            if bar.has_add_on:
-                add_on = self.structures.find_by_tag(bar.add_on_tag)
-                if add_on is None:
-                    continue
-                if add_on.type_id == UnitTypeId.BARRACKSTECHLAB and self.can_afford(UnitTypeId.MARAUDER):
-                    bar.build(UnitTypeId.MARAUDER)
-                elif add_on.type_id == UnitTypeId.BARRACKSREACTOR and self.can_afford(UnitTypeId.MARINE):
-                    bar.build(UnitTypeId.MARINE)
-                    if self.can_afford(UnitTypeId.MARINE):
+        total_marines = self.units.of_type({UnitTypeId.MARINE}).amount
+        total_marauders = self.units.of_type({UnitTypeId.MARAUDER}).amount
+
+        if total_marauders != 0 and total_marines / (total_marines + total_marauders) < self.army_advisor.marine_marauder_ratio: # if not enough marines, make only of them
+            for bar in self.structures(UnitTypeId.BARRACKS).ready.idle:
+                if bar.has_add_on:
+                    add_on = self.structures.find_by_tag(bar.add_on_tag)
+                    if add_on is None:
+                        continue
+                    if add_on.type_id == UnitTypeId.BARRACKSTECHLAB and self.can_afford(UnitTypeId.MARINE):
                         bar.build(UnitTypeId.MARINE)
-            elif self.army_count == 0:
-                if self.can_afford(UnitTypeId.REAPER):
-                    bar.build(UnitTypeId.REAPER)
-            elif self.can_afford(UnitTypeId.MARINE):
-                bar.build(UnitTypeId.MARINE)
+                    elif add_on.type_id == UnitTypeId.BARRACKSREACTOR and self.can_afford(UnitTypeId.MARINE):
+                        bar.build(UnitTypeId.MARINE)
+                        if self.can_afford(UnitTypeId.MARINE):
+                            bar.build(UnitTypeId.MARINE)
+                elif self.army_count == 0:
+                    if self.can_afford(UnitTypeId.REAPER):
+                        bar.build(UnitTypeId.REAPER)
+                elif self.can_afford(UnitTypeId.MARINE):
+                    bar.build(UnitTypeId.MARINE)
+        else:
+            for bar in self.structures(UnitTypeId.BARRACKS).ready.idle:
+                if bar.has_add_on:
+                    add_on = self.structures.find_by_tag(bar.add_on_tag)
+                    if add_on is None:
+                        continue
+                    if add_on.type_id == UnitTypeId.BARRACKSTECHLAB and self.can_afford(UnitTypeId.MARAUDER):
+                        bar.build(UnitTypeId.MARAUDER)
+                    elif add_on.type_id == UnitTypeId.BARRACKSREACTOR and self.can_afford(UnitTypeId.MARINE):
+                        bar.build(UnitTypeId.MARINE)
+                        if self.can_afford(UnitTypeId.MARINE):
+                            bar.build(UnitTypeId.MARINE)
+                elif self.army_count == 0:
+                    if self.can_afford(UnitTypeId.REAPER):
+                        bar.build(UnitTypeId.REAPER)
+                elif self.can_afford(UnitTypeId.MARINE):
+                    bar.build(UnitTypeId.MARINE)

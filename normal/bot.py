@@ -11,12 +11,12 @@ from build_order import early_build_order
 from micro import micro
 from macro import macro
 from production import produce
-from production import adjust_production_values
 from speedmining import split_workers
 from speedmining import get_speedmining_positions
 from speedmining import micro_worker
 from speedmining import handle_refineries
 from speedmining import dispatch_workers
+from army_advisor import ArmyAdvisor
 
 from itertools import chain
 
@@ -24,6 +24,7 @@ from sc2.bot_ai import BotAI
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.position import Point2
 from sc2.data import Race
+from sc2.unit import Unit
 
 
 # bot code --------------------------------------------------------------------------------------------------------
@@ -51,7 +52,6 @@ class SmoothBrainBot(BotAI):
     async def on_before_start(self) -> None:
         self.client.game_step = self.game_step
         self.client.raw_affects_selection = True
-        adjust_production_values(self)
         top_right = Point2((self.game_info.playable_area.right, self.game_info.playable_area.top))
         bottom_right = Point2((self.game_info.playable_area.right, 0))
         bottom_left = Point2((0, 0))
@@ -63,9 +63,16 @@ class SmoothBrainBot(BotAI):
         if self.enemy_race == Race.Zerg:
             self.build_starport_techlab_first = True
         self.client.game_step = self.game_step
+        self.army_advisor = ArmyAdvisor(self)         # provides advices for army composition and building add ons
+        self.army_advisor.provide_advices_startup()
         self.speedmining_positions = get_speedmining_positions(self)
         split_workers(self)
+    
 
+    async def on_unit_destroyed(self, unit_tag: int):
+        self.army_advisor.remove_unit(unit_tag)
+        self.army_advisor.track_resource_losses(unit_tag)
+    
 
     async def on_step(self, iteration: int):
 
@@ -73,6 +80,7 @@ class SmoothBrainBot(BotAI):
             await self.client.leave()
             return
 
+        self.army_advisor.provide_advices()
         self.resource_by_tag = {unit.tag: unit for unit in chain(self.mineral_field, self.gas_buildings)}
 
         dispatch_workers(self)

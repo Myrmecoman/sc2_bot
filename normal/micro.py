@@ -6,6 +6,7 @@ from sc2.units import Units
 from sc2.bot_ai import BotAI
 from sc2.position import Point2
 from typing import Dict, Iterable, List, Optional, Set
+from sc2.data import Race
 
 
 # hit and run
@@ -144,16 +145,6 @@ def worker_rush_ended(self : BotAI):
                 i.gather(mf)
 
 
-# very basic indicator
-def should_we_fight(self : BotAI):
-    if self.enemy_units.amount == 0:
-        return False
-    for i in self.structures:
-        if i.position.distance_to_closest(self.enemy_units) < 24:
-            return True
-    return False
-
-
 def are_we_idle_at_enemy_base(self):
     return self.enemy_structures.amount == 0 and self.enemy_units.amount == 0 and self.units.closest_distance_to(self.enemy_start_locations[0]) < 3
 
@@ -172,17 +163,17 @@ def go_scout_bases(self : BotAI):
         ground_units[counter].attack(i.towards(self.game_info.map_center, -9), True)
         counter += 1
 
-    # kill the tanks if we can't buy vikings and produce only vikings from starports
-    counter = 0
-    for i in self.units.of_type({UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED}):
-        marauders = self.units.of_type({UnitTypeId.MARAUDER})
-        marines = self.units.of_type({UnitTypeId.MARINE})
-        if marauders.amount > 0:
-            marauders.random.attack(i)
-        if marines.amount > 0:
-            marines.random.attack(i)
-    self.produce_from_factories = False
-    self.produce_from_barracks = False
+    # kill the tanks if we can't buy vikings and we are against terran, and produce only vikings from starports
+    if self.enemy_race == Race.Terran:
+        for i in self.units.of_type({UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED}):
+            marauders = self.units.of_type({UnitTypeId.MARAUDER})
+            marines = self.units.of_type({UnitTypeId.MARINE})
+            if marauders.amount > 0:
+                marauders.random.attack(i)
+            if marines.amount > 0:
+                marines.random.attack(i)
+        self.produce_from_factories = False
+        self.produce_from_barracks = False
     
     # shift used to split vikings around
     vikings = self.units.of_type({UnitTypeId.VIKINGFIGHTER})
@@ -273,7 +264,7 @@ async def micro(self : BotAI):
     attack = False
     pos = self.townhalls.closest_to(self.enemy_start_locations[0]).position.towards(self.enemy_start_locations[0], 10)
     enemies: Units = self.enemy_units | self.enemy_structures
-    if self.supply_army >= 40 or should_we_fight(self):
+    if self.army_advisor.should_attack == True:
         if enemies.amount > 0:
             pos = enemies.closest_to(self.start_location)
         else:
