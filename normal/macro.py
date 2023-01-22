@@ -172,7 +172,7 @@ def resume_building_construction(self : BotAI):
         if self.workers.gathering.amount == 0:
             return
         worker = self.workers.gathering.closest_to(i)
-        worker(AbilityId.EFFECT_REPAIR_SCV, i)
+        worker(AbilityId.SMART, i)
 
 
 async def macro(self : BotAI):

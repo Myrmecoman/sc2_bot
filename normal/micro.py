@@ -28,7 +28,7 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
             else:
                 unit.move(position_or_enemy)
             return
-    if any(enemies.flying) and unit.type_id == UnitTypeId.VIKINGASSAULT:
+    if (any(enemies.flying) or (enemies.amount > 0 and enemies.closest_distance_to(unit) > 16)) and unit.type_id == UnitTypeId.VIKINGASSAULT:
         unit(AbilityId.MORPH_VIKINGFIGHTERMODE)
 
     # handle medivacs and ravens
