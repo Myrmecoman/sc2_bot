@@ -12,6 +12,7 @@ from training_bots.lift_hide import Lift
 from training_bots.lift_topright import LiftTopRight
 from training_bots.PF_rush import PFrush
 from training_bots.single_worker_attack import SingleWorker
+from training_bots.resume_building_tester import ResumeBuilding
 
 from sc2 import maps
 from sc2.data import Difficulty, Race
@@ -22,9 +23,10 @@ map_names = ["BerlingradAIE", "HardwireAIE", "InsideAndOutAIE", "MoondanceAIE", 
 bot = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBot")
 human = Human(Race.Terran, "Human", True)
 
-enemy = Computer(Race.Protoss, Difficulty.CheatInsane) # CheatInsane, CheatVision
+#enemy = Computer(Race.Zerg, Difficulty.CheatInsane) # CheatInsane, CheatVision
 #enemy = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBotEnemy")
 #enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
+enemy = Bot(Race.Terran, ResumeBuilding(), "ResumeBuilding")
 #enemy = Bot(Race.Terran, SingleWorker(), "SingleWorker")
 #enemy = Bot(Race.Terran, Lift(), "Lift")
 #enemy = Bot(Race.Terran, LiftTopRight(), "LiftTopRight")

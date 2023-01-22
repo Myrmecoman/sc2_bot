@@ -8,7 +8,15 @@ from typing import Dict, Iterable, List, Optional, Set
 from sc2.data import Race
 
 
-class ArmyAdvisor():
+# So far, all this does is track enemy army.
+#
+# TODO:
+# Make a calculator for marine/marauder percentage, taking flying units and armored into account
+# Provide advice if we should make ghosts or not
+# Provide advice early against zerg if we should make helions or tanks
+# Provide advice for combat positioning before fighting, and micro settings (split against tanks but not against mass zerglings) - maybe in another class
+
+class ArmyCompositionAdvisor():
 
 
     def __init__(self, bot : BotAI):

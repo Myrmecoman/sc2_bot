@@ -16,7 +16,7 @@ from speedmining import get_speedmining_positions
 from speedmining import micro_worker
 from speedmining import handle_refineries
 from speedmining import dispatch_workers
-from army_advisor import ArmyAdvisor
+from army_composition_advisor import ArmyCompositionAdvisor
 
 from itertools import chain
 
@@ -64,7 +64,7 @@ class SmoothBrainBot(BotAI):
         if self.enemy_race == Race.Zerg:
             self.build_starport_techlab_first = True
         self.client.game_step = self.game_step
-        self.army_advisor = ArmyAdvisor(self)         # provides advices for army composition and building add ons
+        self.army_advisor = ArmyCompositionAdvisor(self)         # provides advices for army composition and building add ons
         self.army_advisor.provide_advices_startup()
         self.speedmining_positions = get_speedmining_positions(self)
         split_workers(self)

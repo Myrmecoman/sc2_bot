@@ -21,6 +21,8 @@ async def early_build_order(self : BotAI):
         self.build_order = []
         return
 
+    # SHOULD ADD CHECK HERE, IF BUILD COMMAND FAILED (SCV killed while going to build), CANCEL BUILD ORDER
+
     # getting ramp wall positions
     depot_placement_positions: FrozenSet[Point2] = self.main_base_ramp.corner_depots
     # barracks_placement_position = self.main_base_ramp.barracks_in_middle # If you prefer to have the barracks in the middle without room for addons, use the following instead
