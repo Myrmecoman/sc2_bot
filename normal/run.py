@@ -23,7 +23,7 @@ map_names = ["BerlingradAIE", "HardwireAIE", "InsideAndOutAIE", "MoondanceAIE", 
 bot = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBot")
 human = Human(Race.Terran, "Human", True)
 
-enemy = Computer(Race.Protoss, Difficulty.CheatInsane) # CheatInsane, CheatVision
+enemy = Computer(Race.Zerg, Difficulty.CheatInsane) # CheatInsane, CheatVision
 #enemy = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBotEnemy")
 #enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
 #enemy = Bot(Race.Terran, ResumeBuilding(), "ResumeBuilding")
@@ -44,8 +44,8 @@ if __name__ == "__main__":
         # Local game
         print("Starting local game...")
         run_game(
-        maps.get("sc2-ai-cup-2022"), 
-        #maps.get(map_names[random.randint(0, len(map_names) - 1)]),
+        #maps.get("sc2-ai-cup-2022"), 
+        maps.get(map_names[random.randint(0, len(map_names) - 1)]),
         #[enemy, enemycheat], realtime=False)
         [bot, enemy], realtime=False)
         #[human, bot], realtime=True)

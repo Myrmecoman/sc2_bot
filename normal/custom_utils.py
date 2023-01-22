@@ -231,7 +231,7 @@ def build_worker(self : BotAI):
 
 async def get_safest_expansion(self : BotAI):
     location: Point2 = await self.get_next_expansion()
-    if (self.enemy_units.amount == 0 or self.enemy_units.closest_distance_to(location) > 12) and (self.enemy_structures.amount == 0 or self.enemy_structures.closest_distance_to(location) > 12):
+    if location is not None and (self.enemy_units.amount == 0 or self.enemy_units.closest_distance_to(location) > 12) and (self.enemy_structures.amount == 0 or self.enemy_structures.closest_distance_to(location) > 12):
         return location
     
     closest_dist = 100000
