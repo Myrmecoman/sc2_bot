@@ -238,7 +238,7 @@ async def get_safest_expansion(self : BotAI):
     closest_expansion = None
     for i in self.expansion_locations_list:
         dist = i.distance_to(self.start_location)
-        if i.position != location.position and dist < closest_dist:
+        if (location is None or i.position != location.position) and dist < closest_dist:
             closest_dist = dist
             closest_expansion = i
     
