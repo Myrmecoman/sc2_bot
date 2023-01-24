@@ -16,3 +16,4 @@ Better stutter steps for bio units (instead of just going back).<br/>
 Army grouping and bio splitting before attacking.<br/>
 Prevent flying units from going in range of units that can attack them.<br/>
 Better unit production (counter enemy army).<br/>
+Build uphill against zerg and scout before placing B2.<br/>
