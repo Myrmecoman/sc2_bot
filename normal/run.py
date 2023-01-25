@@ -5,7 +5,7 @@ import random
 from __init__ import run_ladder_game
 
 # Load bot
-from bot import SmoothBrainBot
+from bot.bot import SmoothBrainBot
 from training_bots.pool12_allin import Pool12AllIn
 from training_bots.worker_rush import WorkerRushBot
 from training_bots.lift_hide import Lift
@@ -23,8 +23,8 @@ map_names = ["BerlingradAIE", "HardwireAIE", "InsideAndOutAIE", "MoondanceAIE", 
 bot = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBot")
 human = Human(Race.Terran, "Human", True)
 
-#enemy = Computer(Race.Zerg, Difficulty.CheatInsane) # CheatInsane, CheatVision
-enemy = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBotEnemy")
+enemy = Computer(Race.Zerg, Difficulty.CheatInsane) # CheatInsane, CheatVision
+#enemy = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBotEnemy")
 #enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
 #enemy = Bot(Race.Terran, ResumeBuilding(), "ResumeBuilding")
 #enemy = Bot(Race.Terran, SingleWorker(), "SingleWorker")

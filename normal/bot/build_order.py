@@ -1,7 +1,7 @@
-from custom_utils import points_to_build_addon
-from macro import smart_build
-from macro import build_gas
-from macro import build_cc
+from bot.custom_utils import points_to_build_addon
+from bot.macro import smart_build
+from bot.macro import build_gas
+from bot.macro import build_cc
 
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.ability_id import AbilityId

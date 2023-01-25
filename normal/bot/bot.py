@@ -1,22 +1,22 @@
 import time
 
-from custom_utils import land_structures_for_addons
-from custom_utils import build_worker
-from custom_utils import handle_add_ons
-from custom_utils import handle_depot_status
-from custom_utils import handle_upgrades
-from custom_utils import handle_supply
-from custom_utils import handle_command_centers
-from build_order import early_build_order
-from micro import micro
-from macro import macro
-from production import produce
-from speedmining import split_workers
-from speedmining import get_speedmining_positions
-from speedmining import micro_worker
-from speedmining import handle_refineries
-from speedmining import dispatch_workers
-from army_composition_advisor import ArmyCompositionAdvisor
+from bot.custom_utils import land_structures_for_addons
+from bot.custom_utils import build_worker
+from bot.custom_utils import handle_add_ons
+from bot.custom_utils import handle_depot_status
+from bot.custom_utils import handle_upgrades
+from bot.custom_utils import handle_supply
+from bot.custom_utils import handle_command_centers
+from bot.build_order import early_build_order
+from bot.micro import micro
+from bot.macro import macro
+from bot.production import produce
+from bot.speedmining import split_workers
+from bot.speedmining import get_speedmining_positions
+from bot.speedmining import micro_worker
+from bot.speedmining import handle_refineries
+from bot.speedmining import dispatch_workers
+from bot.army_composition_advisor import ArmyCompositionAdvisor
 
 from itertools import chain
 
@@ -25,10 +25,18 @@ from sc2.ids.unit_typeid import UnitTypeId
 from sc2.position import Point2
 from sc2.data import Race
 from sc2.unit import Unit
+from bot.pathing import Pathing
+from bot.reapers import Reapers
+from bot.consts import ATTACK_TARGET_IGNORE
 
 
 # bot code --------------------------------------------------------------------------------------------------------
 class SmoothBrainBot(BotAI):
+
+    pathing: Pathing
+    # use a separate class for all reaper control
+    reapers: Reapers
+
     def __init__(self):
         self.unit_command_uses_self_do = False
         self.distance_calculation_method = 2
@@ -68,6 +76,8 @@ class SmoothBrainBot(BotAI):
         self.army_advisor.provide_advices_startup()
         self.speedmining_positions = get_speedmining_positions(self)
         split_workers(self)
+        self.pathing = Pathing(self, False)
+        self.reapers = Reapers(self, self.pathing)
     
 
     async def on_unit_destroyed(self, unit_tag: int):
@@ -81,6 +91,7 @@ class SmoothBrainBot(BotAI):
             await self.client.leave()
             return
 
+        self.pathing.update()
         self.army_advisor.provide_advices()
         self.resource_by_tag = {unit.tag: unit for unit in chain(self.mineral_field, self.gas_buildings)}
 

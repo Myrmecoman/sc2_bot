@@ -1,5 +1,5 @@
-from custom_utils import can_build_structure
-from custom_utils import get_safest_expansion
+from bot.custom_utils import can_build_structure
+from bot.custom_utils import get_safest_expansion
 
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.upgrade_id import UpgradeId

@@ -7,6 +7,9 @@ from sc2.bot_ai import BotAI
 from sc2.position import Point2
 from typing import Dict, Iterable, List, Optional, Set
 from sc2.data import Race
+from bot.pathing import Pathing
+from bot.reapers import Reapers
+from bot.consts import ATTACK_TARGET_IGNORE
 
 
 # hit and run
@@ -240,6 +243,18 @@ def defend_building_workers(self : BotAI):
         self.worker_assigned_to_defend[i] = closest_worker.tag
 
 
+def get_attack_target(self : BotAI) -> Point2:
+    if enemy_units := self.enemy_units.filter(
+        lambda u: u.type_id not in ATTACK_TARGET_IGNORE
+        and not u.is_flying
+        and not u.is_cloaked
+        and not u.is_hallucination):
+        return enemy_units.closest_to(self.start_location).position
+    elif enemy_structures := self.enemy_structures:
+        return enemy_structures.closest_to(self.start_location).position
+    return self.enemy_start_locations[0]
+
+
 async def micro(self : BotAI):
 
     if counter_worker_rush(self):
@@ -249,7 +264,7 @@ async def micro(self : BotAI):
     prevent_PF_rush(self)
     defend_building_workers(self)
 
-    units : Units = self.units.exclude_type({UnitTypeId.SCV, UnitTypeId.MULE})
+    units : Units = self.units.exclude_type({UnitTypeId.SCV, UnitTypeId.MULE, UnitTypeId.REAPER})
     if len(units) == 0:
         return
     
@@ -257,6 +272,10 @@ async def micro(self : BotAI):
         go_scout_bases(self)
         return
     
+    # always attack with reapers
+    attack_target: Point2 = get_attack_target(self)
+    await self.reapers.handle_attackers(self.units(UnitTypeId.REAPER), attack_target)
+
     self.produce_from_starports = True
     self.produce_from_factories = True
     self.produce_from_barracks = True
