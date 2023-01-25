@@ -8,8 +8,8 @@ And implement pathing methods our units can use
 from typing import Dict, List, Optional
 
 import numpy as np
-from bot.consts import ALL_STRUCTURES
-from bot.influence_costs import INFLUENCE_COSTS
+from bot.pathing.consts import ALL_STRUCTURES
+from bot.pathing.influence_costs import INFLUENCE_COSTS
 from sc2.bot_ai import BotAI
 from sc2.position import Point2
 from sc2.unit import Unit

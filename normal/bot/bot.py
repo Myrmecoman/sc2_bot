@@ -25,9 +25,9 @@ from sc2.ids.unit_typeid import UnitTypeId
 from sc2.position import Point2
 from sc2.data import Race
 from sc2.unit import Unit
-from bot.pathing import Pathing
-from bot.reapers import Reapers
-from bot.consts import ATTACK_TARGET_IGNORE
+from bot.pathing.pathing import Pathing
+from bot.pathing.reapers import Reapers
+from bot.pathing.consts import ATTACK_TARGET_IGNORE
 
 
 # bot code --------------------------------------------------------------------------------------------------------

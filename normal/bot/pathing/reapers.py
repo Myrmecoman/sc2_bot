@@ -1,8 +1,8 @@
 from typing import Optional
 
 import numpy as np
-from bot.consts import ALL_STRUCTURES, ATTACK_TARGET_IGNORE
-from bot.pathing import Pathing
+from bot.pathing.consts import ALL_STRUCTURES, ATTACK_TARGET_IGNORE
+from bot.pathing.pathing import Pathing
 from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
 from sc2.position import Point2
