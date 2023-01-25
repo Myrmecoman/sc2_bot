@@ -131,7 +131,7 @@ class ArmyCompositionAdvisor():
     
         if self.bot.enemy_race == Race.Zerg:
             self.max_medivacs = 6
-            self.max_vikings = 4
+            self.max_vikings = 2
             self.max_battlecruisers = 2
             self.max_ravens = 2
             self.max_tanks = 8

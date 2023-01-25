@@ -264,6 +264,10 @@ async def micro(self : BotAI):
     prevent_PF_rush(self)
     defend_building_workers(self)
 
+    # always attack with reapers
+    attack_target: Point2 = get_attack_target(self)
+    await self.reapers.handle_attackers(self.units(UnitTypeId.REAPER), attack_target)
+
     units : Units = self.units.exclude_type({UnitTypeId.SCV, UnitTypeId.MULE, UnitTypeId.REAPER})
     if len(units) == 0:
         return
@@ -271,10 +275,6 @@ async def micro(self : BotAI):
     if are_we_idle_at_enemy_base(self):
         go_scout_bases(self)
         return
-    
-    # always attack with reapers
-    attack_target: Point2 = get_attack_target(self)
-    await self.reapers.handle_attackers(self.units(UnitTypeId.REAPER), attack_target)
 
     self.produce_from_starports = True
     self.produce_from_factories = True
