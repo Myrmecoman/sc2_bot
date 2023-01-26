@@ -97,18 +97,17 @@ def handle_add_ons(self : BotAI):
 
 
 def handle_depot_status(self : BotAI):
-    if self.enemy_units.amount == 0:
+    if self.enemy_units.not_flying.exclude_type({UnitTypeId.REAPER, UnitTypeId.COLOSSUS}).amount == 0: # exclude reapers and colossus since they can jump cliffs anyway
         for depo in self.structures(UnitTypeId.SUPPLYDEPOT).ready:
             depo(AbilityId.MORPH_SUPPLYDEPOT_LOWER)
     else:
-        enemies: Units = self.enemy_units
         for depo in self.structures(UnitTypeId.SUPPLYDEPOT).ready:
-            enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(depo.position))
-            if enemy_closest.first.distance_to(depo) >= 12:
+            enemy_closest = self.enemy_units.not_flying.exclude_type({UnitTypeId.REAPER, UnitTypeId.COLOSSUS}).closest_distance_to(depo)
+            if enemy_closest >= 12:
                 depo(AbilityId.MORPH_SUPPLYDEPOT_LOWER)
         for depo in self.structures(UnitTypeId.SUPPLYDEPOTLOWERED).ready:
-            enemy_closest: Units = enemies.sorted(lambda x: x.distance_to(depo.position))
-            if enemy_closest.first.distance_to(depo) < 12:
+            enemy_closest = self.enemy_units.not_flying.exclude_type({UnitTypeId.REAPER, UnitTypeId.COLOSSUS}).closest_distance_to(depo)
+            if enemy_closest < 12:
                 depo(AbilityId.MORPH_SUPPLYDEPOT_RAISE)
 
 

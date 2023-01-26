@@ -65,7 +65,7 @@ async def early_build_order(self : BotAI):
         self.build_order.pop(0)
         return
     # move SCV to next expansion
-    if self.build_order[0] == UnitTypeId.COMMANDCENTER:
+    if self.build_order[0] == UnitTypeId.COMMANDCENTER and self.minerals > 250: # go to the next cc place when we are near able to build it
         location: Point2 = await self.get_next_expansion()
         if location:
             worker: Unit = self.select_build_worker(location) # select the nearest worker to that location

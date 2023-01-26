@@ -50,15 +50,21 @@ class SmoothBrainBot(BotAI):
         self.worker_assigned_to_defend = {}       # lists workers assigned to defend other workers during construction
         self.worker_assigned_to_expand = {}       # lists workers assigned to expand /!\ not used yet
         self.townhall_saturations = {}            # lists the mineral saturation of townhalls in queues of 40 frames, we consider the townhall saturated if max_number + 1 >= ideal_number
-        self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY]
         self.produce_from_starports = True
         self.produce_from_factories = True
         self.produce_from_barracks = True
         self.scouted_at_time = -1000              # save moment at which we scouted, so that we don't re-send units every frame
+        
+        self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY]
+
         super().__init__()
 
 
     async def on_before_start(self) -> None:
+        
+        #if self.enemy_race == Race.Terran:
+        #    self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.REFINERY, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.FACTORY, UnitTypeId.SUPPLYDEPOT, UnitTypeId.COMMANDCENTER]
+
         self.client.game_step = self.game_step
         self.client.raw_affects_selection = True
         top_right = Point2((self.game_info.playable_area.right, self.game_info.playable_area.top))
