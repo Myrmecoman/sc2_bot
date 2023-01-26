@@ -46,34 +46,41 @@ async def try_build_on_line(self : BotAI, type : UnitTypeId, prod_structures : U
 
 
 async def smart_build(self : BotAI, type : UnitTypeId):
+
+    if not self.can_afford(UnitTypeId.BARRACKS) or self.tech_requirement_progress(UnitTypeId.BARRACKS) != 1:
+        return False
+
     prod_structures : Units = self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT})
 
     if prod_structures.amount == 0 and self.main_base_ramp.barracks_correct_placement:
         worker: Unit = self.select_build_worker(self.main_base_ramp.barracks_correct_placement) # select the nearest worker to that location
         if worker is None:
-            return
+            return False
+        pos = self.main_base_ramp.barracks_correct_placement
         if self.enemy_race == Race.Zerg:
-            worker.build(type, self.main_base_ramp.barracks_in_middle)
-        else:
-            worker.build(type, self.main_base_ramp.barracks_correct_placement)
-        return
+            pos = self.main_base_ramp.barracks_in_middle
+        if self.can_place_single(type, pos):
+            worker.build(type, pos)
+            return True
+        return False
 
     # build as a line from any started line
     if await try_build_on_line(self, type, prod_structures):
-        return
+        return True
     
     # else try to build on right or left alternatively
     if await try_build_on_line(self, type, prod_structures, -7):
-        return
+        return True
     if await try_build_on_line(self, type, prod_structures, 7):
-        return
+        return True
     
     # else well try further
     if await try_build_on_line(self, type, prod_structures, -14):
-        return
+        return True
     if await try_build_on_line(self, type, prod_structures, 14):
-        return
-    Exception("No place found")
+        return True
+    # no place found
+    return False
 
 
 HALF_OFFSET = Point2((.5, .5))

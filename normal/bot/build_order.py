@@ -46,18 +46,18 @@ async def early_build_order(self : BotAI):
     # Build depots
     if self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.build_order[0] == UnitTypeId.SUPPLYDEPOT:
         target_depot_location: Point2 = depot_placement_positions.pop()
-        await self.build(UnitTypeId.SUPPLYDEPOT, near=target_depot_location)
-        self.build_order.pop(0)
+        if await self.build(UnitTypeId.SUPPLYDEPOT, near=target_depot_location):
+            self.build_order.pop(0)
         return
     # Build barracks
     if self.can_afford(UnitTypeId.BARRACKS) and self.build_order[0] == UnitTypeId.BARRACKS and self.tech_requirement_progress(UnitTypeId.BARRACKS) == 1:
-        await smart_build(self, UnitTypeId.BARRACKS)
-        self.build_order.pop(0)
+        if await smart_build(self, UnitTypeId.BARRACKS):
+            self.build_order.pop(0)
         return
     # Build factory
     if self.can_afford(UnitTypeId.FACTORY) and self.build_order[0] == UnitTypeId.FACTORY and self.tech_requirement_progress(UnitTypeId.FACTORY) == 1:
-        await smart_build(self, UnitTypeId.FACTORY)
-        self.build_order.pop(0)
+        if await smart_build(self, UnitTypeId.FACTORY):
+            self.build_order.pop(0)
         return
     # Build refinery
     if self.can_afford(UnitTypeId.REFINERY) and self.build_order[0] == UnitTypeId.REFINERY:
