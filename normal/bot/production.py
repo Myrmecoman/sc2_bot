@@ -66,6 +66,8 @@ def produce(self : BotAI):
                     continue
                 if add_on.type_id == UnitTypeId.FACTORYTECHLAB and self.can_afford(UnitTypeId.SIEGETANK):
                     fac.build(UnitTypeId.SIEGETANK)
+                elif add_on.type_id == UnitTypeId.FACTORYTECHLAB and self.can_afford(UnitTypeId.HELLION):
+                    fac.build(UnitTypeId.HELLION)
                 elif add_on.type_id == UnitTypeId.FACTORYREACTOR and self.can_afford(UnitTypeId.HELLION):
                     fac.build(UnitTypeId.HELLION)
                     if self.can_afford(UnitTypeId.HELLION):
