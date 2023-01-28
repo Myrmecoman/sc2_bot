@@ -1,6 +1,7 @@
 from sc2.bot_ai import BotAI
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.ability_id import AbilityId
+from sc2.ids.upgrade_id import UpgradeId
 from sc2.unit import Unit
 from sc2.units import Units
 from sc2.bot_ai import BotAI
@@ -11,8 +12,16 @@ from bot.pathing.consts import ATTACK_TARGET_IGNORE
 
 
 # hit and run
-def kite_attack(unit : Unit, enemy : Unit, unit_range):
-    if unit.weapon_cooldown == 0 or unit.distance_to(enemy) > unit_range + 1:
+def kite_attack(self : BotAI, unit : Unit, enemy : Unit, unit_range):
+    dist = unit.distance_to(enemy)
+
+    if unit.health == unit.health_max and self.already_pending_upgrade(UpgradeId.STIMPACK) == 1 and (unit.type_id == UnitTypeId.MARINE or unit.type_id == UnitTypeId.MARAUDER) and dist <= unit_range + 1:
+        if unit.type_id == UnitTypeId.MARINE and unit.is_using_ability(AbilityId.EFFECT_STIM_MARINE) == False:
+            unit(AbilityId.EFFECT_STIM_MARINE)
+        elif unit.type_id == UnitTypeId.MARAUDER and unit.is_using_ability(AbilityId.EFFECT_STIM_MARAUDER) == False:
+            unit(AbilityId.EFFECT_STIM_MARAUDER)
+
+    if unit.weapon_cooldown == 0 or dist > unit_range + 1:
         unit.attack(enemy)
     else:
         unit.move(unit.position.towards(enemy, -1))
@@ -58,21 +67,21 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
             unit.attack(position_or_enemy)
             return
         closest_enemy = (dangers | enemy_structures).closest_to(unit)
-        kite_attack(unit, closest_enemy, unit.ground_range)
+        kite_attack(self, unit, closest_enemy, unit.ground_range)
         return
     if unit.can_attack_ground:
         if (dangers.not_flying | enemy_structures).amount == 0:
             unit.attack(position_or_enemy)
             return
         closest_enemy = (dangers.not_flying | enemy_structures).closest_to(unit)
-        kite_attack(unit, closest_enemy, unit.ground_range)
+        kite_attack(self, unit, closest_enemy, unit.ground_range)
         return
     if unit.can_attack_air:
         if (dangers.flying | enemy_structures).amount == 0:
             unit.attack(position_or_enemy)
             return
         closest_enemy = (dangers.flying | enemy_structures).closest_to(unit)
-        kite_attack(unit, closest_enemy, unit.air_range)
+        kite_attack(self, unit, closest_enemy, unit.air_range)
         return
 
 

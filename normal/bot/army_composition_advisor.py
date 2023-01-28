@@ -49,6 +49,14 @@ class ArmyCompositionAdvisor():
         # track ressources lost by each player (only army units) /!\ not implemented yet
         self.resources_lost = 0
         self.enemy_resources_lost = 0
+
+    
+    def amount_of_enemies_of_type(self, type : UnitTypeId):
+        enemies = 0
+        for i in self.known_enemy_units.keys():
+            if self.known_enemy_units[i][1] == type:
+                enemies += 1
+        return enemies
     
 
     def update_enemy_army(self, enemies : Units):
@@ -80,6 +88,12 @@ class ArmyCompositionAdvisor():
 
     def provide_advices(self):
         self.update_enemy_army(self.bot.enemy_units)
+
+        if self.bot.enemy_race == Race.Zerg:
+            if self.amount_of_enemies_of_type(UnitTypeId.ROACH) > len(self.known_enemy_units.keys())/2:
+                self.marine_marauder_ratio = 0.6
+            else:
+                self.marine_marauder_ratio = 0.8
 
         total_enemy_supply = 0
         for i in self.known_enemy_units:
