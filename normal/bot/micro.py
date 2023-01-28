@@ -7,8 +7,6 @@ from sc2.bot_ai import BotAI
 from sc2.position import Point2
 from typing import Dict, Iterable, List, Optional, Set
 from sc2.data import Race
-from bot.pathing.pathing import Pathing
-from bot.pathing.reapers import Reapers
 from bot.pathing.consts import ATTACK_TARGET_IGNORE
 
 
@@ -36,8 +34,6 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
 
     # handle medivacs and ravens
     if not unit.can_attack:
-        if unit.type_id == UnitTypeId.MEDIVAC:
-            unit(AbilityId.EFFECT_MEDIVACIGNITEAFTERBURNERS)
         if units.not_flying.amount > 0:
             pos = units.not_flying.closest_to(position_or_enemy).position
             unit.attack(pos)
@@ -53,7 +49,7 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
         unit(AbilityId.UNSIEGE_UNSIEGE)
         return
     
-    dangers : Units = self.enemy_units.exclude_type({UnitTypeId.LARVA, UnitTypeId.EGG})
+    dangers : Units = self.enemy_units.exclude_type(ATTACK_TARGET_IGNORE)
     enemy_structures : Units = self.enemy_structures
 
     # everything else
@@ -291,6 +287,10 @@ async def micro(self : BotAI):
         attack = True
 
     for i in units:
+
+        if i.type_id == UnitTypeId.MEDIVAC and await self.can_cast(i, AbilityId.EFFECT_MEDIVACIGNITEAFTERBURNERS):
+            i(AbilityId.EFFECT_MEDIVACIGNITEAFTERBURNERS)
+            
         if attack:
             smart_attack(self, units, i, pos, enemies)
         else:
