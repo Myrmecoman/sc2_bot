@@ -27,7 +27,6 @@ from sc2.data import Race
 from sc2.unit import Unit
 from bot.pathing.pathing import Pathing
 from bot.pathing.reapers import Reapers
-from bot.pathing.consts import ATTACK_TARGET_IGNORE
 
 
 # bot code --------------------------------------------------------------------------------------------------------

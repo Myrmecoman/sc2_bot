@@ -23,6 +23,14 @@ def produce_single_type_unit(self : BotAI, structure : UnitTypeId, unit : UnitTy
                 s.build(dumpunit)
         elif self.can_afford(unit):
             s.build(unit)
+    
+    for s in self.structures(structure).ready:
+        if not s.has_reactor:
+            continue
+        if len(s.orders) == 1 and self.can_afford(unit):
+            s.build(unit)
+        elif len(s.orders) == 1 and dumpunit is not None and self.can_afford(dumpunit):
+            s.build(dumpunit)
 
 
 def produce(self : BotAI):
@@ -49,6 +57,14 @@ def produce(self : BotAI):
                 st.build(UnitTypeId.MEDIVAC)
             elif self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < self.army_advisor.max_vikings:
                 st.build(UnitTypeId.VIKINGFIGHTER)
+        
+        for st in self.structures(UnitTypeId.STARPORT).ready:
+            if not st.has_reactor:
+                continue
+            if len(st.orders) == 1 and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < self.army_advisor.max_medivacs:
+                st.build(UnitTypeId.MEDIVAC)
+            elif len(st.orders) == 1 and self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < self.army_advisor.max_vikings:
+                st.build(UnitTypeId.VIKINGFIGHTER)
     
     if self.produce_from_factories:
         for fac in self.structures(UnitTypeId.FACTORY).ready.idle:
@@ -62,6 +78,12 @@ def produce(self : BotAI):
                         fac.build(UnitTypeId.HELLION)
                 elif self.can_afford(UnitTypeId.HELLION):
                     fac.build(UnitTypeId.HELLION)
+        
+        for fac in self.structures(UnitTypeId.FACTORY).ready:
+            if not fac.has_reactor:
+                continue
+            if len(fac.orders) == 1 and self.can_afford(UnitTypeId.HELLION):
+                fac.build(UnitTypeId.HELLION)
 
     if self.produce_from_barracks:
         total_marines = self.units.of_type({UnitTypeId.MARINE}).amount
@@ -69,6 +91,7 @@ def produce(self : BotAI):
 
         if self.units.of_type({UnitTypeId.REAPER}).amount < amount_of_enemies_of_type(self, UnitTypeId.REAPER): # if we have less reapers than enemy, make more reapers
             produce_single_type_unit(self, UnitTypeId.BARRACKS, UnitTypeId.REAPER, UnitTypeId.MARINE)
+
         elif total_marauders != 0 and total_marines / (total_marines + total_marauders) < self.army_advisor.marine_marauder_ratio: # if not enough marines, make only of them
             for bar in self.structures(UnitTypeId.BARRACKS).ready.idle:
                 if bar.has_techlab and self.can_afford(UnitTypeId.MARINE):
@@ -82,6 +105,13 @@ def produce(self : BotAI):
                         bar.build(UnitTypeId.REAPER)
                 elif self.can_afford(UnitTypeId.MARINE):
                     bar.build(UnitTypeId.MARINE)
+            
+            for bar in self.structures(UnitTypeId.BARRACKS).ready:
+                if not bar.has_reactor:
+                    continue
+                if len(bar.orders) == 1 and self.can_afford(UnitTypeId.MARINE):
+                    bar.build(UnitTypeId.MARINE)
+
         else:
             for bar in self.structures(UnitTypeId.BARRACKS).ready.idle:
                 if bar.has_techlab and self.can_afford(UnitTypeId.MARAUDER):
@@ -94,4 +124,10 @@ def produce(self : BotAI):
                     if self.can_afford(UnitTypeId.REAPER):
                         bar.build(UnitTypeId.REAPER)
                 elif self.can_afford(UnitTypeId.MARINE):
+                    bar.build(UnitTypeId.MARINE)
+
+            for bar in self.structures(UnitTypeId.BARRACKS).ready:
+                if not bar.has_reactor:
+                    continue
+                if len(bar.orders) == 1 and self.can_afford(UnitTypeId.MARINE):
                     bar.build(UnitTypeId.MARINE)

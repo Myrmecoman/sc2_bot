@@ -16,6 +16,5 @@ Army grouping and bio splitting before attacking.<br/>
 Prevent flying units from going in range of units that can attack them.<br/>
 Better unit production (counter enemy army).<br/>
 Build uphill against zerg and scout before placing B2.<br/>
-Remember reactored buildings that are building only one unit in order to order another one as soon as we have enough resources.<br/>
 
 SmoothBrain Bot now uses the SC2MapAnalysis api : https://github.com/spudde123/SC2MapAnalysis/tree/develop
