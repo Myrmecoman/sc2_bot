@@ -27,6 +27,8 @@ def produce_single_type_unit(self : BotAI, structure : UnitTypeId, unit : UnitTy
 
 def produce(self : BotAI):
 
+    less_reapers = self.units.of_type({UnitTypeId.REAPER}).amount < self.army_advisor.amount_of_enemies_of_type(UnitTypeId.REAPER)
+
     if self.produce_from_starports:
         for st in self.structures(UnitTypeId.STARPORT).ready.idle:
             if st.has_techlab and self.can_afford(UnitTypeId.RAVEN) and self.units(UnitTypeId.RAVEN).amount < self.army_advisor.max_ravens:
@@ -63,7 +65,8 @@ def produce(self : BotAI):
                 if fac.has_techlab and self.can_afford(UnitTypeId.SIEGETANK):
                     fac.build(UnitTypeId.SIEGETANK)
                 elif fac.has_techlab and self.can_afford(UnitTypeId.HELLION):
-                    fac.build(UnitTypeId.HELLION)
+                    if less_reapers:
+                        fac.build(UnitTypeId.HELLION)
                 elif fac.has_reactor and self.can_afford(UnitTypeId.HELLION):
                     fac.build(UnitTypeId.HELLION)
                     if self.can_afford(UnitTypeId.HELLION):
@@ -81,7 +84,7 @@ def produce(self : BotAI):
         total_marines = self.units.of_type({UnitTypeId.MARINE}).amount
         total_marauders = self.units.of_type({UnitTypeId.MARAUDER}).amount
 
-        if self.units.of_type({UnitTypeId.REAPER}).amount < self.army_advisor.amount_of_enemies_of_type(UnitTypeId.REAPER): # if we have less reapers than enemy, make more reapers
+        if less_reapers: # if we have less reapers than enemy, make more reapers
             produce_single_type_unit(self, UnitTypeId.BARRACKS, UnitTypeId.REAPER, UnitTypeId.MARINE)
 
         elif total_marauders != 0 and total_marines / (total_marines + total_marauders) < self.army_advisor.marine_marauder_ratio: # if not enough marines, make only of them

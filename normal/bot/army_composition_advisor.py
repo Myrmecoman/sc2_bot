@@ -91,7 +91,7 @@ class ArmyCompositionAdvisor():
 
         if self.bot.enemy_race == Race.Zerg:
             if self.amount_of_enemies_of_type(UnitTypeId.ROACH) > len(self.known_enemy_units.keys())/2:
-                self.marine_marauder_ratio = 0.6
+                self.marine_marauder_ratio = 0.5
             else:
                 self.marine_marauder_ratio = 0.8
 
@@ -137,7 +137,7 @@ class ArmyCompositionAdvisor():
             self.max_tanks = 6
             self.max_cyclones = 0
 
-            self.marine_marauder_ratio = 0.7
+            self.marine_marauder_ratio = 0.5
 
             self.barracks_techlab_ratio = 0.5
             self.factory_techlab_ratio = 0.5
@@ -151,7 +151,7 @@ class ArmyCompositionAdvisor():
             self.max_tanks = 8
             self.max_cyclones = 0
 
-            self.marine_marauder_ratio = 0.8
+            self.marine_marauder_ratio = 0.5
 
             self.barracks_techlab_ratio = 0.3
             self.factory_techlab_ratio = 0.5
