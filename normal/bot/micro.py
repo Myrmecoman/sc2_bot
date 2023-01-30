@@ -84,10 +84,7 @@ def smart_move(self : BotAI, unit : Unit, position, enemies : Units):
 
     if unit.type_id == UnitTypeId.SIEGETANKSIEGED and enemies.not_flying.amount > 0 and enemies.not_flying.closest_distance_to(unit) > 13:
             unit(AbilityId.UNSIEGE_UNSIEGE)
-
     unit.move(position)
-    # generate map of area covered by units
-    # TODO
 
 
 def are_we_worker_rushed(self : BotAI):
@@ -290,17 +287,16 @@ async def micro(self : BotAI):
         attack = True
 
     bio : Units = self.units.of_type({UnitTypeId.MARINE, UnitTypeId.MARAUDER})
+    medivacs : Units = self.units(UnitTypeId.MEDIVAC)
     if attack:
         await self.bio.handle_attackers(bio, pos)
+        await self.medivacs.handle_attackers(medivacs, pos)
     else:
         self.bio.retreat_to(bio, pos)
+        await self.medivacs.retreat_to(medivacs, pos)
 
     for i in units:
-
-        if i.type_id == UnitTypeId.MEDIVAC and await self.can_cast(i, AbilityId.EFFECT_MEDIVACIGNITEAFTERBURNERS):
-            i(AbilityId.EFFECT_MEDIVACIGNITEAFTERBURNERS)
-            
-        if i.type_id == UnitTypeId.MARINE or i.type_id == UnitTypeId.MARAUDER:
+        if i.type_id == UnitTypeId.MARINE or i.type_id == UnitTypeId.MARAUDER or i.type_id == UnitTypeId.MEDIVAC:
             continue
 
         if attack:

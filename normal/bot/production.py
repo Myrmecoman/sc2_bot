@@ -118,7 +118,7 @@ def produce(self : BotAI):
                 elif self.army_count == 0 or (self.army_count < 2 and self.enemy_race == Race.Terran):
                     if self.can_afford(UnitTypeId.REAPER):
                         bar.build(UnitTypeId.REAPER)
-                elif self.can_afford(UnitTypeId.MARINE):
+                elif bar.has_add_on == False and self.can_afford(UnitTypeId.MARINE):
                     bar.build(UnitTypeId.MARINE)
 
             for bar in self.structures(UnitTypeId.BARRACKS).ready:

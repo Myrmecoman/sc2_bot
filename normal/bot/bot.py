@@ -28,6 +28,7 @@ from sc2.unit import Unit
 from bot.pathing.pathing import Pathing
 from bot.pathing.reapers import Reapers
 from bot.pathing.bio import Bio
+from bot.pathing.medivacs import Medivacs
 
 
 # bot code --------------------------------------------------------------------------------------------------------
@@ -37,6 +38,7 @@ class SmoothBrainBot(BotAI):
     # use a separate class for all units control
     reapers: Reapers
     bio: Bio
+    medivacs: Medivacs
 
     def __init__(self):
         self.unit_command_uses_self_do = False
@@ -83,9 +85,11 @@ class SmoothBrainBot(BotAI):
         self.army_advisor.provide_advices_startup()
         self.speedmining_positions = get_speedmining_positions(self)
         split_workers(self)
+        
         self.pathing = Pathing(self, False)
         self.reapers = Reapers(self, self.pathing)
         self.bio = Bio(self, self.pathing)
+        self.medivacs = Medivacs(self, self.pathing)
     
 
     async def on_unit_destroyed(self, unit_tag: int):

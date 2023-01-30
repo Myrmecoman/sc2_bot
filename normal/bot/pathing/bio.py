@@ -1,6 +1,6 @@
 import numpy as np
 from typing import Optional
-from bot.pathing.consts import ALL_STRUCTURES, ATTACK_TARGET_IGNORE
+from bot.pathing.consts import ALL_STRUCTURES, ATTACK_TARGET_IGNORE, DANGEROUS_STRUCTURES
 from bot.pathing.pathing import Pathing
 from sc2.bot_ai import BotAI
 from sc2.position import Point2
@@ -9,8 +9,6 @@ from sc2.units import Units
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.upgrade_id import UpgradeId
 from sc2.ids.ability_id import AbilityId
-
-HEAL_AT_LESS_THAN: float = 0.5
 
 
 class Bio:
@@ -24,9 +22,9 @@ class Bio:
 
             close_enemies: Units = None
             if unit.type_id == UnitTypeId.MARAUDER:
-                close_enemies = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE)
+                close_enemies = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE) | self.ai.enemy_structures#.filter(lambda s: s.distance_to(unit) < 15.0 and s.type_id in DANGEROUS_STRUCTURES)
             else:
-                close_enemies = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and u.type_id not in ATTACK_TARGET_IGNORE)
+                close_enemies = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and u.type_id not in ATTACK_TARGET_IGNORE) | self.ai.enemy_structures#.filter(lambda s: s.distance_to(unit) < 15.0 and s.type_id in DANGEROUS_STRUCTURES)
 
             # check for nearby target fire
             target: Optional[Unit] = None
@@ -47,23 +45,14 @@ class Bio:
                 continue
 
             # get to the target
-            if unit.distance_to(attack_target) > unit.ground_range:
+            if unit.distance_to(attack_target) > 5:
                 # only make pathing queries if enemies are close
                 if close_enemies:
                     unit.move(self.pathing.find_path_next_point(unit.position, attack_target, grid))
                 else:
                     unit.move(attack_target)
             else:
-                close_structures: Units = None
-                if unit.type_id == UnitTypeId.MARAUDER:
-                    close_structures = self.ai.enemy_structures.filter(lambda u: u.distance_to(unit) < 15.0 and not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE)
-                else:
-                    close_structures = self.ai.enemy_structures.filter(lambda u: u.distance_to(unit) < 15.0 and u.type_id not in ATTACK_TARGET_IGNORE)
-
-                if close_structures.amount != 0:
-                    self.attack_and_stim(unit, close_structures.closest_to(unit))
-                else:
-                    self.attack_and_stim(unit, attack_target)
+                unit.attack(attack_target)
 
     def move_to_safety(self, unit: Unit, grid: np.ndarray):
         """

@@ -1,7 +1,7 @@
 from typing import Optional
 
 import numpy as np
-from bot.pathing.consts import ALL_STRUCTURES, ATTACK_TARGET_IGNORE
+from bot.pathing.consts import ALL_STRUCTURES, ATTACK_TARGET_IGNORE, DANGEROUS_STRUCTURES
 from bot.pathing.pathing import Pathing
 from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
@@ -34,7 +34,7 @@ class Reapers:
                 unit.move(self.pathing.find_path_next_point(unit.position, self.get_heal_spot, grid))
                 continue
 
-            close_enemies: Units = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE)
+            close_enemies: Units = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE) | self.ai.enemy_structures.filter(lambda s: s.distance_to(unit) < 15.0 and s.type_id in DANGEROUS_STRUCTURES)
 
             # reaper grenade
             if await self._do_reaper_grenade(unit, close_enemies):
