@@ -22,6 +22,7 @@ from itertools import chain
 
 from sc2.bot_ai import BotAI
 from sc2.ids.unit_typeid import UnitTypeId
+from sc2.ids.ability_id import AbilityId
 from sc2.position import Point2
 from sc2.data import Race
 from sc2.unit import Unit
@@ -79,6 +80,12 @@ class SmoothBrainBot(BotAI):
         bottom_left = Point2((0, 0))
         top_left = Point2((0, self.game_info.playable_area.top))
         self.map_corners = [top_right, bottom_right, bottom_left, top_left]
+
+
+    # set rally point at start location, therefore our units will spawn on the right side of the wall
+    async def on_building_construction_started(self, unit: Unit):
+        if unit.type_id == UnitTypeId.BARRACKS or unit.type_id == UnitTypeId.FACTORY or unit.type_id == UnitTypeId.STARPORT:
+            unit(AbilityId.SMART, self.start_location)
 
 
     async def on_start(self) -> None:
