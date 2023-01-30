@@ -10,11 +10,9 @@ If you are a novice bot writter I suggest you pick some ideas from this bot and 
 # TODO
 
 Repairing not full life mechanical units.<br/>
-Pickup and drop units on non pathable places.<br/>
-Better stutter steps for bio units (instead of just going back).<br/>
 Army grouping and bio splitting before attacking.<br/>
-Prevent flying units from going in range of units that can attack them.<br/>
 Better unit production (counter enemy army).<br/>
 Build uphill against zerg and scout before placing B2.<br/>
+Do something about the APM bug, which cancels some actions.<br/>
 
 SmoothBrain Bot now uses the SC2MapAnalysis api : https://github.com/spudde123/SC2MapAnalysis/tree/develop

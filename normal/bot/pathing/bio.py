@@ -22,18 +22,18 @@ class Bio:
 
             close_enemies: Units = None
             if unit.type_id == UnitTypeId.MARAUDER:
-                close_enemies = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE) | self.ai.enemy_structures#.filter(lambda s: s.distance_to(unit) < 15.0 and s.type_id in DANGEROUS_STRUCTURES)
+                close_enemies = self.ai.enemy_units.filter(lambda u: not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE) | self.ai.enemy_structures#.filter(lambda s: s.distance_to(unit) < 15.0 and s.type_id in DANGEROUS_STRUCTURES)
             else:
-                close_enemies = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and u.type_id not in ATTACK_TARGET_IGNORE) | self.ai.enemy_structures#.filter(lambda s: s.distance_to(unit) < 15.0 and s.type_id in DANGEROUS_STRUCTURES)
+                close_enemies = self.ai.enemy_units.filter(lambda u: u.type_id not in ATTACK_TARGET_IGNORE) | self.ai.enemy_structures#.filter(lambda s: s.distance_to(unit) < 15.0 and s.type_id in DANGEROUS_STRUCTURES)
 
             # check for nearby target fire
             target: Optional[Unit] = None
             if close_enemies:
                 in_attack_range: Units = close_enemies.in_attack_range_of(unit)
                 if in_attack_range:
-                    target = self.pick_enemy_target(in_attack_range)
+                    target = self.pick_enemy_target(unit, in_attack_range, True)
                 else:
-                    target = self.pick_enemy_target(close_enemies)
+                    target = self.pick_enemy_target(unit, close_enemies, False)
 
             if target and unit.weapon_cooldown == 0:
                 self.attack_and_stim(unit, target)
@@ -47,12 +47,12 @@ class Bio:
             # get to the target
             if unit.distance_to(attack_target) > unit.ground_range:
                 # only make pathing queries if enemies are close
-                if close_enemies:
-                    unit.move(self.pathing.find_path_next_point(unit.position, close_enemies.closest_to(unit).position, grid))
+                if target:
+                    unit.attack(target)
                 else:
-                    unit.move(attack_target)
+                    unit.attack(attack_target)
             else:
-                unit.attack(attack_target)
+                unit.attack(target)
 
     def move_to_safety(self, unit: Unit, grid: np.ndarray):
         """
@@ -64,7 +64,7 @@ class Bio:
         unit.move(move_to)
     
     def attack_and_stim(self, unit: Unit, enemy: Unit):
-        if unit.health == unit.health_max and self.ai.already_pending_upgrade(UpgradeId.STIMPACK) == 1:
+        if unit.health == unit.health_max and self.ai.already_pending_upgrade(UpgradeId.STIMPACK) == 1 and enemy.distance_to(unit) < unit.ground_range:
             if unit.type_id == UnitTypeId.MARINE and unit.is_using_ability(AbilityId.EFFECT_STIM_MARINE) == False:
                 unit(AbilityId.EFFECT_STIM_MARINE)
             elif unit.type_id == UnitTypeId.MARAUDER and unit.is_using_ability(AbilityId.EFFECT_STIM_MARAUDER) == False:
@@ -80,8 +80,11 @@ class Bio:
             unit.move(move_to)
 
     @staticmethod
-    def pick_enemy_target(enemies: Units) -> Unit:
+    def pick_enemy_target(unit: Unit, enemies: Units, in_range: bool = True) -> Unit:
         """For best enemy target from the provided enemies
         TODO: If there are multiple units that can be killed in one shot, pick the highest value one
         """
-        return min(enemies, key=lambda e: (e.health + e.shield, e.tag),)
+        if in_range:
+            return min(enemies, key=lambda e: (e.health + e.shield, e.tag),)
+        else:
+            return enemies.closest_to(unit)

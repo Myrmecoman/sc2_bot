@@ -24,24 +24,11 @@ def kite_attack(self : BotAI, unit : Unit, enemy : Unit, unit_range):
 # same as attack, except medivacs and other non attacking units don't suicide straight in the enemy lines
 def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, enemies : Units):
 
-    '''
-    # if the position cannot be reached by ground units and we are a viking at the designated position, land
-    if not self.in_pathing_grid(position_or_enemy) and isinstance(position_or_enemy, Unit) and not position_or_enemy.is_flying:
-        if unit.type_id == UnitTypeId.VIKINGFIGHTER:
-            if unit.position.distance_to(position_or_enemy) < 8:
-                unit(AbilityId.MORPH_VIKINGASSAULTMODE)
-            else:
-                unit.move(position_or_enemy)
-            return
-    if (any(enemies.flying) or (enemies.amount > 0 and enemies.closest_distance_to(unit) > 16)) and unit.type_id == UnitTypeId.VIKINGASSAULT:
-        unit(AbilityId.MORPH_VIKINGFIGHTERMODE)
-    '''
-
     # handle tanks
-    if unit.type_id == UnitTypeId.SIEGETANK and enemies.not_flying.amount > 0 and enemies.not_flying.closest_distance_to(unit) <= 13:
+    if unit.type_id == UnitTypeId.SIEGETANK and enemies.not_structure.not_flying.amount > 0 and enemies.not_structure.not_flying.closest_distance_to(unit) <= 13:
         unit(AbilityId.SIEGEMODE_SIEGEMODE)
         return
-    elif unit.type_id == UnitTypeId.SIEGETANKSIEGED and (enemies.not_flying.amount == 0 or enemies.not_flying.closest_distance_to(unit) >= 15):
+    elif unit.type_id == UnitTypeId.SIEGETANKSIEGED and (enemies.not_structure.not_flying.amount == 0 or enemies.not_structure.not_flying.closest_distance_to(unit) >= 14):
         unit(AbilityId.UNSIEGE_UNSIEGE)
         return
     
@@ -75,7 +62,7 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
 # move to retreat avoiding enemies as much as possible
 def smart_move(self : BotAI, unit : Unit, position, enemies : Units):
 
-    if unit.type_id == UnitTypeId.SIEGETANKSIEGED and enemies.not_flying.amount > 0 and enemies.not_flying.closest_distance_to(unit) > 13:
+    if unit.type_id == UnitTypeId.SIEGETANKSIEGED and (enemies.not_structure.not_flying.amount == 0 or enemies.not_structure.not_flying.closest_distance_to(unit) > 14):
             unit(AbilityId.UNSIEGE_UNSIEGE)
     unit.move(position)
 

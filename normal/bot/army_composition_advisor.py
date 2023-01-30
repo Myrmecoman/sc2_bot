@@ -104,7 +104,7 @@ class ArmyCompositionAdvisor():
         for i in self.known_enemy_units:
             total_enemy_supply += self.supply_of(self.known_enemy_units[i][1])
 
-        if self.bot.supply_army > 4 * total_enemy_supply or self.bot.supply_army >= 40: # if we have more supply, or enough to trade, we attack
+        if self.bot.supply_army > 4 * total_enemy_supply or self.bot.supply_army >= 50: # if we have more supply, or enough to trade, we attack
             self.should_attack = True
             return
         else:
@@ -136,7 +136,7 @@ class ArmyCompositionAdvisor():
         
         if self.bot.enemy_race == Race.Protoss:
             self.max_medivacs = 4
-            self.max_vikings = 6
+            self.max_vikings = 4
             self.max_battlecruisers = 1
             self.max_ravens = 2
             self.max_tanks = 6
