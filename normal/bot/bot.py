@@ -82,6 +82,9 @@ class SmoothBrainBot(BotAI):
 
 
     async def on_start(self) -> None:
+
+        await self._client.chat_send("glhf!", team_only=False)
+
         #if self.enemy_race == Race.Zerg: # always make techlab first on starport, good against dts, skytoss, burrowed roaches, and siege tanks
         self.build_starport_techlab_first = True
         self.client.game_step = self.game_step
