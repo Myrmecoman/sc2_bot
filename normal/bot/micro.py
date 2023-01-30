@@ -36,7 +36,7 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
     if (any(enemies.flying) or (enemies.amount > 0 and enemies.closest_distance_to(unit) > 16)) and unit.type_id == UnitTypeId.VIKINGASSAULT:
         unit(AbilityId.MORPH_VIKINGFIGHTERMODE)
     '''
-    
+
     # handle tanks
     if unit.type_id == UnitTypeId.SIEGETANK and enemies.not_flying.amount > 0 and enemies.not_flying.closest_distance_to(unit) <= 13:
         unit(AbilityId.SIEGEMODE_SIEGEMODE)
@@ -257,8 +257,8 @@ async def micro(self : BotAI):
     attack_target: Point2 = get_attack_target(self)
     await self.reapers.handle_attackers(self.units(UnitTypeId.REAPER), attack_target)
 
-    units : Units = self.units.exclude_type({UnitTypeId.SCV, UnitTypeId.MULE, UnitTypeId.REAPER})
-    if len(units) == 0:
+    units : Units = self.units.exclude_type({UnitTypeId.SCV, UnitTypeId.MULE, UnitTypeId.REAPER, UnitTypeId.MARINE, UnitTypeId.MARAUDER, UnitTypeId.MEDIVAC, UnitTypeId.RAVEN, UnitTypeId.VIKINGFIGHTER})
+    if self.army_count == 0:
         return
     
     if are_we_idle_at_enemy_base(self):
@@ -295,9 +295,6 @@ async def micro(self : BotAI):
         await self.flying_vikings.retreat_to(flying_vikings, pos)
 
     for i in units:
-        if i.type_id == UnitTypeId.MARINE or i.type_id == UnitTypeId.MARAUDER or i.type_id == UnitTypeId.MEDIVAC or i.type_id == UnitTypeId.RAVEN or i.type_id == UnitTypeId.VIKINGFIGHTER:
-            continue
-
         if attack:
             smart_attack(self, units, i, pos, enemies)
         else:

@@ -48,7 +48,7 @@ class Bio:
             if unit.distance_to(attack_target) > unit.ground_range:
                 # only make pathing queries if enemies are close
                 if close_enemies:
-                    unit.move(self.pathing.find_path_next_point(unit.position, attack_target, grid))
+                    unit.move(self.pathing.find_path_next_point(unit.position, close_enemies.closest_to(unit).position, grid))
                 else:
                     unit.move(attack_target)
             else:
