@@ -33,16 +33,16 @@ class Pathing:
 
         # for reapers / colossus we need a special grid to use the cliffs
         self.reaper_grid: np.ndarray = self.map_data.get_climber_grid()
-
         # ground grid not actually used in this example, but is setup ready to go for other ground units
         self.ground_grid: np.ndarray = self.map_data.get_pyastar_grid()
-
         # air grid if needed, would need to add enemy influence
         self.air_grid: np.ndarray = self.map_data.get_clean_air_grid()
 
     def update(self) -> None:
         self.ground_grid = self.map_data.get_pyastar_grid()
         self.reaper_grid = self.map_data.get_climber_grid()
+        self.air_grid = self.map_data.get_clean_air_grid()
+
         for unit in self.ai.all_enemy_units:
             # checking if a unit is a structure this way is faster then using `if unit.is_structure` :)
             if unit.type_id in ALL_STRUCTURES:
@@ -132,21 +132,38 @@ class Pathing:
         # this unit is in our dictionary where we define custom weights and ranges
         # it could be this unit doesn't have a weapon in the API or we just want to use custom values
         if enemy.type_id in INFLUENCE_COSTS:
-            values: Dict = INFLUENCE_COSTS[enemy.type_id]
-            (self.ground_grid, self.reaper_grid) = self._add_cost_to_multiple_grids(
-                enemy.position,
-                values["GroundCost"],
-                values["GroundRange"] + RANGE_BUFFER,
-                [self.ground_grid, self.reaper_grid],
-            )
+            if enemy.can_attack_ground:
+                values: Dict = INFLUENCE_COSTS[enemy.type_id]
+                (self.ground_grid, self.reaper_grid) = self._add_cost_to_multiple_grids(
+                    enemy.position,
+                    values["GroundCost"],
+                    values["GroundRange"] + RANGE_BUFFER,
+                    [self.ground_grid, self.reaper_grid],
+                )
+            if enemy.can_attack_air:
+                values: Dict = INFLUENCE_COSTS[enemy.type_id]
+                self.air_grid = self._add_cost(
+                    enemy.position,
+                    values["AirCost"],
+                    values["AirRange"] + RANGE_BUFFER,
+                    self.air_grid,
+                )
         # this unit has values in the API and is not in our custom dictionary, take them from there
-        elif enemy.can_attack_ground:
-            (self.ground_grid, self.reaper_grid) = self._add_cost_to_multiple_grids(
-                enemy.position,
-                enemy.ground_dps,
-                enemy.ground_range + RANGE_BUFFER,
-                [self.ground_grid, self.reaper_grid],
-            )
+        else:
+            if enemy.can_attack_ground:
+                (self.ground_grid, self.reaper_grid) = self._add_cost_to_multiple_grids(
+                    enemy.position,
+                    enemy.ground_dps,
+                    enemy.ground_range + RANGE_BUFFER,
+                    [self.ground_grid, self.reaper_grid],
+                )
+            if enemy.can_attack_air:
+                self.air_grid = self._add_cost(
+                    enemy.position,
+                    enemy.air_dps,
+                    enemy.air_range + RANGE_BUFFER,
+                    self.air_grid,
+                )
 
     def _add_structure_influence(self, enemy: Unit) -> None:
         """
@@ -160,13 +177,22 @@ class Pathing:
             return
 
         if enemy.type_id in INFLUENCE_COSTS:
-            values: Dict = INFLUENCE_COSTS[enemy.type_id]
-            (self.ground_grid, self.reaper_grid) = self._add_cost_to_multiple_grids(
-                enemy.position,
-                values["GroundCost"],
-                values["GroundRange"] + RANGE_BUFFER,
-                [self.ground_grid, self.reaper_grid],
-            )
+            if enemy.can_attack_ground:
+                values: Dict = INFLUENCE_COSTS[enemy.type_id]
+                (self.ground_grid, self.reaper_grid) = self._add_cost_to_multiple_grids(
+                    enemy.position,
+                    values["GroundCost"],
+                    values["GroundRange"] + RANGE_BUFFER,
+                    [self.ground_grid, self.reaper_grid],
+                )
+            if enemy.can_attack_air:
+                values: Dict = INFLUENCE_COSTS[enemy.type_id]
+                self.air_grid = self._add_cost(
+                    enemy.position,
+                    values["AirCost"],
+                    values["AirRange"] + RANGE_BUFFER,
+                    self.air_grid,
+                )
 
     def _add_cost(
         self,

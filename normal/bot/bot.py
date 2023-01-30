@@ -29,6 +29,8 @@ from bot.pathing.pathing import Pathing
 from bot.pathing.reapers import Reapers
 from bot.pathing.bio import Bio
 from bot.pathing.medivacs import Medivacs
+from bot.pathing.ravens import Ravens
+from bot.pathing.flying_vikings import FlyingVikings
 
 
 # bot code --------------------------------------------------------------------------------------------------------
@@ -39,6 +41,8 @@ class SmoothBrainBot(BotAI):
     reapers: Reapers
     bio: Bio
     medivacs: Medivacs
+    ravens: Ravens
+    flying_vikings: FlyingVikings
 
     def __init__(self):
         self.unit_command_uses_self_do = False
@@ -85,11 +89,13 @@ class SmoothBrainBot(BotAI):
         self.army_advisor.provide_advices_startup()
         self.speedmining_positions = get_speedmining_positions(self)
         split_workers(self)
-        
+
         self.pathing = Pathing(self, False)
         self.reapers = Reapers(self, self.pathing)
         self.bio = Bio(self, self.pathing)
         self.medivacs = Medivacs(self, self.pathing)
+        self.ravens = Ravens(self, self.pathing)
+        self.flying_vikings = FlyingVikings(self, self.pathing)
     
 
     async def on_unit_destroyed(self, unit_tag: int):

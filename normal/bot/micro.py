@@ -24,6 +24,7 @@ def kite_attack(self : BotAI, unit : Unit, enemy : Unit, unit_range):
 # same as attack, except medivacs and other non attacking units don't suicide straight in the enemy lines
 def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, enemies : Units):
 
+    '''
     # if the position cannot be reached by ground units and we are a viking at the designated position, land
     if not self.in_pathing_grid(position_or_enemy) and isinstance(position_or_enemy, Unit) and not position_or_enemy.is_flying:
         if unit.type_id == UnitTypeId.VIKINGFIGHTER:
@@ -34,15 +35,7 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
             return
     if (any(enemies.flying) or (enemies.amount > 0 and enemies.closest_distance_to(unit) > 16)) and unit.type_id == UnitTypeId.VIKINGASSAULT:
         unit(AbilityId.MORPH_VIKINGFIGHTERMODE)
-
-    # handle medivacs and ravens
-    if not unit.can_attack:
-        if units.not_flying.amount > 0:
-            pos = units.not_flying.closest_to(position_or_enemy).position
-            unit.attack(pos)
-        else:
-            unit.attack(position_or_enemy)
-        return
+    '''
     
     # handle tanks
     if unit.type_id == UnitTypeId.SIEGETANK and enemies.not_flying.amount > 0 and enemies.not_flying.closest_distance_to(unit) <= 13:
@@ -288,15 +281,21 @@ async def micro(self : BotAI):
 
     bio : Units = self.units.of_type({UnitTypeId.MARINE, UnitTypeId.MARAUDER})
     medivacs : Units = self.units(UnitTypeId.MEDIVAC)
+    ravens : Units = self.units(UnitTypeId.RAVEN)
+    flying_vikings : Units = self.units(UnitTypeId.VIKINGFIGHTER)
     if attack:
         await self.bio.handle_attackers(bio, pos)
         await self.medivacs.handle_attackers(medivacs, pos)
+        await self.ravens.handle_attackers(ravens, pos)
+        await self.flying_vikings.handle_attackers(flying_vikings, pos)
     else:
-        self.bio.retreat_to(bio, pos)
+        await self.bio.retreat_to(bio, pos)
         await self.medivacs.retreat_to(medivacs, pos)
+        await self.ravens.retreat_to(ravens, pos)
+        await self.flying_vikings.retreat_to(flying_vikings, pos)
 
     for i in units:
-        if i.type_id == UnitTypeId.MARINE or i.type_id == UnitTypeId.MARAUDER or i.type_id == UnitTypeId.MEDIVAC:
+        if i.type_id == UnitTypeId.MARINE or i.type_id == UnitTypeId.MARAUDER or i.type_id == UnitTypeId.MEDIVAC or i.type_id == UnitTypeId.RAVEN or i.type_id == UnitTypeId.VIKINGFIGHTER:
             continue
 
         if attack:
