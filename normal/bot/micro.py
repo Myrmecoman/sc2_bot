@@ -15,12 +15,6 @@ from bot.pathing.consts import ATTACK_TARGET_IGNORE
 def kite_attack(self : BotAI, unit : Unit, enemy : Unit, unit_range):
     dist = unit.distance_to(enemy)
 
-    if unit.health == unit.health_max and self.already_pending_upgrade(UpgradeId.STIMPACK) == 1 and (unit.type_id == UnitTypeId.MARINE or unit.type_id == UnitTypeId.MARAUDER) and dist <= unit_range + 1:
-        if unit.type_id == UnitTypeId.MARINE and unit.is_using_ability(AbilityId.EFFECT_STIM_MARINE) == False:
-            unit(AbilityId.EFFECT_STIM_MARINE)
-        elif unit.type_id == UnitTypeId.MARAUDER and unit.is_using_ability(AbilityId.EFFECT_STIM_MARAUDER) == False:
-            unit(AbilityId.EFFECT_STIM_MARAUDER)
-
     if unit.weapon_cooldown == 0 or dist > unit_range + 1:
         unit.attack(enemy)
     else:
@@ -290,16 +284,25 @@ async def micro(self : BotAI):
     enemies: Units = self.enemy_units | self.enemy_structures
     if self.army_advisor.should_attack == True:
         if enemies.amount > 0:
-            pos = enemies.closest_to(self.start_location)
+            pos = enemies.closest_to(self.start_location).position
         else:
             pos = self.enemy_start_locations[0]
         attack = True
+
+    bio : Units = self.units.of_type({UnitTypeId.MARINE, UnitTypeId.MARAUDER})
+    if attack:
+        await self.bio.handle_attackers(bio, pos)
+    else:
+        self.bio.retreat_to(bio, pos)
 
     for i in units:
 
         if i.type_id == UnitTypeId.MEDIVAC and await self.can_cast(i, AbilityId.EFFECT_MEDIVACIGNITEAFTERBURNERS):
             i(AbilityId.EFFECT_MEDIVACIGNITEAFTERBURNERS)
             
+        if i.type_id == UnitTypeId.MARINE or i.type_id == UnitTypeId.MARAUDER:
+            continue
+
         if attack:
             smart_attack(self, units, i, pos, enemies)
         else:

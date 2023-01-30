@@ -38,7 +38,7 @@ class Pathing:
         self.ground_grid: np.ndarray = self.map_data.get_pyastar_grid()
 
         # air grid if needed, would need to add enemy influence
-        # self.air_grid: np.ndarray = self.map_data.get_clean_air_grid()
+        self.air_grid: np.ndarray = self.map_data.get_clean_air_grid()
 
     def update(self) -> None:
         self.ground_grid = self.map_data.get_pyastar_grid()

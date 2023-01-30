@@ -27,14 +27,16 @@ from sc2.data import Race
 from sc2.unit import Unit
 from bot.pathing.pathing import Pathing
 from bot.pathing.reapers import Reapers
+from bot.pathing.bio import Bio
 
 
 # bot code --------------------------------------------------------------------------------------------------------
 class SmoothBrainBot(BotAI):
 
     pathing: Pathing
-    # use a separate class for all reaper control
+    # use a separate class for all units control
     reapers: Reapers
+    bio: Bio
 
     def __init__(self):
         self.unit_command_uses_self_do = False
@@ -74,8 +76,8 @@ class SmoothBrainBot(BotAI):
 
 
     async def on_start(self) -> None:
-        if self.enemy_race == Race.Zerg:
-            self.build_starport_techlab_first = True
+        #if self.enemy_race == Race.Zerg: # always make techlab first on starport, good against dts, skytoss, burrowed roaches, and siege tanks
+        self.build_starport_techlab_first = True
         self.client.game_step = self.game_step
         self.army_advisor = ArmyCompositionAdvisor(self)         # provides advices for army composition and building add ons
         self.army_advisor.provide_advices_startup()
@@ -83,6 +85,7 @@ class SmoothBrainBot(BotAI):
         split_workers(self)
         self.pathing = Pathing(self, False)
         self.reapers = Reapers(self, self.pathing)
+        self.bio = Bio(self, self.pathing)
     
 
     async def on_unit_destroyed(self, unit_tag: int):

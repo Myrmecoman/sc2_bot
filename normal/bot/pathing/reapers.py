@@ -16,6 +16,7 @@ class Reapers:
     def __init__(self, ai: BotAI, pathing: Pathing):
         self.ai: BotAI = ai
         self.pathing: Pathing = pathing
+        self.grid: np.ndarray = None
 
         self.reaper_grenade_range: float = self.ai.game_data.abilities[
             AbilityId.KD8CHARGE_KD8CHARGE.value
@@ -23,27 +24,17 @@ class Reapers:
 
     @property
     def get_heal_spot(self) -> Point2:
-        return self.pathing.find_closest_safe_spot(
-            self.ai.game_info.map_center, self.pathing.reaper_grid
-        )
+        return self.pathing.find_closest_safe_spot(self.ai.game_info.map_center, self.pathing.reaper_grid)
 
     async def handle_attackers(self, units: Units, attack_target: Point2) -> None:
         grid: np.ndarray = self.pathing.reaper_grid
         for unit in units:
             # pull back low health reapers to heal
             if unit.health_percentage < HEAL_AT_LESS_THAN:
-                unit.move(
-                    self.pathing.find_path_next_point(
-                        unit.position, self.get_heal_spot, grid
-                    )
-                )
+                unit.move(self.pathing.find_path_next_point(unit.position, self.get_heal_spot, grid))
                 continue
 
-            close_enemies: Units = self.ai.enemy_units.filter(
-                lambda u: u.position.distance_to(unit) < 15.0
-                and not u.is_flying
-                and unit.type_id not in ATTACK_TARGET_IGNORE
-            )
+            close_enemies: Units = self.ai.enemy_units.filter(lambda u: u.position.distance_to(unit) < 15.0 and not u.is_flying and unit.type_id not in ATTACK_TARGET_IGNORE)
 
             # reaper grenade
             if await self._do_reaper_grenade(unit, close_enemies):
@@ -71,11 +62,7 @@ class Reapers:
             if unit.distance_to(attack_target) > 5:
                 # only make pathing queries if enemies are close
                 if close_enemies:
-                    unit.move(
-                        self.pathing.find_path_next_point(
-                            unit.position, attack_target, grid
-                        )
-                    )
+                    unit.move(self.pathing.find_path_next_point(unit.position, attack_target, grid))
                 else:
                     unit.move(attack_target)
             else:
@@ -87,9 +74,7 @@ class Reapers:
         Then path to it
         """
         safe_spot: Point2 = self.pathing.find_closest_safe_spot(unit.position, grid)
-        move_to: Point2 = self.pathing.find_path_next_point(
-            unit.position, safe_spot, grid
-        )
+        move_to: Point2 = self.pathing.find_path_next_point(unit.position, safe_spot, grid)
         unit.move(move_to)
 
     @staticmethod
@@ -97,10 +82,7 @@ class Reapers:
         """For best enemy target from the provided enemies
         TODO: If there are multiple units that can be killed in one shot, pick the highest value one
         """
-        return min(
-            enemies,
-            key=lambda e: (e.health + e.shield, e.tag),
-        )
+        return min(enemies, key=lambda e: (e.health + e.shield, e.tag),)
 
     async def _do_reaper_grenade(self, r: Unit, close_enemies: Units) -> bool:
         """
