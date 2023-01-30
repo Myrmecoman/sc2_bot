@@ -34,7 +34,7 @@ class Reapers:
                 unit.move(self.pathing.find_path_next_point(unit.position, self.get_heal_spot, grid))
                 continue
 
-            close_enemies: Units = self.ai.enemy_units.filter(lambda u: u.position.distance_to(unit) < 15.0 and not u.is_flying and unit.type_id not in ATTACK_TARGET_IGNORE)
+            close_enemies: Units = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE)
 
             # reaper grenade
             if await self._do_reaper_grenade(unit, close_enemies):

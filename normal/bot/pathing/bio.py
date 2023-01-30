@@ -24,12 +24,9 @@ class Bio:
 
             close_enemies: Units = None
             if unit.type_id == UnitTypeId.MARAUDER:
-                close_enemies = self.ai.enemy_units.filter(lambda u: u.position.distance_to(unit) < 15.0 and not u.is_flying and unit.type_id not in ATTACK_TARGET_IGNORE)
+                close_enemies = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE)
             else:
-                close_enemies = self.ai.enemy_units.filter(lambda u: u.position.distance_to(unit) < 15.0 and unit.type_id not in ATTACK_TARGET_IGNORE)
-            
-            if close_enemies.of_type(ATTACK_TARGET_IGNORE).amount > 0:
-                print("found ignored")
+                close_enemies = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and u.type_id not in ATTACK_TARGET_IGNORE)
 
             # check for nearby target fire
             target: Optional[Unit] = None
@@ -48,8 +45,6 @@ class Bio:
             if not self.pathing.is_position_safe(grid, unit.position):
                 self.move_to_safety(unit, grid)
                 continue
-            
-            # NEED TO HANDLE NOT ATTACKING EGGS AND LARVA HERE
 
             # get to the target
             if unit.distance_to(attack_target) > unit.ground_range:
@@ -59,12 +54,16 @@ class Bio:
                 else:
                     unit.move(attack_target)
             else:
-                if close_enemies.amount == 0:
-                    close_structures: Units = self.ai.enemy_structures.filter(lambda u: u.position.distance_to(unit) < 15.0 and unit.type_id not in ATTACK_TARGET_IGNORE)
-                    if close_structures.amount != 0:
-                        self.attack_and_stim(unit, close_structures.first)
+                close_structures: Units = None
+                if unit.type_id == UnitTypeId.MARAUDER:
+                    close_structures = self.ai.enemy_structures.filter(lambda u: u.distance_to(unit) < 15.0 and not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE)
                 else:
-                    self.attack_and_stim(unit, close_enemies.first)
+                    close_structures = self.ai.enemy_structures.filter(lambda u: u.distance_to(unit) < 15.0 and u.type_id not in ATTACK_TARGET_IGNORE)
+
+                if close_structures.amount != 0:
+                    self.attack_and_stim(unit, close_structures.closest_to(unit))
+                else:
+                    self.attack_and_stim(unit, attack_target)
 
     def move_to_safety(self, unit: Unit, grid: np.ndarray):
         """
