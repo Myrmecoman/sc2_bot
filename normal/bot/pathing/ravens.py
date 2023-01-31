@@ -64,6 +64,10 @@ class Ravens:
             unit.move(move_to)
 
     def raven_vs_terran(self, unit: Unit):
+
+        if self.ai.enemy_units.amount == 0:
+            return False
+
         units: Units = self.ai.enemy_units(UnitTypeId.SIEGETANKSIEGED)
         closest: Unit = None
         if units.amount > 0:
@@ -92,6 +96,10 @@ class Ravens:
     
 
     def raven_vs_protoss(self, unit: Unit):
+
+        if self.ai.enemy_units.amount == 0:
+            return False
+        
         units: Units = self.ai.enemy_units(UnitTypeId.COLOSSUS)
         closest: Unit = None
         if units.amount > 0:
