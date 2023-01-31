@@ -141,18 +141,6 @@ def go_scout_bases(self : BotAI):
         ground_units[counter].attack(i)
         ground_units[counter].attack(i.towards(self.game_info.map_center, -9), True)
         counter += 1
-
-    # kill the tanks if we can't buy vikings and we are against terran, and produce only vikings from starports
-    if self.enemy_race == Race.Terran:
-        for i in self.units.of_type({UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED}):
-            marauders = self.units.of_type({UnitTypeId.MARAUDER})
-            marines = self.units.of_type({UnitTypeId.MARINE})
-            if marauders.amount > 0:
-                marauders.random.attack(i)
-            if marines.amount > 0:
-                marines.random.attack(i)
-        self.produce_from_factories = False
-        self.produce_from_barracks = False
     
     # shift used to split vikings around
     vikings = self.units.of_type({UnitTypeId.VIKINGFIGHTER})

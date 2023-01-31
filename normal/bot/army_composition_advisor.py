@@ -60,12 +60,18 @@ class ArmyCompositionAdvisor():
     
 
     def update_enemy_army(self, enemies : Units):
+        # update knowledge of enemy army
         for i in enemies:
             if i.tag in self.known_enemy_units and not i.is_visible:
                 continue
             if i.type_id == UnitTypeId.PROBE or i.type_id == UnitTypeId.DRONE or i.type_id == UnitTypeId.SCV or i.type_id == UnitTypeId.MULE:
                 continue
             self.known_enemy_units[i.tag] = (i.position, i.type_id)
+
+        # update position of enemy units to default if we can see its last position but it is not there anymore
+        for i in self.known_enemy_units.keys():
+            if self.bot.is_visible(self.known_enemy_units[i][0]) and enemies.find_by_tag(i) is None:
+                self.known_enemy_units[i] = (self.bot.enemy_start_locations[0], self.known_enemy_units[i][1])
 
 
     def remove_unit(self, tag : int):

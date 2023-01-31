@@ -16,6 +16,7 @@ class Ravens:
     def __init__(self, ai: BotAI, pathing: Pathing):
         self.ai: BotAI = ai
         self.pathing: Pathing = pathing
+        self.auto_turret = [] # register auto_turret positions to let the raven reach it even if it is under fire
 
     async def handle_attackers(self, units: Units, attack_target: Point2) -> None:
         grid = self.pathing.air_grid
@@ -29,8 +30,8 @@ class Ravens:
             elif self.ai.enemy_race == Race.Zerg:
                 self.raven_vs_zerg(unit)
             
-            # if the order target is an int, it means that we want to cast an ability
-            if isinstance(unit.order_target, int):
+            # if the order target is an int, it means that we want to cast an ability on a unit
+            if isinstance(unit.order_target, int) or (isinstance(unit.order_target, Point2) and unit.order_target in self.auto_turret):
                 return
             
             # in danger, run away
@@ -127,13 +128,25 @@ class Ravens:
     
 
     def raven_vs_zerg(self, unit: Unit):
-        if not self.ai.can_cast(unit, AbilityId.EFFECT_ANTIARMORMISSILE):
+        if not self.ai.can_cast(unit, AbilityId.BUILDAUTOTURRET_AUTOTURRET) or self.ai.enemy_units.amount == 0:
             return False
-        '''
-        units: Units = self.ai.enemy_units.n_closest_to_distance(unit.position, 10)
-        for i in units:
-            if i.distance_to(unit) <= 10:
-                unit(AbilityId.EFFECT_ANTIARMORMISSILE, i)
-                return True
-        '''
+        
+        can_place = None
+        closest_dist = 10000
+        enemy: Unit = self.ai.enemy_units.closest_to(unit.position)
+        if enemy is not None and enemy.distance_to(unit) < 10:
+            for x in range(int(enemy.position.x - 4), int(enemy.position.x + 5)):
+                for y in range(int(enemy.position.y - 4), int(enemy.position.y + 5)):
+                    pos = Point2((x, y))
+                    if self.ai.can_place(UnitTypeId.AUTOTURRET, pos):
+                        dist = unit.distance_to(pos)
+                        if can_place is None or dist < closest_dist:
+                            can_place = pos
+                            closest_dist = dist
+        
+        if can_place is not None:
+            unit(AbilityId.BUILDAUTOTURRET_AUTOTURRET, can_place)
+            self.auto_turret.append(can_place)
+            return True
+        
         return False
