@@ -129,10 +129,11 @@ class Ravens:
     def raven_vs_zerg(self, unit: Unit):
         if not self.ai.can_cast(unit, AbilityId.EFFECT_ANTIARMORMISSILE):
             return False
-        
+        '''
         units: Units = self.ai.enemy_units.n_closest_to_distance(unit.position, 10)
         for i in units:
             if i.distance_to(unit) <= 10:
                 unit(AbilityId.EFFECT_ANTIARMORMISSILE, i)
                 return True
+        '''
         return False
