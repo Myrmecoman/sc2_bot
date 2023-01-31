@@ -25,10 +25,10 @@ def kite_attack(self : BotAI, unit : Unit, enemy : Unit, unit_range):
 def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, enemies : Units):
 
     # handle tanks
-    if unit.type_id == UnitTypeId.SIEGETANK and enemies.not_structure.not_flying.amount > 0 and enemies.not_structure.not_flying.closest_distance_to(unit) <= 13:
+    if unit.type_id == UnitTypeId.SIEGETANK and enemies.not_flying.amount > 0 and enemies.not_flying.closest_distance_to(unit) <= 13:
         unit(AbilityId.SIEGEMODE_SIEGEMODE)
         return
-    elif unit.type_id == UnitTypeId.SIEGETANKSIEGED and (enemies.not_structure.not_flying.amount == 0 or enemies.not_structure.not_flying.closest_distance_to(unit) >= 14):
+    elif unit.type_id == UnitTypeId.SIEGETANKSIEGED and (enemies.not_flying.amount == 0 or enemies.not_flying.closest_distance_to(unit) >= 14):
         unit(AbilityId.UNSIEGE_UNSIEGE)
         return
     
