@@ -22,17 +22,27 @@ class Ravens:
     async def handle_attackers(self, units: Units, attack_target: Point2) -> None:
         grid = self.pathing.air_grid
 
+        # removing too old commands
+        to_remove_mat = []
+        to_remove_tur = []
+        for k in self.matrices.keys():
+            if self.ai.time - self.matrices[k] > 10: # free the unit after 10 seconds
+                to_remove_mat.append(k)
+        for k in self.auto_turret.keys():
+            if self.ai.time - self.auto_turret[k] > 20: # free the position after 20 seconds
+                to_remove_tur.append(k)
+        for k in to_remove_mat:
+            self.matrices.pop(k, None)
+        for k in to_remove_tur:
+            self.auto_turret.pop(k, None)
+
         for unit in units:
             
             # if the order target is an int, it means that we want to cast an ability on a unit
             if isinstance(unit.order_target, int):
-                if unit.order_target in self.matrices.keys() and self.ai.time - self.matrices[unit.order_target] > 10: # free the unit after 10 seconds
-                    self.matrices.pop(unit.order_target, None)
                 return
             # we also return if we want to place an auto turret
             if isinstance(unit.order_target, Point2) and unit.order_target in self.auto_turret.keys():
-                if self.ai.time - self.auto_turret[unit.order_target] > 20: # free the position after 20 seconds
-                    self.auto_turret.pop(unit.order_target, None)
                 return
             
             # cast abilities
@@ -73,7 +83,7 @@ class Ravens:
             unit.move(move_to)
 
     def raven_vs_terran(self, unit: Unit):
-        if not self.ai.can_cast(unit, AbilityId.EFFECT_INTERFERENCEMATRIX):
+        if not self.ai.can_cast(unit, AbilityId.EFFECT_INTERFERENCEMATRIX) or unit.energy >= 125: # if there is nothing to matrix, at some point still spend energy
             self.raven_vs_zerg(unit)
 
         if self.ai.enemy_units.amount == 0:
@@ -87,13 +97,13 @@ class Ravens:
     
 
     def raven_vs_protoss(self, unit: Unit):
-        if not self.ai.can_cast(unit, AbilityId.EFFECT_INTERFERENCEMATRIX):
+        if not self.ai.can_cast(unit, AbilityId.EFFECT_INTERFERENCEMATRIX) or unit.energy >= 125: # if there is nothing to matrix, at some point still spend energy
             return self.raven_vs_zerg(unit)
 
         if self.ai.enemy_units.amount == 0:
             return False
         
-        for i in [UnitTypeId.COLOSSUS, UnitTypeId.CARRIER, UnitTypeId.ARCHON, UnitTypeId.IMMORTAL]:
+        for i in [UnitTypeId.COLOSSUS, UnitTypeId.CARRIER, UnitTypeId.ARCHON, UnitTypeId.IMMORTAL, UnitTypeId.WARPPRISM]:
             if self.matrix_unit(unit, i):
                 return True
         

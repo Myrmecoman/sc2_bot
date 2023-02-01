@@ -23,6 +23,12 @@ INFLUENCE_COSTS: Dict[UnitTypeId, Dict] = {
         "AirRange": 7,
         "GroundRange": 7,
     },
+    UnitTypeId.MISSILETURRET: {
+        "AirCost": 24,
+        "GroundCost": 0,
+        "AirRange": 7,
+        "GroundRange": 0,
+    },
     UnitTypeId.ARCHON: {
         "AirCost": 40,
         "GroundCost": 40,
@@ -155,6 +161,12 @@ INFLUENCE_COSTS: Dict[UnitTypeId, Dict] = {
         "AirRange": 0,
         "GroundRange": 7,
     },
+    UnitTypeId.SPORECRAWLER: {
+        "AirCost": 15,
+        "GroundCost": 0,
+        "AirRange": 7,
+        "GroundRange": 0,
+    },
     UnitTypeId.STALKER: {
         "AirCost": 10,
         "GroundCost": 10,
@@ -196,5 +208,23 @@ INFLUENCE_COSTS: Dict[UnitTypeId, Dict] = {
         "GroundCost": 150,
         "AirRange": 5.5,
         "GroundRange": 5.5,
+    },
+    UnitTypeId.DRONE: {
+        "AirCost": 0,
+        "GroundCost": 5,
+        "AirRange": 0,
+        "GroundRange": 2,
+    },
+    UnitTypeId.PROBE: {
+        "AirCost": 0,
+        "GroundCost": 5,
+        "AirRange": 0,
+        "GroundRange": 2,
+    },
+    UnitTypeId.SCV: {
+        "AirCost": 0,
+        "GroundCost": 5,
+        "AirRange": 0,
+        "GroundRange": 2,
     },
 }
