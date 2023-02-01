@@ -121,6 +121,11 @@ def handle_upgrades(self : BotAI):
             tech.research(UpgradeId.STIMPACK)
         elif self.can_afford(UpgradeId.PUNISHERGRENADES) and self.already_pending_upgrade(UpgradeId.PUNISHERGRENADES) == 0:
             tech.research(UpgradeId.PUNISHERGRENADES)
+    
+    sttechs = self.structures(UnitTypeId.STARPORTTECHLAB).ready.idle
+    for tech in sttechs:
+        if self.can_afford(UpgradeId.BANSHEECLOAK) and self.already_pending_upgrade(UpgradeId.BANSHEECLOAK) == 0:
+            tech.research(UpgradeId.BANSHEECLOAK)
 
     engis = self.structures(UnitTypeId.ENGINEERINGBAY).ready.idle
     for engi in engis:

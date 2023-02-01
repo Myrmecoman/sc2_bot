@@ -22,19 +22,24 @@ class Reapers:
             AbilityId.KD8CHARGE_KD8CHARGE.value
         ]._proto.cast_range
 
+
     @property
     def get_heal_spot(self) -> Point2:
         return self.pathing.find_closest_safe_spot(self.ai.game_info.map_center, self.pathing.reaper_grid)
 
-    async def handle_attackers(self, units: Units, attack_target: Point2) -> None:
+
+    async def handle_attackers(self, units: Units) -> None:
+
+        attack_target: Point2 = self.get_attack_target()
         grid: np.ndarray = self.pathing.reaper_grid
+
         for unit in units:
             # pull back low health reapers to heal
             if unit.health_percentage < HEAL_AT_LESS_THAN:
                 unit.move(self.pathing.find_path_next_point(unit.position, self.get_heal_spot, grid))
                 continue
 
-            close_enemies: Units = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE) | self.ai.enemy_structures.filter(lambda s: s.distance_to(unit) < 15.0 and s.type_id in DANGEROUS_STRUCTURES)
+            close_enemies: Units = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE)
 
             # reaper grenade
             if await self._do_reaper_grenade(unit, close_enemies):
@@ -68,6 +73,7 @@ class Reapers:
             else:
                 unit.attack(attack_target)
 
+
     def move_to_safety(self, unit: Unit, grid: np.ndarray):
         """
         Find a close safe spot on our grid
@@ -76,6 +82,19 @@ class Reapers:
         safe_spot: Point2 = self.pathing.find_closest_safe_spot(unit.position, grid)
         move_to: Point2 = self.pathing.find_path_next_point(unit.position, safe_spot, grid)
         unit.move(move_to)
+    
+
+    def get_attack_target(self) -> Point2:
+        if enemy_units := self.ai.enemy_units.filter(
+            lambda u: u.type_id not in ATTACK_TARGET_IGNORE
+            and not u.is_flying
+            and not u.is_cloaked
+            and not u.is_hallucination):
+            return enemy_units.closest_to(self.ai.start_location).position
+        elif enemy_structures := self.ai.enemy_structures:
+            return enemy_structures.closest_to(self.ai.start_location).position
+        return self.ai.enemy_start_locations[0]
+
 
     @staticmethod
     def pick_enemy_target(enemies: Units) -> Unit:
@@ -83,6 +102,7 @@ class Reapers:
         TODO: If there are multiple units that can be killed in one shot, pick the highest value one
         """
         return min(enemies, key=lambda e: (e.health + e.shield, e.tag),)
+
 
     async def _do_reaper_grenade(self, r: Unit, close_enemies: Units) -> bool:
         """

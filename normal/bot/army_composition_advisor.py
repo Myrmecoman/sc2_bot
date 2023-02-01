@@ -37,6 +37,7 @@ class ArmyCompositionAdvisor():
         self.max_medivacs = 4
         self.max_vikings = 4
         self.max_battlecruisers = 4
+        self.max_banshees = 2
 
         # make less techlabs if we want more marines for example /!\ not used yet
         self.barracks_techlab_ratio = 0.5
@@ -109,7 +110,7 @@ class ArmyCompositionAdvisor():
                 self.marine_marauder_ratio = 0.8
         if self.bot.enemy_race == Race.Protoss:
             if self.bot.enemy_structures(UnitTypeId.STARGATE).amount > 0 or self.bot.enemy_units.of_type({UnitTypeId.VOIDRAY, UnitTypeId.ORACLE, UnitTypeId.PHOENIX, UnitTypeId.CARRIER, UnitTypeId.TEMPEST}).amount > 0:
-                self.marine_marauder_ratio = 0.8
+                self.marine_marauder_ratio = 0.9
             else:
                 self.marine_marauder_ratio = 0.5
 
@@ -137,6 +138,7 @@ class ArmyCompositionAdvisor():
             self.max_ravens = 4
             self.max_tanks = 8
             self.max_cyclones = 0
+            self.max_banshees = 2
 
             self.marine_marauder_ratio = 0.7
 
@@ -151,6 +153,7 @@ class ArmyCompositionAdvisor():
             self.max_ravens = 2
             self.max_tanks = 6
             self.max_cyclones = 0
+            self.max_banshees = 2
 
             self.marine_marauder_ratio = 0.5
 
@@ -165,10 +168,11 @@ class ArmyCompositionAdvisor():
             self.max_ravens = 1
             self.max_tanks = 8
             self.max_cyclones = 0
+            self.max_banshees = 2
 
             self.marine_marauder_ratio = 0.5
 
-            self.barracks_techlab_ratio = 0.3
+            self.barracks_techlab_ratio = 0.4
             self.factory_techlab_ratio = 0.5
             self.starport_techlab_ratio = 0.5
 

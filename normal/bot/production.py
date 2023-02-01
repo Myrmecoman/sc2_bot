@@ -1,6 +1,11 @@
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.bot_ai import BotAI
+from sc2.unit import Unit
 from sc2.data import Race
+
+
+made_banshee = False
+made_raven = False
 
 
 def produce_single_type_unit(self : BotAI, structure : UnitTypeId, unit : UnitTypeId, dumpunit : UnitTypeId = None):
@@ -26,11 +31,26 @@ def produce_single_type_unit(self : BotAI, structure : UnitTypeId, unit : UnitTy
 
 
 def produce(self : BotAI):
+    global made_banshee
+    global made_raven
 
     less_reapers = self.units.of_type({UnitTypeId.REAPER}).amount < self.army_advisor.amount_of_enemies_of_type(UnitTypeId.REAPER)
 
     if self.produce_from_starports:
         for st in self.structures(UnitTypeId.STARPORT).ready.idle:
+
+            # first get a banshee, then a raven, then free to choose
+            if self.units(UnitTypeId.BANSHEE).amount == 0 and self.army_advisor.max_banshees > 0 and not made_banshee:
+                if st.has_techlab and self.can_afford(UnitTypeId.BANSHEE):
+                    st.build(UnitTypeId.BANSHEE)
+                    made_banshee = True
+                continue
+            if self.units(UnitTypeId.RAVEN).amount == 0 and self.army_advisor.max_ravens > 0 and not made_raven:
+                if st.has_techlab and self.can_afford(UnitTypeId.RAVEN):
+                    st.build(UnitTypeId.RAVEN)
+                    made_raven = True
+                continue
+
             if st.has_techlab and self.can_afford(UnitTypeId.RAVEN) and self.units(UnitTypeId.RAVEN).amount < self.army_advisor.max_ravens:
                 st.build(UnitTypeId.RAVEN)
             elif st.has_techlab and self.structures(UnitTypeId.FUSIONCORE).amount > 0 and self.can_afford(UnitTypeId.BATTLECRUISER) and self.units(UnitTypeId.BATTLECRUISER).amount < self.army_advisor.max_battlecruisers:
@@ -39,6 +59,8 @@ def produce(self : BotAI):
                 st.build(UnitTypeId.MEDIVAC)
             elif st.has_techlab and self.can_afford(UnitTypeId.VIKINGFIGHTER) and self.units(UnitTypeId.VIKINGFIGHTER).amount < self.army_advisor.max_vikings:
                 st.build(UnitTypeId.VIKINGFIGHTER)
+            elif st.has_techlab and self.can_afford(UnitTypeId.BANSHEE) and self.units(UnitTypeId.BANSHEE).amount < self.army_advisor.max_banshees:
+                st.build(UnitTypeId.BANSHEE)
             elif st.has_reactor and self.can_afford(UnitTypeId.MEDIVAC) and self.units(UnitTypeId.MEDIVAC).amount < self.army_advisor.max_medivacs:
                 st.build(UnitTypeId.MEDIVAC)
                 if self.can_afford(UnitTypeId.MEDIVAC):
@@ -62,11 +84,9 @@ def produce(self : BotAI):
     
     if self.produce_from_factories:
         for fac in self.structures(UnitTypeId.FACTORY).ready.idle:
-                if fac.has_techlab and self.can_afford(UnitTypeId.SIEGETANK) and self.units(UnitTypeId.SIEGETANK).amount < self.army_advisor.max_tanks:
-                    fac.build(UnitTypeId.SIEGETANK)
-                elif fac.has_techlab and self.can_afford(UnitTypeId.HELLION):
-                    if less_reapers:
-                        fac.build(UnitTypeId.HELLION)
+                if fac.has_techlab:
+                    if self.can_afford(UnitTypeId.SIEGETANK) and self.units(UnitTypeId.SIEGETANK).amount < self.army_advisor.max_tanks:
+                        fac.build(UnitTypeId.SIEGETANK)
                 elif fac.has_reactor and self.can_afford(UnitTypeId.HELLION):
                     fac.build(UnitTypeId.HELLION)
                     if self.can_afford(UnitTypeId.HELLION):

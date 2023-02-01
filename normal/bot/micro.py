@@ -207,18 +207,6 @@ def defend_building_workers(self : BotAI):
         self.worker_assigned_to_defend[i] = closest_worker.tag
 
 
-def get_attack_target(self : BotAI) -> Point2:
-    if enemy_units := self.enemy_units.filter(
-        lambda u: u.type_id not in ATTACK_TARGET_IGNORE
-        and not u.is_flying
-        and not u.is_cloaked
-        and not u.is_hallucination):
-        return enemy_units.closest_to(self.start_location).position
-    elif enemy_structures := self.enemy_structures:
-        return enemy_structures.closest_to(self.start_location).position
-    return self.enemy_start_locations[0]
-
-
 async def micro(self : BotAI):
 
     if counter_worker_rush(self):
@@ -228,11 +216,11 @@ async def micro(self : BotAI):
     prevent_PF_rush(self)
     defend_building_workers(self)
 
-    # always attack with reapers
-    attack_target: Point2 = get_attack_target(self)
-    await self.reapers.handle_attackers(self.units(UnitTypeId.REAPER), attack_target)
+    # always attack with reapers and banshees
+    await self.reapers.handle_attackers(self.units(UnitTypeId.REAPER))
+    await self.banshees.handle_attackers(self.units(UnitTypeId.BANSHEE))
 
-    units : Units = self.units.exclude_type({UnitTypeId.SCV, UnitTypeId.MULE, UnitTypeId.REAPER, UnitTypeId.MARINE, UnitTypeId.MARAUDER, UnitTypeId.MEDIVAC, UnitTypeId.RAVEN, UnitTypeId.VIKINGFIGHTER})
+    units : Units = self.units.exclude_type({UnitTypeId.SCV, UnitTypeId.MULE, UnitTypeId.REAPER, UnitTypeId.MARINE, UnitTypeId.MARAUDER, UnitTypeId.MEDIVAC, UnitTypeId.RAVEN, UnitTypeId.VIKINGFIGHTER, UnitTypeId.BANSHEE})
     if self.army_count == 0:
         return
     
