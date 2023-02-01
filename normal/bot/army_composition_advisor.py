@@ -127,10 +127,10 @@ class ArmyCompositionAdvisor():
 
     def provide_advices_startup(self):
         if self.bot.enemy_race == Race.Terran:
-            self.max_medivacs = 4
-            self.max_vikings = 8
+            self.max_medivacs = 2
+            self.max_vikings = 10
             self.max_battlecruisers = 1
-            self.max_ravens = 2
+            self.max_ravens = 4
             self.max_tanks = 8
             self.max_cyclones = 0
 

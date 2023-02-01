@@ -14,5 +14,6 @@ Army grouping and bio splitting before attacking.<br/>
 Better unit production (counter enemy army).<br/>
 Build uphill against zerg and scout before placing B2.<br/>
 Do something about the APM bug, which cancels some actions.<br/>
+Lift CC if too damaged.<br/>
 
 SmoothBrain Bot now uses the SC2MapAnalysis api : https://github.com/spudde123/SC2MapAnalysis/tree/develop
