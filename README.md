@@ -12,9 +12,9 @@ If you are a novice bot writter I suggest you pick some ideas from this bot and 
 Repairing not full life mechanical units.<br/>
 Army grouping and bio splitting before attacking.<br/>
 Better unit production (counter enemy army).<br/>
-Build uphill against zerg and scout before placing B2.<br/>
+Build B2 uphill against zerg.<br/>
 Do something about the APM bug, which cancels some actions.<br/>
 Lift CC if too damaged.<br/>
-Leave space to build reactor after lifting on first barracks vs zerg.<br/>
+Force banshee then raven before any other air unit.<br/>
 
 SmoothBrain Bot now uses the SC2MapAnalysis api : https://github.com/spudde123/SC2MapAnalysis/tree/develop
