@@ -62,7 +62,7 @@ def produce(self : BotAI):
     
     if self.produce_from_factories:
         for fac in self.structures(UnitTypeId.FACTORY).ready.idle:
-                if fac.has_techlab and self.can_afford(UnitTypeId.SIEGETANK):
+                if fac.has_techlab and self.can_afford(UnitTypeId.SIEGETANK) and self.units(UnitTypeId.SIEGETANK).amount < self.army_advisor.max_tanks:
                     fac.build(UnitTypeId.SIEGETANK)
                 elif fac.has_techlab and self.can_afford(UnitTypeId.HELLION):
                     if less_reapers:

@@ -24,7 +24,7 @@ map_names = ["BerlingradAIE", "HardwireAIE", "InsideAndOutAIE", "MoondanceAIE", 
 bot = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBot")
 human = Human(Race.Terran, "Human", True)
 
-enemy = Computer(Race.Terran, Difficulty.CheatInsane)
+#enemy = Computer(Race.Terran, Difficulty.CheatInsane)
 #enemy = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBotEnemy")
 #enemy = Bot(Race.Terran, MassReaper(), "MassReaper")
 #enemy = Bot(Race.Terran, WorkerRushBot(), "BadWorkerRush")
@@ -33,7 +33,7 @@ enemy = Computer(Race.Terran, Difficulty.CheatInsane)
 #enemy = Bot(Race.Terran, Lift(), "Lift")
 #enemy = Bot(Race.Terran, LiftTopRight(), "LiftTopRight")
 #enemy = Bot(Race.Terran, PFrush(), "PFrush")
-#enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")
+enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")
 
 # Start game
 if __name__ == "__main__":

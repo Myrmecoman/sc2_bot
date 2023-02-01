@@ -92,6 +92,13 @@ class ArmyCompositionAdvisor():
         return self.bot.calculate_supply_cost(unit)
     
 
+    def total_enemy_supply(self):
+        total_enemy_supply = 0
+        for i in self.known_enemy_units:
+            total_enemy_supply += self.supply_of(self.known_enemy_units[i][1])
+        return total_enemy_supply
+    
+
     def provide_advices(self):
         self.update_enemy_army(self.bot.enemy_units)
 
@@ -106,10 +113,7 @@ class ArmyCompositionAdvisor():
             else:
                 self.marine_marauder_ratio = 0.5
 
-        total_enemy_supply = 0
-        for i in self.known_enemy_units:
-            total_enemy_supply += self.supply_of(self.known_enemy_units[i][1])
-
+        total_enemy_supply = self.total_enemy_supply()
         if self.bot.supply_army > 4 * total_enemy_supply or self.bot.supply_army >= 50: # if we have more supply, or enough to trade, we attack
             self.should_attack = True
             return
@@ -158,7 +162,7 @@ class ArmyCompositionAdvisor():
             self.max_medivacs = 6
             self.max_vikings = 2
             self.max_battlecruisers = 1
-            self.max_ravens = 2
+            self.max_ravens = 1
             self.max_tanks = 8
             self.max_cyclones = 0
 
