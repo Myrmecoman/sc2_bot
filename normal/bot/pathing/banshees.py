@@ -70,7 +70,7 @@ class Banshees:
                 else:
                     unit.move(attack_target)
             else:
-                unit.attack(attack_target)
+                unit.move(attack_target)
 
 
     def move_to_safety(self, unit: Unit, grid: np.ndarray):

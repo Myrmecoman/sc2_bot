@@ -227,4 +227,16 @@ INFLUENCE_COSTS: Dict[UnitTypeId, Dict] = {
         "AirRange": 0,
         "GroundRange": 2,
     },
+    UnitTypeId.ZEALOT: {
+        "AirCost": 0,
+        "GroundCost": 16,
+        "AirRange": 0,
+        "GroundRange": 2,
+    },
+    UnitTypeId.ZERGLING: {
+        "AirCost": 0,
+        "GroundCost": 5,
+        "AirRange": 0,
+        "GroundRange": 2,
+    },
 }

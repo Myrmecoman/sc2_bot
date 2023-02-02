@@ -50,19 +50,20 @@ class SmoothBrainBot(BotAI):
         self.unit_command_uses_self_do = False
         self.distance_calculation_method = 2
         self.game_step: int = 2
-        self.build_starport_techlab_first = False # against zerg, we better make a quick raven to counter burrowed roach all-ins
-        self.worker_rushed = False                # tells if we are worker rushed
-        self.attack_with_all_worker = False       # in case of worker rushes
-        self.scouting_units = []                  # lists units assigned to scout so that we do not cancel their orders
-        self.worker_assigned_to_repair = {}       # lists workers assigned to repair
-        self.worker_assigned_to_follow = {}       # lists workers assigned to follow objects (used to prevent Planetary Fortress rushes)
-        self.worker_assigned_to_defend = {}       # lists workers assigned to defend other workers during construction
-        self.worker_assigned_to_expand = {}       # lists workers assigned to expand /!\ not used yet
-        self.townhall_saturations = {}            # lists the mineral saturation of townhalls in queues of 40 frames, we consider the townhall saturated if max_number + 1 >= ideal_number
+        self.build_starport_techlab_first = False    # against zerg, we better make a quick raven to counter burrowed roach all-ins
+        self.worker_rushed = False                   # tells if we are worker rushed
+        self.attack_with_all_worker = False          # in case of worker rushes
+        self.scouting_units = []                     # lists units assigned to scout so that we do not cancel their orders
+        self.worker_assigned_to_repair = {}          # lists workers assigned to repair
+        self.worker_assigned_to_follow = {}          # lists workers assigned to follow objects (used to prevent Planetary Fortress rushes)
+        self.worker_assigned_to_defend = {}          # lists workers assigned to defend other workers during construction
+        self.worker_assigned_to_resume_building = {} # lists workers assigned to resume the construction of a building
+        self.worker_assigned_to_expand = {}          # lists workers assigned to expand /!\ not used yet
+        self.townhall_saturations = {}               # lists the mineral saturation of townhalls in queues of 40 frames, we consider the townhall saturated if max_number + 1 >= ideal_number
         self.produce_from_starports = True
         self.produce_from_factories = True
         self.produce_from_barracks = True
-        self.scouted_at_time = -1000              # save moment at which we scouted, so that we don't re-send units every frame
+        self.scouted_at_time = -1000                 # save moment at which we scouted, so that we don't re-send units every frame
         
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY]
 

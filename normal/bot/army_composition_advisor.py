@@ -36,7 +36,7 @@ class ArmyCompositionAdvisor():
         self.max_ravens = 2
         self.max_medivacs = 4
         self.max_vikings = 4
-        self.max_battlecruisers = 4
+        self.max_battlecruisers = 1
         self.max_banshees = 2
 
         # make less techlabs if we want more marines for example /!\ not used yet
@@ -50,6 +50,9 @@ class ArmyCompositionAdvisor():
         # track ressources lost by each player (only army units) /!\ not implemented yet
         self.resources_lost = 0
         self.enemy_resources_lost = 0
+
+        # a few usefull infos
+        self.zergling_rushed = False
 
     
     def amount_of_enemies_of_type(self, type : UnitTypeId):
@@ -102,6 +105,9 @@ class ArmyCompositionAdvisor():
 
     def provide_advices(self):
         self.update_enemy_army(self.bot.enemy_units)
+
+        if self.bot.enemy_race == Race.Zerg and self.bot.time < 130 and self.bot.enemy_units(UnitTypeId.ZERGLING).amount > 0:
+            self.zergling_rushed = True
 
         if self.bot.enemy_race == Race.Zerg:
             if self.amount_of_enemies_of_type(UnitTypeId.ROACH) > len(self.known_enemy_units.keys())/2:

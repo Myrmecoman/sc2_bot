@@ -53,7 +53,7 @@ async def smart_build(self : BotAI, type : UnitTypeId):
     prod_structures : Units = self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT})
 
     if prod_structures.amount == 0 and self.main_base_ramp.barracks_correct_placement:
-        worker: Unit = self.select_build_worker(self.main_base_ramp.barracks_correct_placement) # select the nearest worker to that location
+        worker: Unit = self.workers.closest_to(self.main_base_ramp.barracks_in_middle) # pretty unsafe but works and should not pose any issue
         if worker is None:
             return False
         pos = self.main_base_ramp.barracks_correct_placement
@@ -171,14 +171,26 @@ def cancel_building(self : BotAI):
 
 def resume_building_construction(self : BotAI):
     # checking if it is actually safe to resume construction
-    for i in self.structures:
-        if self.enemy_units.amount != 0 and self.enemy_units.closest_distance_to(i) < 12:
-            return
-
     for i in self.structures_without_construction_SCVs:
-        if self.workers.gathering.amount == 0:
+        if self.enemy_units.amount != 0 and self.enemy_units.closest_distance_to(i) < 8:
             return
+    
+    # update dictionary if building or worker died
+    to_remove = [] # list of elements to remove from dictionary
+    for k in self.worker_assigned_to_resume_building.keys():
+        if self.structures.find_by_tag(k) is None or self.units.find_by_tag(self.worker_assigned_to_resume_building[k]) is None:
+            to_remove.append(k)
+    for i in to_remove:
+        self.worker_assigned_to_resume_building.pop(i, None)
+
+    # assign a worker for each building
+    for i in self.structures_without_construction_SCVs:
+        if i.tag in self.worker_assigned_to_resume_building.keys():
+            continue
+        if self.workers.gathering.amount == 0:
+            continue
         worker = self.workers.gathering.closest_to(i)
+        self.worker_assigned_to_resume_building[i.tag] = worker.tag
         worker(AbilityId.SMART, i)
 
 
