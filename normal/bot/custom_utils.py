@@ -129,18 +129,18 @@ def handle_upgrades(self : BotAI):
 
     engis = self.structures(UnitTypeId.ENGINEERINGBAY).ready.idle
     for engi in engis:
-        if self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) == 0:
-            engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL1)
-        elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1) == 0:
+        if self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1) == 0:
             engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)
-        elif self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL2) == 0:
-            engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL2)
+        elif self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) == 0:
+            engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL1)
         elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2) == 0:
-            engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2)  
-        elif self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL3) == 0:
-            engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL3)
+            engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2) 
+        elif self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL2) == 0:
+            engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL2) 
         elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 0:
             engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3)
+        elif self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL3) == 0:
+            engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL3)
         elif self.can_afford(UpgradeId.TERRANBUILDINGARMOR) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.TERRANBUILDINGARMOR) == 0:
             engi.research(UpgradeId.TERRANBUILDINGARMOR)
         elif self.can_afford(UpgradeId.HISECAUTOTRACKING) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.HISECAUTOTRACKING) == 0:

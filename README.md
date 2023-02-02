@@ -15,7 +15,6 @@ Better unit production (counter enemy army).<br/>
 Build B2 uphill against zerg.<br/>
 Do something about the APM bug, which cancels some actions.<br/>
 Lift CC if too damaged.<br/>
-Go bas first to afford the banshee.<br/>
 Implement detection map for banshees.<br/>
 Print cyclones against skytoss + handle cyclone micro.<br/>
 

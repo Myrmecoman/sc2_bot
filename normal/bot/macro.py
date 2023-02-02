@@ -215,9 +215,9 @@ async def macro(self : BotAI):
         await smart_build(self, UnitTypeId.BARRACKS)
     if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 2):
         await smart_build(self, UnitTypeId.BARRACKS)
-    if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 6):
+    if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 5):
         await smart_build(self, UnitTypeId.BARRACKS)
-    if self.townhalls.amount >= 4 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 9):
+    if self.townhalls.amount >= 4 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 8):
         await smart_build(self, UnitTypeId.BARRACKS)
 
     if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.ENGINEERINGBAY, None, 2):
@@ -234,13 +234,20 @@ async def macro(self : BotAI):
     if self.can_afford(UnitTypeId.COMMANDCENTER) and self.townhalls.amount < 20 and (self.already_pending(UnitTypeId.COMMANDCENTER) == 0 or self.minerals > 2000):
         await build_cc(self)
 
-    # build refineries
+    # get refineries count
     refineries = self.structures(UnitTypeId.REFINERY)
     active_refineries = 0
     for r in refineries:
         if r.vespene_contents > 20:
             active_refineries += 1
+    for w in self.workers:
+        if isinstance(w.order_target, int) and self.vespene_geyser.find_by_tag(w.order_target) is not None:
+            active_refineries += 1
+    
+    # build refineries
     if self.townhalls.amount >= 2 and active_refineries < 2 and self.can_afford(UnitTypeId.REFINERY):
+        await build_gas(self)
+    if self.townhalls.amount >= 2 and self.structures(UnitTypeId.STARPORT).amount > 0 and active_refineries < 3 and self.can_afford(UnitTypeId.REFINERY):
         await build_gas(self)
     if self.townhalls.amount >= 3 and active_refineries < 4 and self.can_afford(UnitTypeId.REFINERY):
         await build_gas(self)
