@@ -12,6 +12,21 @@ ATTACK_TARGET_IGNORE: Set[UnitTypeId] = {
     UnitTypeId.CHANGELINGZERGLINGWINGS,
 }
 
+ATTACK_TARGET_IGNORE_WITH_WORKERS: Set[UnitTypeId] = {
+    UnitTypeId.LARVA,
+    UnitTypeId.EGG,
+    UnitTypeId.CHANGELING,
+    UnitTypeId.CHANGELINGMARINE,
+    UnitTypeId.CHANGELINGMARINESHIELD,
+    UnitTypeId.CHANGELINGZEALOT,
+    UnitTypeId.CHANGELINGZERGLING,
+    UnitTypeId.CHANGELINGZERGLINGWINGS,
+    UnitTypeId.SCV,
+    UnitTypeId.PROBE,
+    UnitTypeId.DRONE,
+    UnitTypeId.MULE,
+}
+
 DANGEROUS_STRUCTURES: Set[UnitTypeId] = {
     UnitTypeId.PHOTONCANNON,
     UnitTypeId.SHIELDBATTERY,

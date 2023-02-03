@@ -23,15 +23,6 @@ def kite_attack(self : BotAI, unit : Unit, enemy : Unit, unit_range):
 
 # same as attack, except medivacs and other non attacking units don't suicide straight in the enemy lines
 def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, enemies : Units):
-
-    # handle tanks
-    if unit.type_id == UnitTypeId.SIEGETANK and enemies.not_flying.amount > 0 and enemies.not_flying.closest_distance_to(unit) <= 13:
-        unit(AbilityId.SIEGEMODE_SIEGEMODE)
-        return
-    elif unit.type_id == UnitTypeId.SIEGETANKSIEGED and (enemies.not_flying.amount == 0 or enemies.not_flying.closest_distance_to(unit) >= 14):
-        unit(AbilityId.UNSIEGE_UNSIEGE)
-        return
-    
     dangers : Units = self.enemy_units.exclude_type(ATTACK_TARGET_IGNORE)
     enemy_structures : Units = self.enemy_structures
 
@@ -57,14 +48,6 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
         closest_enemy = (dangers.flying | enemy_structures).closest_to(unit)
         kite_attack(self, unit, closest_enemy, unit.air_range)
         return
-
-
-# move to retreat avoiding enemies as much as possible
-def smart_move(self : BotAI, unit : Unit, position, enemies : Units):
-
-    if unit.type_id == UnitTypeId.SIEGETANKSIEGED and (enemies.not_structure.not_flying.amount == 0 or enemies.not_structure.not_flying.closest_distance_to(unit) > 14):
-            unit(AbilityId.UNSIEGE_UNSIEGE)
-    unit.move(position)
 
 
 def are_we_worker_rushed(self : BotAI):
@@ -220,7 +203,9 @@ async def micro(self : BotAI):
     await self.reapers.handle_attackers(self.units(UnitTypeId.REAPER))
     await self.banshees.handle_attackers(self.units(UnitTypeId.BANSHEE))
 
-    units : Units = self.units.exclude_type({UnitTypeId.SCV, UnitTypeId.MULE, UnitTypeId.REAPER, UnitTypeId.MARINE, UnitTypeId.MARAUDER, UnitTypeId.MEDIVAC, UnitTypeId.RAVEN, UnitTypeId.VIKINGFIGHTER, UnitTypeId.BANSHEE})
+    units : Units = self.units.exclude_type({
+        UnitTypeId.SCV, UnitTypeId.MULE, UnitTypeId.REAPER, UnitTypeId.MARINE, UnitTypeId.MARAUDER, UnitTypeId.MEDIVAC, UnitTypeId.RAVEN,
+        UnitTypeId.VIKINGFIGHTER, UnitTypeId.BANSHEE, UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED})
     if self.army_count == 0:
         return
     
@@ -246,19 +231,22 @@ async def micro(self : BotAI):
     medivacs : Units = self.units(UnitTypeId.MEDIVAC)
     ravens : Units = self.units(UnitTypeId.RAVEN)
     flying_vikings : Units = self.units(UnitTypeId.VIKINGFIGHTER)
+    tanks : Units = self.units.of_type({UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED})
     if attack:
         await self.bio.handle_attackers(bio, pos)
         await self.medivacs.handle_attackers(medivacs, pos)
         await self.ravens.handle_attackers(ravens, pos)
         await self.flying_vikings.handle_attackers(flying_vikings, pos)
+        await self.tanks.handle_attackers(tanks, pos)
     else:
         await self.bio.retreat_to(bio, pos)
         await self.medivacs.retreat_to(medivacs, pos)
         await self.ravens.retreat_to(ravens, pos)
         await self.flying_vikings.retreat_to(flying_vikings, pos)
+        await self.tanks.retreat_to(tanks, pos)
 
     for i in units:
         if attack:
             smart_attack(self, units, i, pos, enemies)
         else:
-            smart_move(self, i, pos, enemies)
+            i.move(pos)

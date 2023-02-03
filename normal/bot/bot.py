@@ -33,6 +33,7 @@ from bot.pathing.medivacs import Medivacs
 from bot.pathing.ravens import Ravens
 from bot.pathing.flying_vikings import FlyingVikings
 from bot.pathing.banshees import Banshees
+from bot.pathing.tanks import Tanks
 
 
 # bot code --------------------------------------------------------------------------------------------------------
@@ -45,6 +46,8 @@ class SmoothBrainBot(BotAI):
     medivacs: Medivacs
     ravens: Ravens
     flying_vikings: FlyingVikings
+    banshees: Banshees
+    tanks: Tanks
 
     def __init__(self):
         self.unit_command_uses_self_do = False
@@ -110,6 +113,7 @@ class SmoothBrainBot(BotAI):
         self.ravens = Ravens(self, self.pathing)
         self.flying_vikings = FlyingVikings(self, self.pathing)
         self.banshees = Banshees(self, self.pathing)
+        self.tanks = Tanks(self, self.pathing)
     
 
     async def on_unit_destroyed(self, unit_tag: int):
