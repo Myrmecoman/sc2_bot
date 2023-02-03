@@ -63,7 +63,7 @@ def micro_worker(self : BotAI) -> None:
                 move_target = target.position.towards(unit.position, target.radius + unit.radius)
             elif unit.is_gathering:
                 target : Unit = self.resource_by_tag.get(unit.order_target)
-                if target and not target.is_vespene_geyser:
+                if target and not target.is_vespene_geyser and target.position in self.speedmining_positions.keys():
                     move_target = self.speedmining_positions[target.position]
             if target and not target.is_vespene_geyser and 2 * unit.radius < unit.distance_to(move_target) < SPEEDMINING_DISTANCE:
                 unit.move(move_target)

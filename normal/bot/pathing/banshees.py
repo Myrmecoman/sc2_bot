@@ -36,7 +36,7 @@ class Banshees:
 
             # choose right grid
             grid = normal_grid
-            #if unit.is_cloaked and unit.energy > 5:
+            #if unit.is_cloaked and unit.energy > 3:
             #    grid = cloak_grid
             
             # give a roaming spot to the banshee, it will harass continuously this place autonomously

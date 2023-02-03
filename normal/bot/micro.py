@@ -164,13 +164,13 @@ def prevent_PF_rush(self : BotAI):
             self.worker_assigned_to_follow[i.tag] = -1
     keys = [i for i in self.worker_assigned_to_follow.keys()]
     for i in keys:
-        if enemy_flying_structures.find_by_tag(i) is None:
-            self.worker_assigned_to_follow.pop(i)
+        if enemy_flying_structures.find_by_tag(i) is None or self.workers.find_by_tag(enemy_flying_structures.find_by_tag(i)) is None:
+            self.worker_assigned_to_follow.pop(i, None)
 
     # if no worker assigned, give one and remember it
     for i in self.structures:
         closest_enemy_struct = enemy_flying_structures.closest_to(i)
-        if closest_enemy_struct.distance_to(i) > 14:
+        if closest_enemy_struct.distance_to(i) > 14 or self.workers.gathering.amount == 0:
             continue
         if self.worker_assigned_to_follow[closest_enemy_struct.tag] != -1:
             self.workers.find_by_tag(self.worker_assigned_to_follow[closest_enemy_struct.tag]).move(closest_enemy_struct.position)

@@ -19,7 +19,7 @@ from MapAnalyzer import MapData
 
 # When adding enemies to the grids add a bit extra range so our units stay out of trouble
 RANGE_BUFFER: float = 3.0
-RANGE_BUFFER_BUILDING: float = 1.0
+RANGE_BUFFER_BUILDING: float = 3.0
 
 
 class Pathing:
@@ -61,18 +61,14 @@ class Pathing:
             self.map_data.draw_influence_in_game(self.reaper_grid, lower_threshold=1)
 
 
-    def find_closest_safe_spot(
-        self, from_pos: Point2, grid: np.ndarray, radius: int = 15
-    ) -> Point2:
+    def find_closest_safe_spot(self, from_pos: Point2, grid: np.ndarray, radius: int = 15) -> Point2:
         """
         @param from_pos:
         @param grid:
         @param radius:
         @return:
         """
-        all_safe: np.ndarray = self.map_data.lowest_cost_points_array(
-            from_pos, radius, grid
-        )
+        all_safe: np.ndarray = self.map_data.lowest_cost_points_array(from_pos, radius, grid)
         # type hint wants a numpy array but doesn't actually need one - this is faster
         all_dists = spatial.distance.cdist(all_safe, [from_pos], "sqeuclidean")
         min_index = np.argmin(all_dists)
@@ -100,13 +96,10 @@ class Pathing:
         @return: The next point on the path we should move to
         """
         # Note: On rare occasions a path is not found and returns `None`
-        path: Optional[List[Point2]] = self.map_data.pathfind(
-            start, target, grid, sensitivity=sensitivity, smoothing=smoothing
-        )
+        path: Optional[List[Point2]] = self.map_data.pathfind(start, target, grid, sensitivity=sensitivity, smoothing=smoothing)
         if not path or len(path) == 0:
             return target
-        else:
-            return path[0]
+        return path[0]
 
 
     @staticmethod
@@ -132,7 +125,7 @@ class Pathing:
         """
         Add influence to the relevant grid.
         TODO:
-            Add spell castors
+            Add spell casters
             Add units that have no weapon in the API such as BCs, sentries and voids
             Extend this to add influence to an air grid
         @return:
@@ -173,7 +166,7 @@ class Pathing:
         if enemy.is_detector:
             self.cloak_air_grid = self._add_cost(
                 enemy.position,
-                10, # arbitrary value
+                50, # arbitrary value
                 enemy.detect_range + RANGE_BUFFER,
                 self.cloak_air_grid,)
 
@@ -209,7 +202,7 @@ class Pathing:
         if enemy.is_detector:
             self.cloak_air_grid = self._add_cost(
                 enemy.position,
-                10, # arbitrary value
+                50, # arbitrary value
                 enemy.detect_range + RANGE_BUFFER_BUILDING,
                 self.cloak_air_grid,)
 
