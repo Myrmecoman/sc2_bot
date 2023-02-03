@@ -49,7 +49,7 @@ class SmoothBrainBot(BotAI):
     def __init__(self):
         self.unit_command_uses_self_do = False
         self.distance_calculation_method = 2
-        self.game_step: int = 2
+        self.game_step: int = 2                      # 2 usually, 6 vs human
         self.build_starport_techlab_first = False    # against zerg, we better make a quick raven to counter burrowed roach all-ins
         self.worker_rushed = False                   # tells if we are worker rushed
         self.attack_with_all_worker = False          # in case of worker rushes
@@ -129,7 +129,6 @@ class SmoothBrainBot(BotAI):
         dispatch_workers(self)
         micro_worker(self)
         handle_refineries(self)
-        #await self.distribute_workers(0)
 
         handle_depot_status(self)
         handle_command_centers(self)

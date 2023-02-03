@@ -19,6 +19,7 @@ from MapAnalyzer import MapData
 
 # When adding enemies to the grids add a bit extra range so our units stay out of trouble
 RANGE_BUFFER: float = 3.0
+RANGE_BUFFER_BUILDING: float = 1.0
 
 
 class Pathing:
@@ -37,11 +38,14 @@ class Pathing:
         self.ground_grid: np.ndarray = self.map_data.get_pyastar_grid()
         # air grid if needed, would need to add enemy influence
         self.air_grid: np.ndarray = self.map_data.get_clean_air_grid()
+        # air grid for cloaked units indicating zones without detection
+        self.cloak_air_grid: np.ndarray = self.map_data.get_clean_air_grid()
 
     def update(self) -> None:
         self.ground_grid = self.map_data.get_pyastar_grid()
         self.reaper_grid = self.map_data.get_climber_grid()
         self.air_grid = self.map_data.get_clean_air_grid()
+        self.cloak_air_grid = self.map_data.get_clean_air_grid()
 
         for unit in self.ai.all_enemy_units:
             # checking if a unit is a structure this way is faster then using `if unit.is_structure` :)
@@ -55,6 +59,7 @@ class Pathing:
 
         if self.debug:
             self.map_data.draw_influence_in_game(self.reaper_grid, lower_threshold=1)
+
 
     def find_closest_safe_spot(
         self, from_pos: Point2, grid: np.ndarray, radius: int = 15
@@ -74,6 +79,7 @@ class Pathing:
 
         # safe because the shape of all_dists (N x 1) means argmin will return an int
         return Point2(all_safe[min_index])
+
 
     def find_path_next_point(
         self,
@@ -102,6 +108,7 @@ class Pathing:
         else:
             return path[0]
 
+
     @staticmethod
     def is_position_safe(
         grid: np.ndarray,
@@ -119,6 +126,7 @@ class Pathing:
         weight: float = grid[position.x, position.y]
         # np.inf check if drone is pathing near a spore crawler
         return weight == np.inf or weight <= weight_safety_limit
+
 
     def _add_unit_influence(self, enemy: Unit) -> None:
         """
@@ -138,16 +146,14 @@ class Pathing:
                     enemy.position,
                     values["GroundCost"],
                     values["GroundRange"] + RANGE_BUFFER,
-                    [self.ground_grid, self.reaper_grid],
-                )
+                    [self.ground_grid, self.reaper_grid],)
             if enemy.can_attack_air:
                 values: Dict = INFLUENCE_COSTS[enemy.type_id]
                 self.air_grid = self._add_cost(
                     enemy.position,
                     values["AirCost"],
                     values["AirRange"] + RANGE_BUFFER,
-                    self.air_grid,
-                )
+                    self.air_grid,)
         # this unit has values in the API and is not in our custom dictionary, take them from there
         else:
             if enemy.can_attack_ground:
@@ -155,15 +161,22 @@ class Pathing:
                     enemy.position,
                     enemy.ground_dps,
                     enemy.ground_range + RANGE_BUFFER,
-                    [self.ground_grid, self.reaper_grid],
-                )
+                    [self.ground_grid, self.reaper_grid],)
             if enemy.can_attack_air:
                 self.air_grid = self._add_cost(
                     enemy.position,
                     enemy.air_dps,
                     enemy.air_range + RANGE_BUFFER,
-                    self.air_grid,
-                )
+                    self.air_grid,)
+        
+        # detector units
+        if enemy.is_detector:
+            self.cloak_air_grid = self._add_cost(
+                enemy.position,
+                10, # arbitrary value
+                enemy.detect_range + RANGE_BUFFER,
+                self.cloak_air_grid,)
+
 
     def _add_structure_influence(self, enemy: Unit) -> None:
         """
@@ -182,17 +195,24 @@ class Pathing:
                 (self.ground_grid, self.reaper_grid) = self._add_cost_to_multiple_grids(
                     enemy.position,
                     values["GroundCost"],
-                    values["GroundRange"] + RANGE_BUFFER,
-                    [self.ground_grid, self.reaper_grid],
-                )
+                    values["GroundRange"] + RANGE_BUFFER_BUILDING,
+                    [self.ground_grid, self.reaper_grid],)
             if enemy.can_attack_air:
                 values: Dict = INFLUENCE_COSTS[enemy.type_id]
                 self.air_grid = self._add_cost(
                     enemy.position,
                     values["AirCost"],
-                    values["AirRange"] + RANGE_BUFFER,
-                    self.air_grid,
-                )
+                    values["AirRange"] + RANGE_BUFFER_BUILDING,
+                    self.air_grid,)
+                
+        # detector structures
+        if enemy.is_detector:
+            self.cloak_air_grid = self._add_cost(
+                enemy.position,
+                10, # arbitrary value
+                enemy.detect_range + RANGE_BUFFER_BUILDING,
+                self.cloak_air_grid,)
+
 
     def _add_cost(
         self,
@@ -213,6 +233,7 @@ class Pathing:
         )
         return grid
 
+
     def _add_cost_to_multiple_grids(
         self,
         pos: Point2,
@@ -231,6 +252,5 @@ class Pathing:
             radius=unit_range,
             grids=grids,
             weight=int(weight),
-            initial_default_weights=initial_default_weights,
-        )
+            initial_default_weights=initial_default_weights,)
         return grids

@@ -21,7 +21,8 @@ class Banshees:
 
     async def handle_attackers(self, units: Units) -> None:
 
-        grid = self.pathing.air_grid
+        normal_grid = self.pathing.air_grid
+        cloak_grid = self.pathing.cloak_air_grid
 
         # remove dead banshees
         to_remove = []
@@ -32,6 +33,11 @@ class Banshees:
             self.roam_spot.pop(k, None)
 
         for unit in units:
+
+            # choose right grid
+            grid = normal_grid
+            #if unit.is_cloaked and unit.energy > 5:
+            #    grid = cloak_grid
             
             # give a roaming spot to the banshee, it will harass continuously this place autonomously
             if not unit.tag in self.roam_spot.keys():
@@ -51,15 +57,16 @@ class Banshees:
                 else:
                     target = self.pick_enemy_target(close_enemies)
 
-            if target and unit.weapon_cooldown == 0:
-                unit.attack(target)
-                continue
-
             # in danger, run away
             if not self.pathing.is_position_safe(grid, unit.position):
                 if self.ai.already_pending_upgrade(UpgradeId.BANSHEECLOAK) == 1 and self.ai.can_cast(unit, AbilityId.BEHAVIOR_CLOAKON_BANSHEE):
                     unit(AbilityId.BEHAVIOR_CLOAKON_BANSHEE)
                 self.move_to_safety(unit, grid)
+                continue
+
+            # attack
+            if target and unit.weapon_cooldown == 0:
+                unit.attack(target)
                 continue
 
             # get to the target
