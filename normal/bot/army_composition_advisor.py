@@ -141,7 +141,7 @@ class ArmyCompositionAdvisor():
             self.max_medivacs = 2
             self.max_vikings = 10
             self.max_battlecruisers = 1
-            self.max_ravens = 4
+            self.max_ravens = 3
             self.max_tanks = 8
             self.max_cyclones = 0
             self.max_banshees = 2

@@ -71,17 +71,30 @@ def micro_worker(self : BotAI) -> None:
 
 
 # Saturate refineries
-def handle_refineries(self : BotAI):
-    for refinery in self.gas_buildings:
-        if refinery.assigned_harvesters < refinery.ideal_harvesters:
-            workers: Units = self.workers.closer_than(10, refinery)
+def handle_refineries(self : BotAI, step: int):
+
+    # update refineries ages and dictionary
+    for r in self.gas_buildings.ready:
+        if not r.tag in self.refineries_age.keys():
+            self.refineries_age[r.tag] = step
+    to_remove = []
+    for k in self.refineries_age.keys():
+        if self.gas_buildings.ready.find_by_tag(k) is None:
+            to_remove.append(k)
+    for i in to_remove:
+        self.refineries_age.pop(i, None)
+
+    # handle workers
+    for r in self.gas_buildings.ready:
+        if r.assigned_harvesters < r.ideal_harvesters and step - self.refineries_age[r.tag] > 4: # last check because when it is finished there are 0 workers altough the one building goes to it instantly
+            workers: Units = self.workers.closer_than(10, r)
             if workers:
                 for w in workers:
                     if not w.is_carrying_minerals and not w.is_carrying_vespene:
-                        w.gather(refinery)
+                        w.gather(r)
                         return
-        if refinery.assigned_harvesters > refinery.ideal_harvesters or self.workers.amount <= 5:
-            workers: Units = self.workers.closer_than(2, refinery)
+        if r.assigned_harvesters > r.ideal_harvesters or self.workers.amount <= 5:
+            workers: Units = self.workers.closer_than(2, r)
             if workers:
                 for w in workers:
                     if w.is_carrying_vespene:

@@ -60,6 +60,7 @@ class SmoothBrainBot(BotAI):
         self.worker_assigned_to_resume_building = {} # lists workers assigned to resume the construction of a building
         self.worker_assigned_to_expand = {}          # lists workers assigned to expand /!\ not used yet
         self.townhall_saturations = {}               # lists the mineral saturation of townhalls in queues of 40 frames, we consider the townhall saturated if max_number + 1 >= ideal_number
+        self.refineries_age = {}                     # this is here to tackle an issue with refineries having 0 workers on them when finished, although the building worker is assigned to it
         self.produce_from_starports = True
         self.produce_from_factories = True
         self.produce_from_barracks = True
@@ -128,7 +129,7 @@ class SmoothBrainBot(BotAI):
 
         dispatch_workers(self)
         micro_worker(self)
-        handle_refineries(self)
+        handle_refineries(self, iteration)
 
         handle_depot_status(self)
         handle_command_centers(self)

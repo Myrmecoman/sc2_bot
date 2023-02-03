@@ -17,7 +17,6 @@ Do something about the APM bug, which cancels some actions.<br/>
 Lift CC if too damaged.<br/>
 Implement detection map for banshees.<br/>
 Print cyclones against skytoss + handle cyclone micro.<br/>
-Fix gas overfill bug.<br/>
 Fix cloak air grid.<br/>
 
 SmoothBrain Bot now uses the SC2MapAnalysis api : https://github.com/spudde123/SC2MapAnalysis/tree/develop
