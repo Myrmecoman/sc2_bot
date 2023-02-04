@@ -76,18 +76,14 @@ def counter_worker_rush(self : BotAI):
     counter = 0
     for i in self.workers:
 
-        if i.distance_to(self.start_location) > 40:
-            if mfs:
-                mf: Unit = mfs.closest_to(i)
-                i.gather(mf)
+        if i.distance_to(self.start_location) > 40 or i.weapon_cooldown > 0:
+            mf: Unit = mfs.closest_to(i)
+            i(AbilityId.SMART, mf)
             continue
 
         if i.health <= 10 and not self.attack_with_all_worker:
-            if mfs:
-                mf: Unit = mfs.closest_to(i)
-                i(AbilityId.SMART, mf)
-            else:
-                i.move(self.mineral_field.closest_to(i))
+            mf: Unit = mfs.closest_to(i)
+            i(AbilityId.SMART, mf)
             continue
         counter += 1
         if counter > w + 2: # only pull their amount + 2
@@ -96,7 +92,8 @@ def counter_worker_rush(self : BotAI):
     if counter <= w + 2:
         self.attack_with_all_worker = True
         for i in self.workers:
-            i.attack(pos)
+            if i.weapon_cooldown <= 0:
+                i.attack(pos)
     else:
         self.attack_with_all_worker = False
     return True
