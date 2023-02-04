@@ -56,7 +56,7 @@ def build_add_on(self : BotAI, type, add_on_type):
             addon_points = points_to_build_addon(u.position)
             if all(self.in_map_bounds(addon_point) and self.in_placement_grid(addon_point) and self.in_pathing_grid(addon_point) for addon_point in addon_points):
                 u.build(add_on_type)
-            elif u.position != self.main_base_ramp.barracks_in_middle or self.enemy_race != Race.Zerg or self.army_advisor.total_enemy_supply() < self.supply_army and not self.army_advisor.zergling_rushed: # only lift the first barracks if there are no threats
+            elif u.position != self.main_base_ramp.barracks_in_middle or self.enemy_race == Race.Terran or (self.army_advisor.total_enemy_supply() < self.supply_army and not self.army_advisor.zergling_rushed and not self.worker_rushed): # only lift the first barracks if there are no threats
                 u(AbilityId.LIFT)
             break
     
