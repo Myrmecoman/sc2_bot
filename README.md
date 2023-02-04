@@ -15,9 +15,11 @@ Better unit production (counter enemy army).<br/>
 Build B2 uphill against zerg.<br/>
 Do something about the APM bug, which cancels some actions.<br/>
 Lift CC if too damaged.<br/>
-Print cyclones against skytoss + handle cyclone micro.<br/>
 Fix cloak air grid.<br/>
 Defend Zozo and sharkbot worker rushes.<br/>
 Stop kitting against units that match our attack range (or reduce it).<br/>
+Print cyclones against skytoss + handle cyclone micro.<br/>
+Go factory before CC.<br/>
+Play more mecha.<br/>
 
 SmoothBrain Bot now uses the SC2MapAnalysis api : https://github.com/spudde123/SC2MapAnalysis/tree/develop
