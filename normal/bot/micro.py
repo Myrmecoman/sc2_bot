@@ -52,7 +52,7 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
 
 def are_we_worker_rushed(self : BotAI):
 
-    if self.time > 300:
+    if self.time > 80:
         return 0, None
 
     enemies: Units = self.enemy_units.visible.of_type({UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE})

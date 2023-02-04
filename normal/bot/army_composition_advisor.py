@@ -110,10 +110,10 @@ class ArmyCompositionAdvisor():
             self.zergling_rushed = True
 
         if self.bot.enemy_race == Race.Zerg:
-            if self.amount_of_enemies_of_type(UnitTypeId.ROACH) > len(self.known_enemy_units.keys())/2:
-                self.marine_marauder_ratio = 0.5
-            else:
+            if self.amount_of_enemies_of_type(UnitTypeId.ROACH) < len(self.known_enemy_units.keys())/2:
                 self.marine_marauder_ratio = 0.8
+            else:
+                self.marine_marauder_ratio = 0.5
         if self.bot.enemy_race == Race.Protoss:
             if self.bot.enemy_structures(UnitTypeId.STARGATE).amount > 0 or self.bot.enemy_units.of_type({UnitTypeId.VOIDRAY, UnitTypeId.ORACLE, UnitTypeId.PHOENIX, UnitTypeId.CARRIER, UnitTypeId.TEMPEST}).amount > 0:
                 self.marine_marauder_ratio = 0.9

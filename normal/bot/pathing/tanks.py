@@ -56,7 +56,7 @@ class Tanks:
         """
         for unit in units:
             close_enemies: Units = self.ai.enemy_units.filter(lambda u: not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE_WITH_WORKERS)# | self.ai.enemy_structures.filter(lambda s: s.distance_to(unit) < 15.0 and s.type_id in DANGEROUS_STRUCTURES)
-            if unit.type_id == UnitTypeId.SIEGETANKSIEGED and (close_enemies.not_structure.amount == 0 or close_enemies.not_structure.closest_distance_to(unit) > 13):
+            if unit.type_id == UnitTypeId.SIEGETANKSIEGED and (close_enemies.not_structure.amount == 0 or close_enemies.not_structure.closest_distance_to(unit) > 14):
                 unit(AbilityId.UNSIEGE_UNSIEGE)
 
             move_to: Point2 = self.pathing.find_path_next_point(unit.position, pos, self.pathing.ground_grid)
