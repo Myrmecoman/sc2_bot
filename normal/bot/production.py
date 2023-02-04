@@ -114,7 +114,7 @@ def produce(self : BotAI):
                     bar.build(UnitTypeId.MARINE)
                     if self.can_afford(UnitTypeId.MARINE):
                         bar.build(UnitTypeId.MARINE)
-                elif self.army_count == 0 and self.can_afford(UnitTypeId.REAPER):
+                elif self.army_count == 0 and (self.can_afford(UnitTypeId.REAPER) or (self.minerals >= 50 and self.vespene >= 40)): # if can buy or almost buy
                     bar.build(UnitTypeId.REAPER)
                 elif self.can_afford(UnitTypeId.MARINE):
                     bar.build(UnitTypeId.MARINE)
@@ -133,7 +133,7 @@ def produce(self : BotAI):
                     bar.build(UnitTypeId.MARINE)
                     if self.can_afford(UnitTypeId.MARINE):
                         bar.build(UnitTypeId.MARINE)
-                elif self.army_count == 0 and self.can_afford(UnitTypeId.REAPER):
+                elif self.army_count == 0 and (self.can_afford(UnitTypeId.REAPER) or (self.minerals >= 50 and self.vespene >= 40)): # if can buy or almost buy
                     bar.build(UnitTypeId.REAPER)
                 elif self.can_afford(UnitTypeId.MARINE):
                     bar.build(UnitTypeId.MARINE)
