@@ -12,8 +12,8 @@ import math
 
 def can_build_structure(self : BotAI, type, fly_type, amount):
     if fly_type is not None:
-        return self.structures(type).ready.amount + self.already_pending(type) + self.structures(fly_type).amount < amount and self.can_afford(type) and self.tech_requirement_progress(type) == 1
-    return self.structures(type).ready.amount + self.already_pending(type) < amount and self.can_afford(type) and self.tech_requirement_progress(type) == 1
+        return self.structures(type).amount + self.already_pending(type) + self.structures(fly_type).amount < amount and self.can_afford(type) and self.tech_requirement_progress(type) == 1
+    return self.structures(type).amount + self.already_pending(type) < amount and self.can_afford(type) and self.tech_requirement_progress(type) == 1
 
 
 # Return all points that need to be checked when trying to build an addon. Returns 4 points.
