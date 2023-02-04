@@ -53,7 +53,7 @@ class SmoothBrainBot(BotAI):
         self.unit_command_uses_self_do = False
         self.distance_calculation_method = 2
         self.game_step: int = 2                      # 2 usually, 6 vs human
-        self.build_starport_techlab_first = False    # against zerg, we better make a quick raven to counter burrowed roach all-ins
+        self.build_starport_techlab_first = True     # always make techlab first on starport, good against dts, skytoss, burrowed roaches, and siege tanks
         self.worker_rushed = False                   # tells if we are worker rushed
         self.attack_with_all_worker = False          # in case of worker rushes
         self.scouting_units = []                     # lists units assigned to scout so that we do not cancel their orders
@@ -98,7 +98,6 @@ class SmoothBrainBot(BotAI):
 
         await self._client.chat_send("glhf!", team_only=False)
 
-        #if self.enemy_race == Race.Zerg: # always make techlab first on starport, good against dts, skytoss, burrowed roaches, and siege tanks
         self.build_starport_techlab_first = True
         self.client.game_step = self.game_step
         self.army_advisor = ArmyCompositionAdvisor(self)         # provides advices for army composition and building add ons
