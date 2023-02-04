@@ -54,7 +54,7 @@ class SmoothBrainBot(BotAI):
         self.distance_calculation_method = 2
         self.game_step: int = 2                      # 2 usually, 6 vs human
         self.build_starport_techlab_first = True     # always make techlab first on starport, good against dts, skytoss, burrowed roaches, and siege tanks
-        self.worker_rushed = False                   # tells if we are worker rushed
+        self.worker_rushed = False                   # tells if we are worker rushed, if the enemies were repelled we should close the wall quick before they come back
         self.attack_with_all_worker = False          # in case of worker rushes
         self.scouting_units = []                     # lists units assigned to scout so that we do not cancel their orders
         self.worker_assigned_to_repair = {}          # lists workers assigned to repair

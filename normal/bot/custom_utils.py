@@ -227,11 +227,11 @@ def handle_command_centers(self : BotAI):
 def build_worker(self : BotAI):
     if not self.can_afford(UnitTypeId.SCV) or self.townhalls.amount == 0 or self.workers.amount > 70 or self.workers.amount >= self.townhalls.amount * 22:
         return
-    ccs: Units = self.townhalls
-    for cc in ccs:
-        if cc.is_idle:
+    if self.worker_rushed and (self.structures(UnitTypeId.BARRACKS).amount == 0 or self.structures(UnitTypeId.BARRACKS).first.is_idle): # buy barracks quick, save money buy cutting SCVs production
+        return
+    for cc in self.townhalls:
+        if cc.is_idle:# and len(cc.orders) == 0:
             cc.train(UnitTypeId.SCV)
-            break
 
 
 async def get_safest_expansion(self : BotAI):

@@ -6,7 +6,8 @@ from sc2.ids.upgrade_id import UpgradeId
 from sc2.ids.ability_id import AbilityId
 from sc2.unit import Unit
 from sc2.units import Units
-from sc2.position import Point2
+from sc2.position import Point2, Point3
+from typing import FrozenSet, Set
 from sc2.bot_ai import BotAI
 from sc2.data import Race
 import math
@@ -52,12 +53,12 @@ async def smart_build(self : BotAI, type : UnitTypeId):
 
     prod_structures : Units = self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT})
 
-    if prod_structures.amount == 0 and self.main_base_ramp.barracks_correct_placement:
+    if prod_structures.amount == 0 and self.main_base_ramp.barracks_in_middle:
         worker: Unit = self.workers.closest_to(self.main_base_ramp.barracks_in_middle) # pretty unsafe but works and should not pose any issue
         if worker is None:
             return False
         pos = self.main_base_ramp.barracks_correct_placement
-        if self.enemy_race == Race.Zerg:
+        if self.enemy_race == Race.Zerg or self.enemy_race == Race.Protoss:
             pos = self.main_base_ramp.barracks_in_middle
         if self.can_place_single(type, pos):
             worker.build(type, pos)
@@ -194,6 +195,37 @@ def resume_building_construction(self : BotAI):
         worker(AbilityId.SMART, i)
 
 
+def wall_as_fast_as_possible(self: BotAI):
+    if self.worker_rushed:
+        closest_enemy_from_closest_building: Unit = None
+        dist = 10000
+        for e in self.enemy_units:
+            new_dist = self.structures.closest_distance_to(e)
+            if new_dist < dist:
+                closest_enemy_from_closest_building = e
+                dist = new_dist
+        if dist > 8 or closest_enemy_from_closest_building.position3d.z < self.townhalls.first.position3d.z:
+            # at this point, we are worker rushed and the enemies got repelled. Close the wall quick with the closest non constructing SCV, check the we have a depot and the barracks
+            # getting ramp wall positions
+            depot_placement_positions: FrozenSet[Point2] = self.main_base_ramp.corner_depots
+            depots: Units = self.structures.of_type({UnitTypeId.SUPPLYDEPOT, UnitTypeId.SUPPLYDEPOTLOWERED})
+            # Filter locations close to finished supply depots
+            if depots:
+                depot_placement_positions: Set[Point2] = {d for d in depot_placement_positions if depots.closest_distance_to(d) > 1}
+            if len(depot_placement_positions) > 0:
+                for w in self.workers:
+                    if not w.is_constructing_scv and self.can_afford(UnitTypeId.SUPPLYDEPOT):
+                        w.build(UnitTypeId.SUPPLYDEPOT, depot_placement_positions.pop())
+            barracks_in_wall = False
+            for b in self.structures(UnitTypeId.BARRACKS):
+                if b.position == self.main_base_ramp.barracks_in_middle:
+                    barracks_in_wall = True
+            if not barracks_in_wall:
+                for w in self.workers:
+                    if not w.is_constructing_scv and self.can_afford(UnitTypeId.BARRACKS):
+                        w.build(UnitTypeId.BARRACKS, self.main_base_ramp.barracks_in_middle)
+
+
 async def macro(self : BotAI):
 
     cancel_building(self)
@@ -202,6 +234,8 @@ async def macro(self : BotAI):
 
     if len(self.build_order) != 0 or self.workers.amount == 0:
         return
+    
+    wall_as_fast_as_possible(self)
 
     if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTFLYING, 1):
         await smart_build(self, UnitTypeId.STARPORT)

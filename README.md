@@ -18,5 +18,6 @@ Lift CC if too damaged.<br/>
 Print cyclones against skytoss + handle cyclone micro.<br/>
 Fix cloak air grid.<br/>
 Defend Zozo and sharkbot worker rushes.<br/>
+Stop kitting against units that match our attack range (or reduce it).<br/>
 
 SmoothBrain Bot now uses the SC2MapAnalysis api : https://github.com/spudde123/SC2MapAnalysis/tree/develop

@@ -61,7 +61,7 @@ def are_we_worker_rushed(self : BotAI):
 
     dangerous_units = 0
     for e in enemies:
-        if e.distance_to(self.start_location) < 10:
+        if e.distance_to(self.structures.closest_to(e)) < 10:
             dangerous_units += 1
     return dangerous_units, enemies.first.position
 
@@ -71,14 +71,21 @@ def counter_worker_rush(self : BotAI):
     if (w < 3 and not self.worker_rushed) or w == 0:
         return False
 
+    mfs: Units = self.mineral_field.closer_than(12, self.start_location)
     self.worker_rushed = True
     counter = 0
     for i in self.workers:
-        if i.health <= 10 and not self.attack_with_all_worker:
-            mfs: Units = self.mineral_field.closer_than(12, self.start_location)
+
+        if i.distance_to(self.start_location) > 40:
             if mfs:
-                mf: Unit = mfs.furthest_to(i)
+                mf: Unit = mfs.closest_to(i)
                 i.gather(mf)
+            continue
+
+        if i.health <= 10 and not self.attack_with_all_worker:
+            if mfs:
+                mf: Unit = mfs.closest_to(i)
+                i(AbilityId.SMART, mf)
             else:
                 i.move(self.mineral_field.closest_to(i))
             continue

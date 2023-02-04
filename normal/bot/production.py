@@ -104,10 +104,9 @@ def produce(self : BotAI):
         total_marines = self.units.of_type({UnitTypeId.MARINE}).amount
         total_marauders = self.units.of_type({UnitTypeId.MARAUDER}).amount
 
-        if less_reapers: # if we have less reapers than enemy, make more reapers
-            produce_single_type_unit(self, UnitTypeId.BARRACKS, UnitTypeId.REAPER, UnitTypeId.MARINE)
-
-        elif total_marauders != 0 and total_marines / (total_marines + total_marauders) < self.army_advisor.marine_marauder_ratio: # if not enough marines, make only of them
+        #if less_reapers: # if we have less reapers than enemy, make more reapers (can also be fixed by rushing cyclone)
+        #    produce_single_type_unit(self, UnitTypeId.BARRACKS, UnitTypeId.REAPER, UnitTypeId.MARINE)
+        if total_marauders != 0 and total_marines / (total_marines + total_marauders) < self.army_advisor.marine_marauder_ratio: # if not enough marines, make only of them
             for bar in self.structures(UnitTypeId.BARRACKS).ready.idle:
                 if bar.has_techlab and self.can_afford(UnitTypeId.MARINE):
                     bar.build(UnitTypeId.MARINE)
@@ -115,9 +114,8 @@ def produce(self : BotAI):
                     bar.build(UnitTypeId.MARINE)
                     if self.can_afford(UnitTypeId.MARINE):
                         bar.build(UnitTypeId.MARINE)
-                elif self.army_count == 0 or (self.army_count < 2 and self.enemy_race == Race.Terran):
-                    if self.can_afford(UnitTypeId.REAPER):
-                        bar.build(UnitTypeId.REAPER)
+                elif self.army_count == 0 and self.can_afford(UnitTypeId.REAPER):
+                    bar.build(UnitTypeId.REAPER)
                 elif self.can_afford(UnitTypeId.MARINE):
                     bar.build(UnitTypeId.MARINE)
             
@@ -135,10 +133,9 @@ def produce(self : BotAI):
                     bar.build(UnitTypeId.MARINE)
                     if self.can_afford(UnitTypeId.MARINE):
                         bar.build(UnitTypeId.MARINE)
-                elif self.army_count == 0 or (self.army_count < 2 and self.enemy_race == Race.Terran):
-                    if self.can_afford(UnitTypeId.REAPER):
-                        bar.build(UnitTypeId.REAPER)
-                elif bar.has_add_on == False and self.can_afford(UnitTypeId.MARINE):
+                elif self.army_count == 0 and self.can_afford(UnitTypeId.REAPER):
+                    bar.build(UnitTypeId.REAPER)
+                elif self.can_afford(UnitTypeId.MARINE):
                     bar.build(UnitTypeId.MARINE)
 
             for bar in self.structures(UnitTypeId.BARRACKS).ready:
