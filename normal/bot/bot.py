@@ -124,6 +124,7 @@ class SmoothBrainBot(BotAI):
     async def on_step(self, iteration: int):
 
         if self.townhalls.amount == 0 or self.supply_used == 0:
+            await self._client.chat_send("gg", team_only=False)
             await self.client.leave()
             return
 
