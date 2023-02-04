@@ -98,9 +98,8 @@ class SmoothBrainBot(BotAI):
 
         await self._client.chat_send("glhf!", team_only=False)
 
-        self.build_starport_techlab_first = True
         self.client.game_step = self.game_step
-        self.army_advisor = ArmyCompositionAdvisor(self)         # provides advices for army composition and building add ons
+        self.army_advisor = ArmyCompositionAdvisor(self) # provides advices for army composition and building add ons
         self.army_advisor.provide_advices_startup()
         self.speedmining_positions = get_speedmining_positions(self)
         split_workers(self)
