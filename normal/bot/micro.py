@@ -102,13 +102,16 @@ def counter_worker_rush(self : BotAI):
 def worker_rush_ended(self : BotAI):
     w, _ = are_we_worker_rushed(self)
     if w == 0 and self.worker_rushed:
-        self.worker_rushed = False
         self.attack_with_all_worker = False
+        mfs: Units = self.mineral_field.closer_than(10, self.townhalls.first)
         for i in self.workers.idle:
-            mfs: Units = self.mineral_field.closer_than(10, self.townhalls.first)
-            if mfs:
+            mf: Unit = mfs.closest_to(i)
+            i.gather(mf)
+        for i in self.workers:
+            if self.enemy_units.find_by_tag(i.order_target) is not None: # if the scv is targeting an enemy unit, leave it
                 mf: Unit = mfs.closest_to(i)
                 i.gather(mf)
+
 
 
 def are_we_idle_at_enemy_base(self):

@@ -197,14 +197,12 @@ def resume_building_construction(self : BotAI):
 
 def wall_as_fast_as_possible(self: BotAI):
     if self.worker_rushed:
-        closest_enemy_from_closest_building: Unit = None
         dist = 10000
         for e in self.enemy_units:
             new_dist = self.structures.closest_distance_to(e)
             if new_dist < dist:
-                closest_enemy_from_closest_building = e
                 dist = new_dist
-        if dist > 8 or closest_enemy_from_closest_building.position3d.z < self.townhalls.first.position3d.z:
+        if dist > 8:
             # at this point, we are worker rushed and the enemies got repelled. Close the wall quick with the closest non constructing SCV, check the we have a depot and the barracks
             # getting ramp wall positions
             depot_placement_positions: FrozenSet[Point2] = self.main_base_ramp.corner_depots

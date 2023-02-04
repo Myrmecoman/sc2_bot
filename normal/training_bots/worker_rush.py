@@ -1,5 +1,6 @@
 from sc2.bot_ai import BotAI, Race
 from sc2.data import Result
+from sc2.ids.unit_typeid import UnitTypeId
 
 
 class WorkerRushBot(BotAI):
@@ -11,10 +12,23 @@ class WorkerRushBot(BotAI):
         for w in self.workers:
             total_health += w.health + w.shield
 
-        if total_health < 220:
+        mfs = self.mineral_field.closer_than(10, self.townhalls.first)
+
+        if total_health < 240:               # leave if we don't have any more health
             for worker in self.workers:
-                worker.move(self.start_location)
+                mf = mfs.closest_to(worker)
+                worker.gather(mf)
         
-        if total_health > 260:
+        if total_health > 260:               # attack again when enough health
             for worker in self.workers:
-                worker.attack(self.enemy_start_locations[0])
+                if worker.weapon_cooldown > 0:
+                    mf = mfs.closest_to(worker)
+                    worker.gather(mf)
+                elif worker.health > 10:
+                    worker.attack(self.enemy_start_locations[0])
+                else:
+                    mf = mfs.closest_to(worker)
+                    worker.gather(mf)
+
+        if self.townhalls.idle.amount > 0 and self.can_afford(UnitTypeId.PROBE):
+            self.townhalls.idle.first.train(UnitTypeId.PROBE)

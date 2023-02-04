@@ -24,10 +24,10 @@ map_names = ["BerlingradAIE", "HardwireAIE", "InsideAndOutAIE", "MoondanceAIE", 
 bot = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBot")
 human = Human(Race.Terran, "Human", True)
 
-enemy = Computer(Race.Zerg, Difficulty.CheatInsane)
+#enemy = Computer(Race.Zerg, Difficulty.CheatInsane)
 #enemy = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBotEnemy")
 #enemy = Bot(Race.Terran, MassReaper(), "MassReaper")
-#enemy = Bot(Race.Protoss, WorkerRushBot(), "BadWorkerRush")
+enemy = Bot(Race.Protoss, WorkerRushBot(), "WorkerRush")
 #enemy = Bot(Race.Terran, ResumeBuilding(), "ResumeBuilding")
 #enemy = Bot(Race.Terran, SingleWorker(), "SingleWorker")
 #enemy = Bot(Race.Terran, Lift(), "Lift")
