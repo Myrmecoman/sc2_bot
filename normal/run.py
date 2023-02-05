@@ -48,5 +48,5 @@ if __name__ == "__main__":
         run_game(
         #maps.get("sc2-ai-cup-2022"), 
         maps.get(map_names[random.randint(0, len(map_names) - 1)]),
-        [bot, enemy], realtime=True)
+        [bot, enemy], realtime=False)
         #[human, bot], realtime=True)

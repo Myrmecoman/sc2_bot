@@ -86,14 +86,14 @@ def handle_refineries(self : BotAI, step: int):
 
     # handle workers
     for r in self.gas_buildings.ready:
-        if r.assigned_harvesters < r.ideal_harvesters and step - self.refineries_age[r.tag] > 4: # last check because when it is finished there are 0 workers altough the one building goes to it instantly
+        if r.assigned_harvesters < r.ideal_harvesters and step - self.refineries_age[r.tag] > 6: # last check because when it is finished there are 0 workers altough the one building goes to it instantly
             workers: Units = self.workers.closer_than(10, r)
             if workers:
                 for w in workers:
                     if not w.is_carrying_minerals and not w.is_carrying_vespene:
                         w.gather(r)
                         return
-        if r.assigned_harvesters > r.ideal_harvesters or self.workers.amount <= 5:
+        if r.assigned_harvesters > r.ideal_harvesters or self.workers.amount <= 6:
             workers: Units = self.workers.closer_than(2, r)
             if workers:
                 for w in workers:

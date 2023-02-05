@@ -55,12 +55,12 @@ def build_add_on(self : BotAI, type, add_on_type):
     for u in self.structures(type).ready.idle:
         if not u.has_add_on and self.can_afford(add_on_type):
             addon_points = points_to_build_addon(u.position)
-            if all(self.in_map_bounds(addon_point) and self.in_placement_grid(addon_point) and self.in_pathing_grid(addon_point) for addon_point in addon_points) and (self.army_advisor.total_enemy_supply() < self.supply_army and not self.army_advisor.zergling_rushed and not self.worker_rushed):
+            if all(self.in_map_bounds(addon_point) and self.in_placement_grid(addon_point) and self.in_pathing_grid(addon_point) for addon_point in addon_points): # if no need to lift for addon, build it
                 u.build(add_on_type)
-            elif u.position != self.main_base_ramp.barracks_in_middle or self.enemy_race == Race.Terran or (self.army_advisor.total_enemy_supply() < self.supply_army and not self.army_advisor.zergling_rushed and not self.worker_rushed):
+            elif self.enemy_race == Race.Terran or (u.position == self.main_base_ramp.barracks_in_middle and self.army_advisor.total_enemy_supply() < self.supply_army and not self.army_advisor.zergling_rushed and not self.worker_rushed):
                 u(AbilityId.LIFT)
             break
-    
+
 
 def handle_add_ons(self : BotAI):
     if len(self.build_order) != 0:
@@ -179,7 +179,7 @@ def handle_upgrades(self : BotAI):
 HALF_OFFSET = Point2((.5, .5))
 async def handle_supply(self : BotAI):
 
-    if self.supply_cap >= 200 or (self.worker_rushed and self.structures.of_type({UnitTypeId.SUPPLYDEPOT, UnitTypeId.SUPPLYDEPOTLOWERED}).amount <= 2):
+    if self.supply_cap >= 200 or (self.worker_rushed and self.structures.of_type({UnitTypeId.SUPPLYDEPOT, UnitTypeId.SUPPLYDEPOTLOWERED}).amount < 2):
         return
 
     if self.supply_left < 6 and self.supply_used >= 14 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 2 and len(self.build_order) == 0:
