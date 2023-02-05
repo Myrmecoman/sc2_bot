@@ -21,5 +21,6 @@ Play more mecha.<br/>
 Siege the tanks while on defense waiting.<br/>
 Fix locked banshees.<br/>
 Add abilities in pathing (biles, scans for detection).<br/>
+There is a bug where the bot does not make addons.<br/>
 
 SmoothBrain Bot now uses the SC2MapAnalysis api : https://github.com/spudde123/SC2MapAnalysis/tree/develop
