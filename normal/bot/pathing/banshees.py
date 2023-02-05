@@ -36,15 +36,15 @@ class Banshees:
 
             # choose right grid
             grid = normal_grid
-            #if unit.is_cloaked and unit.energy > 3:
-            #    grid = cloak_grid
+            if unit.is_cloaked and unit.energy > 3:
+                grid = cloak_grid
             
             # give a roaming spot to the banshee, it will harass continuously this place autonomously
             if not unit.tag in self.roam_spot.keys():
                 spot = self.get_free_roaming_spot()
                 if spot != -1:
                     self.roam_spot[unit.tag] = spot
-            attack_target: Point2 = self.get_attack_target(unit.tag)
+            attack_target: Point2 = self.get_attack_target(unit)
 
             close_enemies = self.ai.enemy_units.filter(lambda u: u.distance_to(unit) < 15.0 and not u.is_flying and not u.type_id in ATTACK_TARGET_IGNORE)
 
@@ -58,11 +58,14 @@ class Banshees:
                     target = self.pick_enemy_target(close_enemies)
 
             # in danger, run away
-            if not self.pathing.is_position_safe(grid, unit.position):
-                if self.ai.already_pending_upgrade(UpgradeId.BANSHEECLOAK) == 1 and self.ai.can_cast(unit, AbilityId.BEHAVIOR_CLOAKON_BANSHEE):
-                    unit(AbilityId.BEHAVIOR_CLOAKON_BANSHEE)
-                self.move_to_safety(unit, grid)
-                continue
+            if not self.pathing.is_position_safe(grid, unit.position): # if cloaked we are detected, otherwise it is imminent danger
+                if unit.is_cloaked and self.pathing.is_position_safe(normal_grid, unit.position): # if spotted but no danger still attack things
+                    pass
+                else:
+                    if self.ai.already_pending_upgrade(UpgradeId.BANSHEECLOAK) == 1 and self.ai.can_cast(unit, AbilityId.BEHAVIOR_CLOAKON_BANSHEE):
+                        unit(AbilityId.BEHAVIOR_CLOAKON_BANSHEE)
+                    self.move_to_safety(unit, grid)
+                    continue
 
             # attack
             if target and unit.weapon_cooldown == 0:
@@ -110,14 +113,13 @@ class Banshees:
         return min(enemies, key=lambda e: (e.health + e.shield, e.tag),)
     
 
-    def get_attack_target(self, tag) -> Point2:
-        if enemy_units := self.ai.enemy_units.filter(
-            lambda u: u.type_id not in ATTACK_TARGET_IGNORE
-            and not u.is_flying
-            and not u.is_cloaked
-            and not u.is_hallucination):
+    def get_attack_target(self, unit) -> Point2:
+        workers = self.ai.enemy_units.of_type({UnitTypeId.SCV, UnitTypeId.MULE, UnitTypeId.DRONE, UnitTypeId.PROBE})
+        if workers.amount > 0 and workers.closest_distance_to(unit) < 15:
+            return workers.closest_to(unit).position
+        if enemy_units := self.ai.enemy_units.filter(lambda u: u.type_id not in ATTACK_TARGET_IGNORE and not u.is_flying and not u.is_cloaked and not u.is_hallucination):
             return enemy_units.closest_to(self.ai.start_location).position
-        return self.roam_spot_positions[self.roam_spot[tag]]
+        return self.roam_spot_positions[self.roam_spot[unit.tag]]
     
 
     # there are 4 roaming spots, in order it's 1rst base, 2nd, 3rd, and 4rth

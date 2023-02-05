@@ -12,9 +12,7 @@ If you are a novice bot writter I suggest you pick some ideas from this bot and 
 Repairing not full life mechanical units.<br/>
 Army grouping and bio splitting before attacking.<br/>
 Better unit production (counter enemy army).<br/>
-Build B2 uphill against zerg.<br/>
 Do something about the APM bug, which cancels some actions.<br/>
-Fix lift CC if too damaged.<br/>
 Fix cloak air grid.<br/>
 Defend Zozo and sharkbot worker rushes.<br/>
 Stop kitting against units that match our attack range (or reduce it).<br/>

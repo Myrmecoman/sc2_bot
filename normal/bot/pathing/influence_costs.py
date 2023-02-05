@@ -28,6 +28,7 @@ INFLUENCE_COSTS: Dict[UnitTypeId, Dict] = {
         "GroundCost": 0,
         "AirRange": 7,
         "GroundRange": 0,
+        "DetectionRange": 11,
     },
     UnitTypeId.ARCHON: {
         "AirCost": 40,
@@ -142,6 +143,7 @@ INFLUENCE_COSTS: Dict[UnitTypeId, Dict] = {
         "GroundCost": 22,
         "AirRange": 7,
         "GroundRange": 7,
+        "DetectionRange": 11,
     },
     UnitTypeId.QUEEN: {
         "AirCost": 12.6,
@@ -166,6 +168,7 @@ INFLUENCE_COSTS: Dict[UnitTypeId, Dict] = {
         "GroundCost": 0,
         "AirRange": 7,
         "GroundRange": 0,
+        "DetectionRange": 11,
     },
     UnitTypeId.STALKER: {
         "AirCost": 10,
@@ -238,5 +241,20 @@ INFLUENCE_COSTS: Dict[UnitTypeId, Dict] = {
         "GroundCost": 5,
         "AirRange": 0,
         "GroundRange": 1,
+    },
+    UnitTypeId.RAVEN: {
+        "DetectionRange": 11,
+    },
+    UnitTypeId.OBSERVER: {
+        "DetectionRange": 11,
+    },
+    UnitTypeId.OBSERVERSIEGEMODE: {
+        "DetectionRange": 17,
+    },
+    UnitTypeId.OVERSEER: {
+        "DetectionRange": 11,
+    },
+    UnitTypeId.OVERSEERSIEGEMODE: {
+        "DetectionRange": 17,
     },
 }

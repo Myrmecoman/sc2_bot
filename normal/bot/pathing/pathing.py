@@ -164,10 +164,11 @@ class Pathing:
         
         # detector units
         if enemy.is_detector:
+            values: Dict = INFLUENCE_COSTS[enemy.type_id]
             self.cloak_air_grid = self._add_cost(
                 enemy.position,
                 50, # arbitrary value
-                enemy.detect_range + RANGE_BUFFER,
+                values["DetectionRange"] + RANGE_BUFFER_BUILDING,
                 self.cloak_air_grid,)
 
 
@@ -200,10 +201,11 @@ class Pathing:
                 
         # detector structures
         if enemy.is_detector:
+            values: Dict = INFLUENCE_COSTS[enemy.type_id]
             self.cloak_air_grid = self._add_cost(
                 enemy.position,
                 50, # arbitrary value
-                enemy.detect_range + RANGE_BUFFER_BUILDING,
+                values["DetectionRange"] + RANGE_BUFFER_BUILDING,
                 self.cloak_air_grid,)
 
 
