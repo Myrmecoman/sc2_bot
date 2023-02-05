@@ -173,7 +173,7 @@ def cancel_building(self : BotAI):
 def resume_building_construction(self : BotAI):
     # checking if it is actually safe to resume construction
     for i in self.structures_without_construction_SCVs:
-        if self.enemy_units.amount != 0 and self.enemy_units.closest_distance_to(i) < 8:
+        if (self.enemy_units.amount != 0 and self.enemy_units.closest_distance_to(i)) < 8 and not (self.army_advisor.is_wall_closed() and (self.worker_rushed or self.army_advisor.zergling_rushed)):
             return
     
     # update dictionary if building or worker died
@@ -209,7 +209,7 @@ async def macro(self : BotAI):
     if self.townhalls.amount >= 4 and can_build_structure(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTFLYING, 2):
         await smart_build(self, UnitTypeId.STARPORT)
 
-    if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.FACTORY, UnitTypeId.FACTORYFLYING, 1):
+    if self.townhalls.amount >= 1 and can_build_structure(self, UnitTypeId.FACTORY, UnitTypeId.FACTORYFLYING, 1):
         await smart_build(self, UnitTypeId.FACTORY)
     
     if self.townhalls.amount >= 1 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 1):

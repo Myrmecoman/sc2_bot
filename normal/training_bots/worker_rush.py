@@ -25,7 +25,7 @@ class WorkerRushBot(BotAI):
         
         if total_health > 260:               # attack again when enough health
             for worker in self.workers:
-                if worker.weapon_cooldown > 0:
+                if worker.weapon_cooldown > 5:
                     mf = mfs.closest_to(worker)
                     worker.gather(mf)
                 elif worker.health + worker.shield > 10:

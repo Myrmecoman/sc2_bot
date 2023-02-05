@@ -42,13 +42,16 @@ def wall_as_fast_as_possible(self: BotAI):
 def are_we_worker_rushed(self : BotAI):
     enemies: Units = self.enemy_units.of_type({UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE})
     if enemies.empty:
-        return 0, None
+        return 0, None, 0
     
     dangerous_units = 0
+    pathable_units = 0
     for e in enemies:
         if e.distance_to(self.structures.closest_to(e)) < 10:
             dangerous_units += 1
-    return dangerous_units, enemies.first.position
+            if e.position3d.z + 0.01 < self.townhalls.first.position3d.z:
+                pathable_units += 1
+    return dangerous_units, enemies.first.position, dangerous_units - pathable_units
 
 
 def counter_worker_rush(self : BotAI, w, pos):
@@ -59,9 +62,9 @@ def counter_worker_rush(self : BotAI, w, pos):
     self.worker_rushed = True
     counter = 0
 
-    for i in self.workers:
+    for i in self.workers.sorted_by_distance_to(self.start_location):
 
-        if i.tag in self.out_of_fight_workers:
+        if i.tag in self.out_of_fight_workers or i.is_constructing_scv:
             continue
 
         if i.health <= 6:
@@ -74,36 +77,38 @@ def counter_worker_rush(self : BotAI, w, pos):
                 mf: Unit = mfs.closest_to(i)
                 i(AbilityId.SMART, mf)
 
-        if i.weapon_cooldown > 8: # attack again a little before we are actually a able to (quicker attacks)
+        if i.weapon_cooldown > 5: # attack again a little before we are actually a able to (quicker attacks)
             mf: Unit = mfs.closest_to(i)
             i(AbilityId.SMART, mf)
             continue
 
         counter += 1
-        if counter > w + 2: # only pull their amount + 2
+        if counter > w + 1: # only pull their amount + 1
             break
         i.attack(pos)
 
     return True
 
 
-def pull_back_workers(self : BotAI, w):
-    if w == 0:
-        mfs: Units = self.mineral_field.closer_than(10, self.townhalls.first)
-        for i in self.workers.idle:
+def pull_back_workers(self : BotAI):
+    mfs: Units = self.mineral_field.closer_than(10, self.townhalls.first)
+    for i in self.workers.idle:
+        mf: Unit = mfs.closest_to(i)
+        i.gather(mf)
+    for i in self.workers:
+        if self.enemy_units.find_by_tag(i.order_target) is not None: # if the scv is targeting an enemy unit, leave it
             mf: Unit = mfs.closest_to(i)
             i.gather(mf)
-        for i in self.workers:
-            if self.enemy_units.find_by_tag(i.order_target) is not None: # if the scv is targeting an enemy unit, leave it
-                mf: Unit = mfs.closest_to(i)
-                i.gather(mf)
 
 
 def worker_rush_defense(self : BotAI):
-    w, pos = are_we_worker_rushed(self)
+    w, pos, enemies_inside_wall = are_we_worker_rushed(self)
+    if self.army_advisor.is_wall_closed():
+        w = enemies_inside_wall
     if counter_worker_rush(self, w, pos):
         if len(self.build_order) != 0:
             self.build_order = []
     if self.worker_rushed:
         wall_as_fast_as_possible(self)
-        pull_back_workers(self, w)
+        if w == 0:
+            pull_back_workers(self)
