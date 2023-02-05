@@ -13,12 +13,13 @@ Repairing not full life mechanical units.<br/>
 Army grouping and bio splitting before attacking.<br/>
 Better unit production (counter enemy army).<br/>
 Do something about the APM bug, which cancels some actions.<br/>
-Fix cloak air grid.<br/>
 Defend Zozo and sharkbot worker rushes.<br/>
 Stop kitting against units that match our attack range (or reduce it).<br/>
 Print cyclones against skytoss + handle cyclone micro.<br/>
 Go factory before CC.<br/>
 Play more mecha.<br/>
 Siege the tanks while on defense waiting.<br/>
+Fix locked banshees.<br/>
+Add abilities in pathing (biles, scans for detection).<br/>
 
 SmoothBrain Bot now uses the SC2MapAnalysis api : https://github.com/spudde123/SC2MapAnalysis/tree/develop
