@@ -190,7 +190,7 @@ class Pool12AllIn(BotAI):
                 unit(AbilityId.SMART, target, True)
 
     def micro_army(self, unit: Unit) -> None:
-        if unit.is_idle or unit.is_using_ability(AbilityId.EFFECT_INJECTLARVA):
+        if (unit.is_idle or unit.is_using_ability(AbilityId.EFFECT_INJECTLARVA)) and self.time > 140:
             if self.enemy_structures:
                 unit.attack(self.enemy_structures.random.position)
             elif any(self.invisible_enemy_start_locations):

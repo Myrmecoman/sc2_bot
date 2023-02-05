@@ -117,18 +117,14 @@ def repair_buildings(self : BotAI):
 
     if self.worker_rushed and not self.army_advisor.is_wall_closed():
         return
-
+    
     # adding tag if needs to be repaired, else remove it
     for i in self.structures.ready:
-        nb_enemy_workers_around = 0
-        for w in self.enemy_units.of_type({UnitTypeId.SCV, UnitTypeId.PROBE, UnitTypeId.DRONE}):
-            if w.distance_to(i) < 5:
-                nb_enemy_workers_around += 1
-        if i.health_percentage > 0.9 or nb_enemy_workers_around > 2:
+        if i.health_percentage > 0.9:
             if i.tag in self.worker_assigned_to_repair.keys():
                 self.worker_assigned_to_repair.pop(i.tag)
             continue
-        if i.tag in self.worker_assigned_to_repair:
+        if i.tag in self.worker_assigned_to_repair.keys():
             continue
         self.worker_assigned_to_repair[i.tag] = []
     
@@ -141,7 +137,7 @@ def repair_buildings(self : BotAI):
         new_value = []
         for i in range(total_repairing):
             worker_tag = self.worker_assigned_to_repair[key][i]
-            if self.units.of_type({UnitTypeId.SCV}).find_by_tag(worker_tag) is not None:
+            if self.workers.find_by_tag(worker_tag) is not None:
                 new_value.append(worker_tag)
         self.worker_assigned_to_repair[key] = new_value
         total_repairing = len(self.worker_assigned_to_repair[key])
@@ -154,11 +150,7 @@ def repair_buildings(self : BotAI):
         for wo in sorted_workers:
             if wo.is_repairing or wo.is_constructing_scv:
                 continue
-            if wo.distance_to(i) < 30 and total_repairing < 2:
-                wo(AbilityId.EFFECT_REPAIR_SCV, i)
-                self.worker_assigned_to_repair[key].append(wo.tag)
-                total_repairing = len(self.worker_assigned_to_repair[key])
-            if wo.distance_to(i) < 30 and total_repairing < 4 and i.health_percentage < 0.5:
+            if wo.distance_to(i) < 30 and (total_repairing < 2 or total_repairing < 4 and i.health_percentage < 0.5):
                 wo(AbilityId.EFFECT_REPAIR_SCV, i)
                 self.worker_assigned_to_repair[key].append(wo.tag)
                 total_repairing = len(self.worker_assigned_to_repair[key])

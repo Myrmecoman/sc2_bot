@@ -27,13 +27,13 @@ human = Human(Race.Terran, "Human", True)
 #enemy = Computer(Race.Protoss, Difficulty.CheatInsane)
 #enemy = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBotEnemy")
 #enemy = Bot(Race.Terran, MassReaper(), "MassReaper")
-enemy = Bot(Race.Protoss, WorkerRushBot(), "WorkerRush")
+#enemy = Bot(Race.Protoss, WorkerRushBot(), "WorkerRush")
 #enemy = Bot(Race.Terran, ResumeBuilding(), "ResumeBuilding")
 #enemy = Bot(Race.Terran, SingleWorker(), "SingleWorker")
 #enemy = Bot(Race.Terran, Lift(), "Lift")
 #enemy = Bot(Race.Terran, LiftTopRight(), "LiftTopRight")
 #enemy = Bot(Race.Terran, PFrush(), "PFrush")
-#enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")
+enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")
 
 # Start game
 if __name__ == "__main__":

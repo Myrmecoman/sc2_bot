@@ -20,6 +20,8 @@ class WorkerRushBot(BotAI):
 
         if total_health < 240:               # leave if we don't have any more health
             for worker in self.workers:
+                if worker.is_returning or (isinstance(worker.order_target, int) and self.mineral_field.find_by_tag(worker.order_target) is not None):
+                    continue
                 mf = mfs.closest_to(worker)
                 worker.gather(mf)
         

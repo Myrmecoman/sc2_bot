@@ -14,7 +14,7 @@ Army grouping and bio splitting before attacking.<br/>
 Better unit production (counter enemy army).<br/>
 Build B2 uphill against zerg.<br/>
 Do something about the APM bug, which cancels some actions.<br/>
-Lift CC if too damaged.<br/>
+Fix lift CC if too damaged.<br/>
 Fix cloak air grid.<br/>
 Defend Zozo and sharkbot worker rushes.<br/>
 Stop kitting against units that match our attack range (or reduce it).<br/>

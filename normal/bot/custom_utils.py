@@ -210,7 +210,7 @@ async def handle_supply(self : BotAI):
         print("Could not place depot")
 
 
-def handle_command_centers(self : BotAI):
+async def handle_command_centers(self : BotAI):
     # Manage orbital energy and drop mules if we need minerals, else keep for scanning
     if self.minerals < 800:
         for oc in self.townhalls(UnitTypeId.ORBITALCOMMAND).filter(lambda x: x.energy >= 50):
@@ -225,20 +225,23 @@ def handle_command_centers(self : BotAI):
             break
     # lift base if too much damaged and in danger
     for cc in self.townhalls.ready:
-        if (cc.type_id == UnitTypeId.COMMANDCENTER or cc.type_id == UnitTypeId.ORBITALCOMMAND) and cc.health < 600 and self.enemy_units.closest_distance_to(cc) < 8:
+        if (cc.type_id == UnitTypeId.COMMANDCENTER or cc.type_id == UnitTypeId.ORBITALCOMMAND) and cc.health < 600 and (self.enemy_units.amount > 0 and self.enemy_units.closest_distance_to(cc) < 8):
             if cc.is_using_ability(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND):
                 cc(AbilityId.CANCEL_MORPHORBITAL)
             if cc.is_using_ability(AbilityId.COMMANDCENTERTRAIN_SCV):
                 cc(AbilityId.CANCEL_LAST)
+            self.lifted_cc_pos[cc.tag] = cc.position
             cc(AbilityId.LIFT)
             continue
-        if (cc.type_id == UnitTypeId.COMMANDCENTERFLYING or cc.type_id == UnitTypeId.ORBITALCOMMANDFLYING) and (cc.health < 600 or self.enemy_units.closest_distance_to(cc) < 8):
-            cc.move(self.start_location)
-            continue
-        expo_pos = get_safest_expansion(self)
-        if (cc.type_id == UnitTypeId.COMMANDCENTERFLYING or cc.type_id == UnitTypeId.ORBITALCOMMANDFLYING) and cc.health >= 600 and self.enemy_units.closest_distance_to(cc) > 8 and expo_pos is not None:
-            cc(AbilityId.LAND, expo_pos)
-
+        if cc.type_id == UnitTypeId.COMMANDCENTERFLYING or cc.type_id == UnitTypeId.ORBITALCOMMANDFLYING:
+            if cc.health < 600 or (self.enemy_units.amount > 0 and self.enemy_units.closest_distance_to(cc) < 8):
+                cc.move(self.start_location.towards(self.game_info.map_center, 6))
+            else:
+                expo_pos = self.lifted_cc_pos[cc.tag]
+                if cc.distance_to(expo_pos) < 1:
+                    cc(AbilityId.LAND, expo_pos)
+                else:
+                    cc.move(expo_pos)
 
 def build_worker(self : BotAI):
     if not self.can_afford(UnitTypeId.SCV) or self.townhalls.amount == 0 or self.workers.amount > 70 or self.workers.amount >= self.townhalls.amount * 22:
@@ -255,11 +258,12 @@ async def get_safest_expansion(self : BotAI):
     if location is not None and (self.enemy_units.amount == 0 or self.enemy_units.closest_distance_to(location) > 12) and (self.enemy_structures.amount == 0 or self.enemy_structures.closest_distance_to(location) > 12):
         return location
     
+    already_taken_positions = [pos.position for pos in self.townhalls.not_flying]
     closest_dist = 100000
     closest_expansion = None
     for i in self.expansion_locations_list:
         dist = i.distance_to(self.start_location)
-        if (location is None or i.position != location.position) and dist < closest_dist:
+        if (location is None or i.position != location.position) and dist < closest_dist and i.position not in already_taken_positions:
             closest_dist = dist
             closest_expansion = i
     
