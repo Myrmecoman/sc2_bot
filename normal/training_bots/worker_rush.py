@@ -24,7 +24,7 @@ class WorkerRushBot(BotAI):
                 if worker.weapon_cooldown > 0:
                     mf = mfs.closest_to(worker)
                     worker.gather(mf)
-                elif worker.health > 10:
+                elif worker.health + worker.shield > 10:
                     worker.attack(self.enemy_start_locations[0])
                 else:
                     mf = mfs.closest_to(worker)

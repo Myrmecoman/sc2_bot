@@ -8,13 +8,17 @@ from sc2.bot_ai import BotAI
 
 
 def wall_as_fast_as_possible(self: BotAI):
+
+    if self.army_advisor.is_wall_closed():
+        return
+
     dist = 10000
     for e in self.enemy_units:
         new_dist = self.structures.closest_distance_to(e)
         if new_dist < dist:
             dist = new_dist
     if dist > 8:
-        # at this point, we are worker rushed and the enemies got repelled. Close the wall quick with the closest non constructing SCV, check the we have a depot and the barracks
+        # at this point, we are worker rushed and the enemies got repelled. Close the wall quick with the closest non constructing SCV, check that we have a depot and the barracks
         # getting ramp wall positions
         depot_placement_positions: FrozenSet[Point2] = self.main_base_ramp.corner_depots
         depots: Units = self.structures.of_type({UnitTypeId.SUPPLYDEPOT, UnitTypeId.SUPPLYDEPOTLOWERED})
@@ -36,8 +40,6 @@ def wall_as_fast_as_possible(self: BotAI):
 
 
 def are_we_worker_rushed(self : BotAI):
-    if self.time > 80:
-        return 0, None
     enemies: Units = self.enemy_units.of_type({UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE})
     if enemies.empty:
         return 0, None

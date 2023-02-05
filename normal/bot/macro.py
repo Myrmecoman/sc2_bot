@@ -115,7 +115,7 @@ async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId):
 
 def repair_buildings(self : BotAI):
 
-    if self.worker_rushed:
+    if self.worker_rushed and not self.army_advisor.is_wall_closed():
         return
 
     # adding tag if needs to be repaired, else remove it
@@ -246,7 +246,7 @@ async def macro(self : BotAI):
             active_refineries += 1
     
     # build refineries
-    if self.townhalls.amount >= 1 and active_refineries < 1 and self.can_afford(UnitTypeId.REFINERY) and self.structures(UnitTypeId.BARRACKS).amount > 0:
+    if self.townhalls.amount >= 1 and active_refineries < 1 and self.can_afford(UnitTypeId.REFINERY) and self.structures(UnitTypeId.BARRACKS).amount > 0 and (not self.worker_rushed or self.army_advisor.is_wall_closed()):
         await build_gas(self)
     if self.townhalls.amount >= 2 and active_refineries < 2 and self.can_afford(UnitTypeId.REFINERY):
         await build_gas(self)

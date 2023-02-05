@@ -55,7 +55,7 @@ def build_add_on(self : BotAI, type, add_on_type):
     for u in self.structures(type).ready.idle:
         if not u.has_add_on and self.can_afford(add_on_type):
             addon_points = points_to_build_addon(u.position)
-            if all(self.in_map_bounds(addon_point) and self.in_placement_grid(addon_point) and self.in_pathing_grid(addon_point) for addon_point in addon_points): # if no need to lift for addon, build it
+            if all(self.in_map_bounds(addon_point) and self.in_placement_grid(addon_point) and self.in_pathing_grid(addon_point) for addon_point in addon_points) and self.army_advisor.is_wall_closed(): # if no need to lift for addon, and walled, build it
                 u.build(add_on_type)
             elif self.enemy_race == Race.Terran or (u.position == self.main_base_ramp.barracks_in_middle and self.army_advisor.total_enemy_supply() < self.supply_army and not self.army_advisor.zergling_rushed and not self.worker_rushed):
                 u(AbilityId.LIFT)
@@ -179,7 +179,7 @@ def handle_upgrades(self : BotAI):
 HALF_OFFSET = Point2((.5, .5))
 async def handle_supply(self : BotAI):
 
-    if self.supply_cap >= 200 or (self.worker_rushed and self.structures.of_type({UnitTypeId.SUPPLYDEPOT, UnitTypeId.SUPPLYDEPOTLOWERED}).amount < 2):
+    if self.supply_cap >= 200 or (self.worker_rushed and not self.army_advisor.is_wall_closed()):
         return
 
     if self.supply_left < 6 and self.supply_used >= 14 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 2 and len(self.build_order) == 0:
@@ -223,12 +223,27 @@ def handle_command_centers(self : BotAI):
         for cc in self.townhalls(UnitTypeId.COMMANDCENTER).idle:
             cc(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND)
             break
+    # lift base if too much damaged and in danger
+    for cc in self.townhalls.ready:
+        if (cc.type_id == UnitTypeId.COMMANDCENTER or cc.type_id == UnitTypeId.ORBITALCOMMAND) and cc.health < 600 and self.enemy_units.closest_distance_to(cc) < 8:
+            if cc.is_using_ability(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND):
+                cc(AbilityId.CANCEL_MORPHORBITAL)
+            if cc.is_using_ability(AbilityId.COMMANDCENTERTRAIN_SCV):
+                cc(AbilityId.CANCEL_LAST)
+            cc(AbilityId.LIFT)
+            continue
+        if (cc.type_id == UnitTypeId.COMMANDCENTERFLYING or cc.type_id == UnitTypeId.ORBITALCOMMANDFLYING) and (cc.health < 600 or self.enemy_units.closest_distance_to(cc) < 8):
+            cc.move(self.start_location)
+            continue
+        expo_pos = get_safest_expansion(self)
+        if (cc.type_id == UnitTypeId.COMMANDCENTERFLYING or cc.type_id == UnitTypeId.ORBITALCOMMANDFLYING) and cc.health >= 600 and self.enemy_units.closest_distance_to(cc) > 8 and expo_pos is not None:
+            cc(AbilityId.LAND, expo_pos)
 
 
 def build_worker(self : BotAI):
     if not self.can_afford(UnitTypeId.SCV) or self.townhalls.amount == 0 or self.workers.amount > 70 or self.workers.amount >= self.townhalls.amount * 22:
         return
-    if self.worker_rushed and (self.structures(UnitTypeId.BARRACKS).amount == 0 or self.structures(UnitTypeId.BARRACKS).first.is_idle): # buy barracks and marine quick, save money buy cutting SCVs production
+    if self.worker_rushed and ((self.structures(UnitTypeId.BARRACKS).amount == 0 or self.structures(UnitTypeId.BARRACKS).first.is_idle) or not self.army_advisor.is_wall_closed()): # buy barracks and marine quick, save money buy cutting SCVs production
         return
     for cc in self.townhalls:
         if cc.is_idle:# and len(cc.orders) == 0:
