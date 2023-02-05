@@ -50,70 +50,6 @@ def smart_attack(self : BotAI, units : Units, unit : Unit, position_or_enemy, en
         return
 
 
-def are_we_worker_rushed(self : BotAI):
-
-    if self.time > 80:
-        return 0, None
-
-    enemies: Units = self.enemy_units.visible.of_type({UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE})
-    if enemies.empty:
-        return 0, None
-
-    dangerous_units = 0
-    for e in enemies:
-        if e.distance_to(self.structures.closest_to(e)) < 10:
-            dangerous_units += 1
-    return dangerous_units, enemies.first.position
-
-
-def counter_worker_rush(self : BotAI):
-    w, pos = are_we_worker_rushed(self)
-    if (w < 3 and not self.worker_rushed) or w == 0:
-        return False
-
-    mfs: Units = self.mineral_field.closer_than(12, self.start_location)
-    self.worker_rushed = True
-    counter = 0
-    for i in self.workers:
-
-        if i.distance_to(self.start_location) > 40 or i.weapon_cooldown > 0:
-            mf: Unit = mfs.closest_to(i)
-            i(AbilityId.SMART, mf)
-            continue
-
-        if i.health <= 10 and not self.attack_with_all_worker:
-            mf: Unit = mfs.closest_to(i)
-            i(AbilityId.SMART, mf)
-            continue
-        counter += 1
-        if counter > w + 2: # only pull their amount + 2
-            break
-        i.attack(pos)
-    if counter <= w + 2:
-        self.attack_with_all_worker = True
-        for i in self.workers:
-            if i.weapon_cooldown <= 0:
-                i.attack(pos)
-    else:
-        self.attack_with_all_worker = False
-    return True
-
-
-def worker_rush_ended(self : BotAI):
-    w, _ = are_we_worker_rushed(self)
-    if w == 0 and self.worker_rushed:
-        self.attack_with_all_worker = False
-        mfs: Units = self.mineral_field.closer_than(10, self.townhalls.first)
-        for i in self.workers.idle:
-            mf: Unit = mfs.closest_to(i)
-            i.gather(mf)
-        for i in self.workers:
-            if self.enemy_units.find_by_tag(i.order_target) is not None: # if the scv is targeting an enemy unit, leave it
-                mf: Unit = mfs.closest_to(i)
-                i.gather(mf)
-
-
-
 def are_we_idle_at_enemy_base(self):
     return self.enemy_structures.amount == 0 and self.enemy_units.amount == 0 and self.units.closest_distance_to(self.enemy_start_locations[0]) < 3
 
@@ -198,10 +134,6 @@ def defend_building_workers(self : BotAI):
 
 
 async def micro(self : BotAI):
-
-    if counter_worker_rush(self):
-        worker_rush_ended(self)
-        return
 
     prevent_PF_rush(self)
     defend_building_workers(self)

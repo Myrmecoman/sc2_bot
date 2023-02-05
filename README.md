@@ -21,5 +21,7 @@ Stop kitting against units that match our attack range (or reduce it).<br/>
 Print cyclones against skytoss + handle cyclone micro.<br/>
 Go factory before CC.<br/>
 Play more mecha.<br/>
+Siege the tanks while on defense waiting.<br/>
+Fix no gas after worker rush.<br/>
 
 SmoothBrain Bot now uses the SC2MapAnalysis api : https://github.com/spudde123/SC2MapAnalysis/tree/develop

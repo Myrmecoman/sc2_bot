@@ -13,10 +13,9 @@ from bot.macro import macro
 from bot.production import produce
 from bot.speedmining import split_workers
 from bot.speedmining import get_speedmining_positions
-from bot.speedmining import micro_worker
-from bot.speedmining import handle_refineries
-from bot.speedmining import dispatch_workers
+from bot.speedmining import mine
 from bot.army_composition_advisor import ArmyCompositionAdvisor
+from bot.worker_rush_defense import worker_rush_defense
 
 from itertools import chain
 
@@ -55,7 +54,7 @@ class SmoothBrainBot(BotAI):
         self.game_step: int = 2                      # 2 usually, 6 vs human
         self.build_starport_techlab_first = True     # always make techlab first on starport, good against dts, skytoss, burrowed roaches, and siege tanks
         self.worker_rushed = False                   # tells if we are worker rushed, if the enemies were repelled we should close the wall quick before they come back
-        self.attack_with_all_worker = False          # in case of worker rushes
+        self.out_of_fight_workers = []               # workers with too low hp to defend a worker rush
         self.scouting_units = []                     # lists units assigned to scout so that we do not cancel their orders
         self.worker_assigned_to_repair = {}          # lists workers assigned to repair
         self.worker_assigned_to_follow = {}          # lists workers assigned to follow objects (used to prevent Planetary Fortress rushes)
@@ -120,9 +119,6 @@ class SmoothBrainBot(BotAI):
     
 
     async def on_step(self, iteration: int):
-
-        print(str(self.worker_rushed) + " : " + str(iteration))
-
         if self.townhalls.amount == 0 or self.supply_used == 0:
             await self._client.chat_send("gg", team_only=False)
             await self.client.leave()
@@ -132,9 +128,8 @@ class SmoothBrainBot(BotAI):
         self.army_advisor.provide_advices()
         self.resource_by_tag = {unit.tag: unit for unit in chain(self.mineral_field, self.gas_buildings)}
 
-        dispatch_workers(self)
-        micro_worker(self)
-        handle_refineries(self, iteration)
+        worker_rush_defense(self)
+        mine(self, iteration)
 
         handle_depot_status(self)
         handle_command_centers(self)
@@ -142,8 +137,6 @@ class SmoothBrainBot(BotAI):
 
         if not self.worker_rushed:
             await early_build_order(self)
-        elif len(self.build_order) != 0:
-            self.build_order = []
 
         await macro(self)
         build_worker(self)

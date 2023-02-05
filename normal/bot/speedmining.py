@@ -155,3 +155,9 @@ def split_workers(self : BotAI) -> None:
             worker = self.workers.tags_not_in(assigned).furthest_to(patch) # the remaining workers get longer paths, this usually results in double stacking without having to spam orders
         worker.gather(patch)
         assigned.add(worker.tag)
+
+
+def mine(self : BotAI, iteration):
+    dispatch_workers(self)
+    micro_worker(self)
+    handle_refineries(self, iteration)
