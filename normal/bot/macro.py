@@ -246,6 +246,9 @@ async def macro(self : BotAI):
             active_refineries += 1
     
     # build refineries
+    if self.worker_rushed and not self.army_advisor.is_wall_closed() and self.structures.of_type(UnitTypeId.REFINERY).amount != 0:
+        if self.structure_type_build_progress(UnitTypeId.REFINERY) < 1:
+            self.structures.of_type(UnitTypeId.REFINERY).first(AbilityId.CANCEL)
     if self.townhalls.amount >= 1 and active_refineries < 1 and self.can_afford(UnitTypeId.REFINERY) and self.structures(UnitTypeId.BARRACKS).amount > 0 and (not self.worker_rushed or self.army_advisor.is_wall_closed()):
         await build_gas(self)
     if self.townhalls.amount >= 2 and active_refineries < 2 and self.can_afford(UnitTypeId.REFINERY):

@@ -27,7 +27,7 @@ def wall_as_fast_as_possible(self: BotAI):
             depot_placement_positions: Set[Point2] = {d for d in depot_placement_positions if depots.closest_distance_to(d) > 1}
         if len(depot_placement_positions) > 0:
             for w in self.workers:
-                if not w.is_constructing_scv and self.can_afford(UnitTypeId.SUPPLYDEPOT):
+                if not w.is_constructing_scv and self.can_afford(UnitTypeId.SUPPLYDEPOT) and len(depot_placement_positions) > 0:
                     w.build(UnitTypeId.SUPPLYDEPOT, depot_placement_positions.pop())
         barracks_in_wall = False
         for b in self.structures(UnitTypeId.BARRACKS):
@@ -74,7 +74,7 @@ def counter_worker_rush(self : BotAI, w, pos):
                 mf: Unit = mfs.closest_to(i)
                 i(AbilityId.SMART, mf)
 
-        if i.weapon_cooldown > 0:
+        if i.weapon_cooldown > 8: # attack again a little before we are actually a able to (quicker attacks)
             mf: Unit = mfs.closest_to(i)
             i(AbilityId.SMART, mf)
             continue

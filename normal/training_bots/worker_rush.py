@@ -8,6 +8,10 @@ class WorkerRushBot(BotAI):
     RACE: Race = Race.Terran
 
     async def on_step(self, iteration: int):
+
+        if iteration < 25:
+            return
+
         total_health = 0
         for w in self.workers:
             total_health += w.health + w.shield
