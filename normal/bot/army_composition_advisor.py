@@ -58,7 +58,7 @@ class ArmyCompositionAdvisor():
     def is_wall_closed(self):
         barrack_ok = False
         for b in self.bot.structures(UnitTypeId.BARRACKS):
-            if b.position == self.bot.main_base_ramp.barracks_in_middle:
+            if b.position.distance_to(self.bot.main_base_ramp.barracks_in_middle) <= 3:
                 barrack_ok = True
                 break
         depot_placement_positions: FrozenSet[Point2] = self.bot.main_base_ramp.corner_depots

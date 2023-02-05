@@ -55,8 +55,9 @@ def build_add_on(self : BotAI, type, add_on_type):
     for u in self.structures(type).ready.idle:
         if not u.has_add_on and self.can_afford(add_on_type):
             addon_points = points_to_build_addon(u.position)
-            if all(self.in_map_bounds(addon_point) and self.in_placement_grid(addon_point) and self.in_pathing_grid(addon_point) for addon_point in addon_points) and self.army_advisor.is_wall_closed(): # if no need to lift for addon, and walled, build it
-                u.build(add_on_type)
+            if all(self.in_map_bounds(addon_point) and self.in_placement_grid(addon_point) and self.in_pathing_grid(addon_point) for addon_point in addon_points):
+                if self.army_advisor.is_wall_closed() or (not self.worker_rushed and not self.army_advisor.zergling_rushed): # if no need to lift for addon, and walled, build it
+                    u.build(add_on_type)
             elif self.enemy_race == Race.Terran or (u.position == self.main_base_ramp.barracks_in_middle and self.army_advisor.total_enemy_supply() < self.supply_army and not self.army_advisor.zergling_rushed and not self.worker_rushed):
                 u(AbilityId.LIFT)
             break
