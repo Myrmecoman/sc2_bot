@@ -8,6 +8,7 @@ For any units not declared here we take values from the API instead when adding 
 
 from typing import Dict
 from sc2.ids.unit_typeid import UnitTypeId
+from sc2.ids.effect_id import EffectId
 
 INFLUENCE_COSTS: Dict[UnitTypeId, Dict] = {
     UnitTypeId.ADEPT: {"AirCost": 0, "GroundCost": 9, "AirRange": 0, "GroundRange": 5},
@@ -256,5 +257,23 @@ INFLUENCE_COSTS: Dict[UnitTypeId, Dict] = {
     },
     UnitTypeId.OVERSEERSIEGEMODE: {
         "DetectionRange": 17,
+    },
+}
+
+INFLUENCE_COSTS_EFFECTS: Dict[EffectId, Dict] = {
+    EffectId.RAVAGERCORROSIVEBILECP: {
+        "AirCost": 50,
+        "GroundCost": 50,
+        "AirRange": 0,
+        "GroundRange": 0,
+    },
+    EffectId.PSISTORMPERSISTENT: {
+        "AirCost": 80,
+        "GroundCost": 80,
+        "AirRange": 1.5,
+        "GroundRange": 1.5,
+    },
+    EffectId.SCANNERSWEEP: {
+        "DetectionRange": 13,
     },
 }

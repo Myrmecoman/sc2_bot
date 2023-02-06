@@ -9,10 +9,13 @@ from typing import Dict, List, Optional
 
 import numpy as np
 from bot.pathing.consts import ALL_STRUCTURES
-from bot.pathing.influence_costs import INFLUENCE_COSTS
+from bot.pathing.influence_costs import INFLUENCE_COSTS, INFLUENCE_COSTS_EFFECTS
 from sc2.bot_ai import BotAI
 from sc2.position import Point2
 from sc2.unit import Unit
+from sc2.game_state import EffectData
+from sc2.ids.unit_typeid import UnitTypeId
+from sc2.ids.effect_id import EffectId
 from scipy import spatial
 
 from MapAnalyzer import MapData
@@ -54,8 +57,9 @@ class Pathing:
             else:
                 self._add_unit_influence(unit)
 
-        # TODO: Add effect influence like storm, ravager biles, nukes etc
-        #   `for effect in self.ai.state.effects: ...`
+        for effect in self.ai.state.effects:
+            if effect.id in INFLUENCE_COSTS_EFFECTS.keys():
+                self._add_effect_influence(effect)
 
         if self.debug:
             self.map_data.draw_influence_in_game(self.reaper_grid, lower_threshold=1)
@@ -207,6 +211,33 @@ class Pathing:
                 50, # arbitrary value
                 values["DetectionRange"] + RANGE_BUFFER_BUILDING,
                 self.cloak_air_grid,)
+
+
+    def _add_effect_influence(self, effect: EffectData) -> None:
+        """
+        Add effect influence to the relevant grids.
+        @return:
+        """
+        if effect.id in INFLUENCE_COSTS_EFFECTS:
+            values: Dict = INFLUENCE_COSTS_EFFECTS[effect.id]
+            if "GroundCost" in values.keys():
+                (self.ground_grid, self.reaper_grid) = self._add_cost_to_multiple_grids(
+                    next(iter(effect.positions)),
+                    values["GroundCost"],
+                    values["GroundRange"] + RANGE_BUFFER_BUILDING,
+                    [self.ground_grid, self.reaper_grid],)
+            if "AirCost" in values.keys():
+                self.air_grid = self._add_cost(
+                    next(iter(effect.positions)),
+                    values["AirCost"],
+                    values["AirRange"] + RANGE_BUFFER_BUILDING,
+                    self.air_grid,)
+            if "DetectionRange" in values.keys():
+                self.cloak_air_grid = self._add_cost(
+                    next(iter(effect.positions)),
+                    50, # arbitrary value
+                    values["DetectionRange"] + RANGE_BUFFER_BUILDING,
+                    self.cloak_air_grid,)
 
 
     def _add_cost(
