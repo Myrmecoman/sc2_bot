@@ -74,12 +74,14 @@ def counter_worker_rush(self : BotAI, w, pos):
             if i.is_carrying_minerals:
                 i(AbilityId.SMART, self.townhalls.first)
             else:
-                mf: Unit = mfs.closest_to(i)
-                i(AbilityId.SMART, mf)
+                if mfs.amount > 0:
+                    mf: Unit = mfs.closest_to(i)
+                    i(AbilityId.SMART, mf)
 
         if i.weapon_cooldown > 5: # attack again a little before we are actually a able to (quicker attacks)
-            mf: Unit = mfs.closest_to(i)
-            i(AbilityId.SMART, mf)
+            if mfs.amount > 0:
+                mf: Unit = mfs.closest_to(i)
+                i(AbilityId.SMART, mf)
             continue
 
         counter += 1
@@ -91,7 +93,9 @@ def counter_worker_rush(self : BotAI, w, pos):
 
 
 def pull_back_workers(self : BotAI):
-    mfs: Units = self.mineral_field.closer_than(10, self.townhalls.first)
+    mfs: Units = self.mineral_field.closer_than(12, self.townhalls.first)
+    if mfs.amount == 0:
+        return
     for i in self.workers.idle:
         mf: Unit = mfs.closest_to(i)
         i.gather(mf)
