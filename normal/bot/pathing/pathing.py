@@ -23,6 +23,7 @@ from MapAnalyzer import MapData
 # When adding enemies to the grids add a bit extra range so our units stay out of trouble
 RANGE_BUFFER: float = 3.0
 RANGE_BUFFER_BUILDING: float = 3.0
+RANGE_BUFFER_EFFECTS: float = 1.0
 
 
 class Pathing:
@@ -224,19 +225,19 @@ class Pathing:
                 (self.ground_grid, self.reaper_grid) = self._add_cost_to_multiple_grids(
                     next(iter(effect.positions)),
                     values["GroundCost"],
-                    values["GroundRange"] + RANGE_BUFFER_BUILDING,
+                    values["GroundRange"] + RANGE_BUFFER_EFFECTS,
                     [self.ground_grid, self.reaper_grid],)
             if "AirCost" in values.keys():
                 self.air_grid = self._add_cost(
                     next(iter(effect.positions)),
                     values["AirCost"],
-                    values["AirRange"] + RANGE_BUFFER_BUILDING,
+                    values["AirRange"] + RANGE_BUFFER_EFFECTS,
                     self.air_grid,)
             if "DetectionRange" in values.keys():
                 self.cloak_air_grid = self._add_cost(
                     next(iter(effect.positions)),
                     50, # arbitrary value
-                    values["DetectionRange"] + RANGE_BUFFER_BUILDING,
+                    values["DetectionRange"] + RANGE_BUFFER_EFFECTS,
                     self.cloak_air_grid,)
 
 

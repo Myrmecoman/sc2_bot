@@ -264,14 +264,14 @@ INFLUENCE_COSTS_EFFECTS: Dict[EffectId, Dict] = {
     EffectId.RAVAGERCORROSIVEBILECP: {
         "AirCost": 50,
         "GroundCost": 50,
-        "AirRange": 0,
-        "GroundRange": 0,
+        "AirRange": 1,
+        "GroundRange": 1,
     },
     EffectId.PSISTORMPERSISTENT: {
         "AirCost": 80,
         "GroundCost": 80,
-        "AirRange": 1.5,
-        "GroundRange": 1.5,
+        "AirRange": 2,
+        "GroundRange": 2,
     },
     EffectId.SCANNERSWEEP: {
         "DetectionRange": 13,
