@@ -34,11 +34,6 @@ class Banshees:
 
         for unit in units:
 
-            # choose right grid
-            grid = normal_grid
-            if unit.is_cloaked and unit.energy > 3:
-                grid = cloak_grid
-            
             # give a roaming spot to the banshee, it will harass continuously this place autonomously
             if not unit.tag in self.roam_spot.keys():
                 spot = self.get_free_roaming_spot()
@@ -58,29 +53,21 @@ class Banshees:
                     target = self.pick_enemy_target(close_enemies)
 
             # in danger, run away
-            if not self.pathing.is_position_safe(grid, unit.position): # if cloaked we are detected, otherwise it is imminent danger
-                if unit.is_cloaked and self.pathing.is_position_safe(normal_grid, unit.position): # if spotted but no danger still attack things
-                    pass
-                else:
-                    if self.ai.already_pending_upgrade(UpgradeId.BANSHEECLOAK) == 1 and self.ai.can_cast(unit, AbilityId.BEHAVIOR_CLOAKON_BANSHEE):
-                        unit(AbilityId.BEHAVIOR_CLOAKON_BANSHEE)
-                    self.move_to_safety(unit, grid)
+            if unit.is_cloaked and unit.energy > 3:
+                if not self.pathing.is_position_safe(cloak_grid, unit.position) and not self.pathing.is_position_safe(normal_grid, unit.position):
+                    self.move_to_safety(unit, cloak_grid)
                     continue
+            elif not self.pathing.is_position_safe(normal_grid, unit.position):
+                if self.ai.already_pending_upgrade(UpgradeId.BANSHEECLOAK) == 1 and self.ai.can_cast(unit, AbilityId.BEHAVIOR_CLOAKON_BANSHEE):
+                    unit(AbilityId.BEHAVIOR_CLOAKON_BANSHEE)
+                self.move_to_safety(unit, normal_grid)
+                continue
 
             # attack
             if target and unit.weapon_cooldown == 0:
                 unit.attack(target)
                 continue
-
-            # get to the target
-            if unit.distance_to(attack_target) > unit.air_range:
-                # only make pathing queries if enemies are close
-                if close_enemies:
-                    unit.move(self.pathing.find_path_next_point(unit.position, attack_target, grid))
-                else:
-                    unit.move(attack_target)
-            else:
-                unit.move(attack_target)
+            unit.move(attack_target)
 
 
     def move_to_safety(self, unit: Unit, grid: np.ndarray):
