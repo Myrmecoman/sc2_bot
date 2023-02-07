@@ -11,7 +11,6 @@ If you are a novice bot writter I suggest you pick some ideas from this bot and 
 
 Repairing not full life mechanical units.<br/>
 Army grouping and bio splitting before attacking.<br/>
-Better unit production (counter enemy army).<br/>
 Do something about the APM bug, which cancels some actions.<br/>
 Defend Zozo and sharkbot worker rushes.<br/>
 Stop kitting against units that match our attack range (or reduce it).<br/>
@@ -19,8 +18,6 @@ Print cyclones against skytoss + handle cyclone micro.<br/>
 Go factory before CC.<br/>
 Play more mecha.<br/>
 Siege the tanks while on defense waiting.<br/>
-Fix locked banshees.<br/>
-Add abilities in pathing (biles, scans for detection).<br/>
-There is a bug where the bot does not make addons.<br/>
+There is a bug where the bot does not resume building construction.<br/>
 
 SmoothBrain Bot now uses the SC2MapAnalysis api : https://github.com/spudde123/SC2MapAnalysis/tree/develop
