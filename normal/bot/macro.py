@@ -165,7 +165,7 @@ def cancel_building(self : BotAI):
 def resume_building_construction(self : BotAI):
     # checking if it is actually safe to resume construction
     for i in self.structures_without_construction_SCVs:
-        if (self.enemy_units.amount != 0 and self.enemy_units.closest_distance_to(i)) < 8 and not (self.army_advisor.is_wall_closed() and (self.worker_rushed or self.army_advisor.zergling_rushed)):
+        if (self.enemy_units.amount != 0 and self.enemy_units.closest_distance_to(i)) < 8 or (not self.army_advisor.is_wall_closed() and (self.worker_rushed or self.army_advisor.zergling_rushed)):
             return
     
     # update dictionary if building or worker died

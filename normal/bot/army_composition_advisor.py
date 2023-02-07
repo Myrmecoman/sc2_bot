@@ -61,11 +61,18 @@ class ArmyCompositionAdvisor():
             if b.position.distance_to(self.bot.main_base_ramp.barracks_in_middle) <= 3:
                 barrack_ok = True
                 break
+        
+        depot_ok = False
+        for d in self.bot.structures.of_type({UnitTypeId.SUPPLYDEPOT, UnitTypeId.SUPPLYDEPOTLOWERED}):
+            if d.position.distance_to(self.bot.main_base_ramp.depot_in_middle) < 1:
+                depot_ok = True
+                break
+
         depot_placement_positions: FrozenSet[Point2] = self.bot.main_base_ramp.corner_depots
         depots: Units = self.bot.structures.of_type({UnitTypeId.SUPPLYDEPOT, UnitTypeId.SUPPLYDEPOTLOWERED})
         if depots:
             depot_placement_positions: Set[Point2] = {d for d in depot_placement_positions if depots.closest_distance_to(d) > 1}
-        return len(depot_placement_positions) == 0 and barrack_ok
+        return len(depot_placement_positions) == 0 and (barrack_ok or depot_ok)
 
     
     def amount_of_enemies_of_type(self, type : UnitTypeId):
