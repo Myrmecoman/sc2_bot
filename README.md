@@ -18,6 +18,6 @@ Print cyclones against skytoss + handle cyclone micro.<br/>
 Go factory before CC.<br/>
 Play more mecha.<br/>
 Siege the tanks while on defense waiting.<br/>
-There is a bug where the bot does not resume building construction.<br/>
+Fix raven dropping turrets even on useless units like changelings.<br/>
 
 SmoothBrain Bot now uses the SC2MapAnalysis api : https://github.com/spudde123/SC2MapAnalysis/tree/develop

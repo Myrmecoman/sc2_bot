@@ -84,14 +84,16 @@ def prevent_PF_rush(self : BotAI):
     if enemy_flying_structures.amount == 0 or self.workers.gathering.amount == 0:
         return
 
-    # updating all flying buildings
-    for i in enemy_flying_structures:
-        if not i.tag in self.worker_assigned_to_follow.keys():
-            self.worker_assigned_to_follow[i.tag] = -1
+    # remove dead buildings or with dead SCV
     keys = [i for i in self.worker_assigned_to_follow.keys()]
     for i in keys:
         if enemy_flying_structures.find_by_tag(i) is None or self.workers.find_by_tag(enemy_flying_structures.find_by_tag(i)) is None:
             self.worker_assigned_to_follow.pop(i, None)
+
+    # updating all flying buildings
+    for i in enemy_flying_structures:
+        if not i.tag in self.worker_assigned_to_follow.keys():
+            self.worker_assigned_to_follow[i.tag] = -1
 
     # if no worker assigned, give one and remember it
     for i in self.structures:
