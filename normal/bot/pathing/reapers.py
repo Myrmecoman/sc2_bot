@@ -2,6 +2,7 @@ from typing import Optional
 
 import numpy as np
 from bot.pathing.consts import ALL_STRUCTURES, ATTACK_TARGET_IGNORE, DANGEROUS_STRUCTURES
+from bot.pathing.order_utils import is_already_attacking, is_already_attack_moving_to
 from bot.pathing.pathing import Pathing
 from sc2.bot_ai import BotAI
 from sc2.ids.ability_id import AbilityId
@@ -55,11 +56,22 @@ class Reapers:
                     target = self.pick_enemy_target(close_enemies)
 
             if target and unit.weapon_cooldown == 0:
-                unit.attack(target)
+                if not is_already_attacking(unit, target):
+                    unit.attack(target)
                 continue
 
-            # no target and in danger, run away
-            if not self.pathing.is_position_safe(grid, unit.position):
+            # no target and in danger, run away - unless the thing threatening us both outranges
+            # AND isn't slower than us, in which case backing off between shots is futile (can't
+            # out-range or out-run it) and just wastes movement; hold and trade instead. Reapers
+            # are fast enough that this is a no-op against almost everything - it only kicks in
+            # for the rare case something both outranges and outruns them. real_speed (not
+            # movement_speed) because that accounts for buffs/upgrades currently active
+            futile_to_kite: bool = (
+                target is not None
+                and target.ground_range > unit.ground_range
+                and target.real_speed >= unit.real_speed
+            )
+            if not futile_to_kite and not self.pathing.is_position_safe(grid, unit.position):
                 self.move_to_safety(unit, grid)
                 continue
 
@@ -71,7 +83,8 @@ class Reapers:
                 else:
                     unit.move(attack_target)
             else:
-                unit.attack(attack_target)
+                if not is_already_attack_moving_to(unit, attack_target):
+                    unit.attack(attack_target)
 
 
     def move_to_safety(self, unit: Unit, grid: np.ndarray):
@@ -112,7 +125,7 @@ class Reapers:
         enemy_ground_units_in_grenade_range: Units = close_enemies.filter(
             lambda unit: unit.type_id not in ALL_STRUCTURES
             and unit.type_id not in ATTACK_TARGET_IGNORE
-            and unit.distance_to(unit) < self.reaper_grenade_range
+            and unit.distance_to(r) < self.reaper_grenade_range
         )
 
         if enemy_ground_units_in_grenade_range and (r.is_attacking or r.is_moving):

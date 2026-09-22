@@ -39,9 +39,9 @@ class SmoothBrainFlat48(BotAI):
         self.client.game_step = self.game_step
         self.client.raw_affects_selection = True
         top_right = Point2((self.game_info.playable_area.right, self.game_info.playable_area.top))
-        bottom_right = Point2((self.game_info.playable_area.right, 0))
-        bottom_left = Point2((0, 0))
-        top_left = Point2((0, self.game_info.playable_area.top))
+        bottom_right = Point2((self.game_info.playable_area.right, self.game_info.playable_area.y))
+        bottom_left = Point2((self.game_info.playable_area.x, self.game_info.playable_area.y))
+        top_left = Point2((self.game_info.playable_area.x, self.game_info.playable_area.top))
         self.map_corners = [top_right, bottom_right, bottom_left, top_left]
 
 

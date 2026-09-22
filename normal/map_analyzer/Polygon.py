@@ -1,75 +1,13 @@
 from functools import lru_cache
-from typing import List, Set, Tuple, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, List, Set, Union
 
 import numpy as np
-from loguru import logger
-from numpy import int64, ndarray
+from numpy import ndarray
 from sc2.position import Point2
 from scipy.ndimage import center_of_mass
 
 if TYPE_CHECKING:
-    from MapAnalyzer import MapData, Region
-
-
-class Buildables:
-    """
-
-    Represents the Buildable Points in a :class:`.Polygon`,
-
-    "Lazy" class that will only update information when it is needed
-
-    Tip:
-        :class:`.BuildablePoints` that belong to a :class:`.ChokeArea`
-
-        are always the edges, this is useful for walling off
-
-    """
-
-    def __init__(self, polygon):
-        self.polygon = polygon
-        self.points = None
-
-    @property
-    def free_pct(self) -> float:
-        """
-
-        A simple method for knowing what % of the points is left available out of the total
-
-        """
-        if self.points is None:
-            logger.warning("BuildablePoints needs to update first")
-            self.update()
-        return len(self.points) / len(self.polygon.points)
-
-    def update(self) -> None:
-        """
-
-        To be called only by :class:`.Polygon`, this ensures that updates are done in a lazy fashion,
-
-        the update is evaluated only when there is need for the information, otherwise it is ignored
-
-        """
-        parr = self.polygon.map_data.points_to_numpy_array(self.polygon.points)
-        # passing safe false to reduce the warnings,
-        # which are irrelevant in this case
-        [
-            self.polygon.map_data.add_cost(
-                position=(unit.position.x, unit.position.y),
-                radius=unit.radius * 0.9,
-                grid=parr,
-                safe=False,
-            )
-            for unit in self.polygon.map_data.bot.all_units.not_flying
-        ]
-        buildable_indices = np.where(parr == 1)
-        buildable_points = []
-        _points = list(self.polygon.map_data.indices_to_points(buildable_indices))
-        placement_grid = self.polygon.map_data.placement_arr.T
-        for p in _points:
-            if p[0] < placement_grid.shape[0] and p[1] < placement_grid.shape[1]:
-                if placement_grid[p] == 1:
-                    buildable_points.append(p)
-        self.points = list(map(Point2, buildable_points))
+    from map_analyzer import MapData, Region
 
 
 class Polygon:
@@ -94,7 +32,6 @@ class Polygon:
         self.is_region = False
         self.areas = []  # set by map_data / Region
         self.map_data.polygons.append(self)
-        self._buildables = Buildables(polygon=self)
 
     @property
     def top(self):
@@ -113,36 +50,26 @@ class Polygon:
         return min(self.points, key=lambda x: x[0])
 
     @property
-    def buildables(self) -> Buildables:
-        """
-
-        :rtype: :class:`.BuildablePoints`
-
-        Is a responsible for holding and updating the buildable points of it's respected :class:`.Polygon`
-
-        """
-        self._buildables.update()
-        return self._buildables
-
-    @property
     def regions(self) -> List["Region"]:
         """
 
         :rtype: List[:class:`.Region`]
 
-        Filters out every Polygon that is not a region, and is inside / bordering with ``self``
+        Filters out every Polygon that is not a region,
+        and is inside / bordering with ``self``
 
         """
-        from MapAnalyzer.Region import Region
+        from map_analyzer.Region import Region
 
         if len(self.areas) > 0:
             return [r for r in self.areas if isinstance(r, Region)]
         return []
 
     def calc_areas(self) -> None:
-        # This is called by MapData, at a specific point in the sequence of compiling the map
-        # this method uses where_all which means
-        # it should be called at the end of the map compilation when areas are populated
+        # This is called by MapData, at a specific point in the
+        # sequence of compiling the map this method uses where_all
+        # which means it should be called at the end of the map
+        # compilation when areas are populated
 
         areas = self.areas
         for point in self.outer_perimeter:

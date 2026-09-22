@@ -39,7 +39,7 @@ async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId):
         # try to place at a few positions
         for i in range(30):
             position = cc.position.towards_with_random_angle(Point2((x, y)), 11, (math.pi / 3))
-            position.rounded.offset(HALF_OFFSET)
+            position = position.rounded.offset(HALF_OFFSET)
             if await self.can_place_single(type, position):
                 await self.build(type, near=position, max_distance=4)
                 return

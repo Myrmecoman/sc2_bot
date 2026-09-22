@@ -13,7 +13,7 @@ DEBUG: bool = False
 
 
 class MassReaper(BotAI):
-    # In pathing we are going to use MapAnalyzer's pathing module
+    # In pathing we are going to use our own grid-based pathing module
     # Here we will add enemy influence, and create pathing methods
     # Our reapers will have access to this class
     pathing: Pathing

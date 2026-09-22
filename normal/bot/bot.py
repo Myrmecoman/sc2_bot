@@ -7,6 +7,8 @@ from bot.custom_utils import handle_depot_status
 from bot.custom_utils import handle_upgrades
 from bot.custom_utils import handle_supply
 from bot.custom_utils import handle_command_centers
+from bot.custom_utils import get_rally_point
+from bot.custom_utils import update_rally_points
 from bot.build_order import early_build_order
 from bot.micro import micro
 from bot.macro import macro
@@ -16,6 +18,7 @@ from bot.speedmining import get_speedmining_positions
 from bot.speedmining import mine
 from bot.army_composition_advisor import ArmyCompositionAdvisor
 from bot.worker_rush_defense import worker_rush_defense
+from bot.scouting import scout
 
 from itertools import chain
 
@@ -26,6 +29,7 @@ from sc2.position import Point2
 from sc2.data import Race
 from sc2.unit import Unit
 from bot.pathing.pathing import Pathing
+from bot.pathing.pathing_fallback import Pathing as PathingFallback
 from bot.pathing.reapers import Reapers
 from bot.pathing.bio import Bio
 from bot.pathing.medivacs import Medivacs
@@ -33,6 +37,7 @@ from bot.pathing.ravens import Ravens
 from bot.pathing.flying_vikings import FlyingVikings
 from bot.pathing.banshees import Banshees
 from bot.pathing.tanks import Tanks
+from bot.pathing.cyclones import Cyclones
 
 
 # bot code --------------------------------------------------------------------------------------------------------
@@ -47,6 +52,7 @@ class SmoothBrainBot(BotAI):
     flying_vikings: FlyingVikings
     banshees: Banshees
     tanks: Tanks
+    cyclones: Cyclones
 
     def __init__(self):
         self.unit_command_uses_self_do = False
@@ -54,9 +60,10 @@ class SmoothBrainBot(BotAI):
         self.game_step: int = 2                      # 2 usually, 6 vs human
         self.build_starport_techlab_first = True     # always make techlab first on starport, good against dts, skytoss, burrowed roaches, and siege tanks
         self.worker_rushed = False                   # tells if we are worker rushed, if the enemies were repelled we should close the wall quick before they come back
-        self.out_of_fight_workers = []               # workers with too low hp to defend a worker rush
+        self.worker_rush_clear_since = None           # timestamp since the worker rush threat has been gone, used to eventually stand down
         self.scouting_units = []                     # lists units assigned to scout so that we do not cancel their orders
         self.worker_assigned_to_repair = {}          # lists workers assigned to repair
+        self.worker_assigned_to_repair_mech = {}     # lists workers assigned to repair damaged mechanical army units
         self.worker_assigned_to_follow = {}          # lists workers assigned to follow objects (used to prevent Planetary Fortress rushes)
         self.worker_assigned_to_defend = {}          # lists workers assigned to defend other workers during construction
         self.worker_assigned_to_resume_building = {} # lists workers assigned to resume the construction of a building
@@ -68,30 +75,35 @@ class SmoothBrainBot(BotAI):
         self.produce_from_factories = True
         self.produce_from_barracks = True
         self.scouted_at_time = -1000                 # save moment at which we scouted, so that we don't re-send units every frame
-        
+        self.factory_prioritized = False              # tracks whether we've already moved the factory earlier in the build order this game
+        self.rally_wall_state = None                  # tracks the (wall_closed, under_threat) state our production rally points were last set for
+        self.scout_worker_tag = None                  # tag of the worker currently on the early scouting run, if any
+        self.enemy_base_scouted = False                # whether we've gotten vision of the enemy's main at least once
+        self.scout_attempted = False                   # only ever send one scouting worker per game
+        self.army_attacking = False                    # sticky: are we currently committed to attacking (see micro.py)
+        self.build_order_critical_worker = None        # tag of the worker currently committed to the scripted build order, if any - kept safe from flee_worker_threats so the two don't fight over it
+        self.gas_bank_high = False                      # sticky: are we currently sitting on so much banked vespene that building more refineries is pointless (see macro.py)
+
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY]
 
         super().__init__()
 
 
     async def on_before_start(self) -> None:
-        
-        #if self.enemy_race == Race.Terran:
-        #    self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.REFINERY, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.FACTORY, UnitTypeId.SUPPLYDEPOT, UnitTypeId.COMMANDCENTER]
 
         self.client.game_step = self.game_step
         self.client.raw_affects_selection = True
         top_right = Point2((self.game_info.playable_area.right, self.game_info.playable_area.top))
-        bottom_right = Point2((self.game_info.playable_area.right, 0))
-        bottom_left = Point2((0, 0))
-        top_left = Point2((0, self.game_info.playable_area.top))
+        bottom_right = Point2((self.game_info.playable_area.right, self.game_info.playable_area.y))
+        bottom_left = Point2((self.game_info.playable_area.x, self.game_info.playable_area.y))
+        top_left = Point2((self.game_info.playable_area.x, self.game_info.playable_area.top))
         self.map_corners = [top_right, bottom_right, bottom_left, top_left]
 
 
     # set rally point at start location, therefore our units will spawn on the right side of the wall
     async def on_building_construction_started(self, unit: Unit):
         if unit.type_id == UnitTypeId.BARRACKS or unit.type_id == UnitTypeId.FACTORY or unit.type_id == UnitTypeId.STARPORT:
-            unit(AbilityId.SMART, self.start_location)
+            unit(AbilityId.SMART, get_rally_point(self))
 
 
     async def on_start(self) -> None:
@@ -104,7 +116,14 @@ class SmoothBrainBot(BotAI):
         self.speedmining_positions = get_speedmining_positions(self)
         split_workers(self)
 
-        self.pathing = Pathing(self, False)
+        try:
+            self.pathing = Pathing(self, False)
+        except Exception as e:
+            # map_analyzer's compiled C extension isn't usable on this machine (missing/wrong
+            # platform/ABI-mismatched .so are all failures that have happened before on AI Arena's
+            # servers) - fall back to the pure-Python implementation rather than forfeit the game
+            print(f"[PATHING] map_analyzer unavailable ({e!r}), using pure-Python pathing fallback")
+            self.pathing = PathingFallback(self, False)
         self.reapers = Reapers(self, self.pathing)
         self.bio = Bio(self, self.pathing)
         self.medivacs = Medivacs(self, self.pathing)
@@ -112,6 +131,7 @@ class SmoothBrainBot(BotAI):
         self.flying_vikings = FlyingVikings(self, self.pathing)
         self.banshees = Banshees(self, self.pathing)
         self.tanks = Tanks(self, self.pathing)
+        self.cyclones = Cyclones(self, self.pathing)
     
 
     async def on_unit_destroyed(self, unit_tag: int):
@@ -130,6 +150,7 @@ class SmoothBrainBot(BotAI):
         self.resource_by_tag = {unit.tag: unit for unit in chain(self.mineral_field, self.gas_buildings)}
 
         worker_rush_defense(self)
+        await scout(self)
         mine(self, iteration)
 
         handle_depot_status(self)

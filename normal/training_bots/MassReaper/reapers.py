@@ -110,7 +110,7 @@ class Reapers:
         enemy_ground_units_in_grenade_range: Units = close_enemies.filter(
             lambda unit: unit.type_id not in ALL_STRUCTURES
             and unit.type_id not in ATTACK_TARGET_IGNORE
-            and unit.distance_to(unit) < self.reaper_grenade_range
+            and unit.distance_to(r) < self.reaper_grenade_range
         )
 
         if enemy_ground_units_in_grenade_range and (r.is_attacking or r.is_moving):

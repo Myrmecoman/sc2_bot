@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Optional
 from bot.pathing.consts import ALL_STRUCTURES, ATTACK_TARGET_IGNORE, DANGEROUS_STRUCTURES
+from bot.pathing.order_utils import is_already_attacking
 from bot.pathing.pathing import Pathing
 from sc2.bot_ai import BotAI
 from sc2.position import Point2
@@ -58,14 +59,15 @@ class Banshees:
                     self.move_to_safety(unit, cloak_grid)
                     continue
             elif not self.pathing.is_position_safe(normal_grid, unit.position):
-                if self.ai.already_pending_upgrade(UpgradeId.BANSHEECLOAK) == 1 and self.ai.can_cast(unit, AbilityId.BEHAVIOR_CLOAKON_BANSHEE):
+                if self.ai.already_pending_upgrade(UpgradeId.BANSHEECLOAK) == 1 and await self.ai.can_cast(unit, AbilityId.BEHAVIOR_CLOAKON_BANSHEE):
                     unit(AbilityId.BEHAVIOR_CLOAKON_BANSHEE)
                 self.move_to_safety(unit, normal_grid)
                 continue
 
             # attack
             if target and unit.weapon_cooldown == 0:
-                unit.attack(target)
+                if not is_already_attacking(unit, target):
+                    unit.attack(target)
                 continue
             unit.move(attack_target)
 

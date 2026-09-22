@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Optional
 from bot.pathing.consts import ALL_STRUCTURES, ATTACK_TARGET_IGNORE, DANGEROUS_STRUCTURES
+from bot.pathing.order_utils import is_already_attacking, is_already_attack_moving_to
 from bot.pathing.pathing import Pathing
 from sc2.bot_ai import BotAI
 from sc2.position import Point2
@@ -32,9 +33,11 @@ class Medivacs:
             # get to the target
             if self.ai.units.not_flying.amount > 0:
                 pos = self.ai.units.not_flying.closest_to(attack_target)
-                unit.attack(pos)
+                if not is_already_attacking(unit, pos):
+                    unit.attack(pos)
             else:
-                unit.attack(attack_target)
+                if not is_already_attack_moving_to(unit, attack_target):
+                    unit.attack(attack_target)
 
     def move_to_safety(self, unit: Unit, grid: np.ndarray):
         """

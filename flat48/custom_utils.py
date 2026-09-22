@@ -54,8 +54,8 @@ async def handle_supply(self : BotAI):
             for i in range(20):
                 position = cc.position.towards_with_random_angle(Point2((x, y)), 8, (math.pi / 3))
                 position_further = cc.position.towards_with_random_angle(Point2((x, y)), 11, (math.pi / 3))
-                position.rounded.offset(HALF_OFFSET)
-                position_further.rounded.offset(HALF_OFFSET)
+                position = position.rounded.offset(HALF_OFFSET)
+                position_further = position_further.rounded.offset(HALF_OFFSET)
                 if await self.can_place_single(UnitTypeId.SUPPLYDEPOT, position):
                     await self.build(UnitTypeId.SUPPLYDEPOT, near=position, max_distance=4)
                     return

@@ -1,15 +1,14 @@
 from functools import lru_cache
-
-from typing import List, TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 import numpy as np
 from sc2.position import Point2
 
-from MapAnalyzer.Polygon import Polygon
-from MapAnalyzer.constructs import MDRamp, ChokeArea
+from map_analyzer.constructs import ChokeArea, MDRamp
+from map_analyzer.Polygon import Polygon
 
 if TYPE_CHECKING:
-    from MapAnalyzer import MapData
+    from map_analyzer import MapData
 
 
 class Region(Polygon):

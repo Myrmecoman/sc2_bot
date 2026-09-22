@@ -64,19 +64,17 @@ def counter_worker_rush(self : BotAI, w, pos):
 
     for i in self.workers.sorted_by_distance_to(self.start_location):
 
-        if i.tag in self.out_of_fight_workers or i.is_constructing_scv:
+        if i.is_constructing_scv:
             continue
 
         if i.health <= 6:
-            if not i.tag in self.out_of_fight_workers:
-                self.out_of_fight_workers.append(i.tag)
-                continue
             if i.is_carrying_minerals:
                 i(AbilityId.SMART, self.townhalls.first)
             else:
                 if mfs.amount > 0:
                     mf: Unit = mfs.closest_to(i)
                     i(AbilityId.SMART, mf)
+            continue
 
         if i.weapon_cooldown > 5: # attack again a little before we are actually a able to (quicker attacks)
             if mfs.amount > 0:
@@ -99,12 +97,9 @@ def pull_back_workers(self : BotAI):
     for i in self.workers.idle:
         mf: Unit = mfs.closest_to(i)
         i.gather(mf)
-    for i in self.workers:
-        if self.enemy_units.find_by_tag(i.order_target) is not None: # if the scv is targeting an enemy unit, leave it
-            mf: Unit = mfs.closest_to(i)
-            i.gather(mf)
 
 
+WORKER_RUSH_CLEAR_DELAY = 30.0 # how long the threat must be gone before we stand down for good
 def worker_rush_defense(self : BotAI):
     w, pos, enemies_inside_wall = are_we_worker_rushed(self)
     if self.army_advisor.is_wall_closed():
@@ -112,6 +107,21 @@ def worker_rush_defense(self : BotAI):
     if counter_worker_rush(self, w, pos):
         if len(self.build_order) != 0:
             self.build_order = []
+
+    if self.worker_rushed:
+        # worker_rushed used to be permanent for the rest of the game once set - a single early
+        # rush attempt, even a failed one, would leave pull_back_workers() overriding normal
+        # worker distribution forever. Only stand down after the threat's been gone a while,
+        # so we don't flip back to normal mining mid-fight if they're just regrouping.
+        if w == 0:
+            if self.worker_rush_clear_since is None:
+                self.worker_rush_clear_since = self.time
+            elif self.time - self.worker_rush_clear_since > WORKER_RUSH_CLEAR_DELAY:
+                self.worker_rushed = False
+                self.worker_rush_clear_since = None
+        else:
+            self.worker_rush_clear_since = None
+
     if self.worker_rushed:
         wall_as_fast_as_possible(self)
         if w == 0:

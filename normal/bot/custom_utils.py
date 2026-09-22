@@ -115,63 +115,78 @@ def handle_depot_status(self : BotAI):
 
 
 def handle_upgrades(self : BotAI):
+    # light/swarm-heavy matchups (already reflected in marine_marauder_ratio - more marines wanted
+    # means the enemy leans light/numerous) get more value from armor first, since it gives more
+    # effective HP against many small hits; tankier matchups get more from weapons first
+    prioritize_armor = self.army_advisor.marine_marauder_ratio > 0.7
+
     bartechs = self.structures(UnitTypeId.BARRACKSTECHLAB).ready.idle
     for tech in bartechs:
-        if self.can_afford(UpgradeId.SHIELDWALL) and self.already_pending_upgrade(UpgradeId.SHIELDWALL) == 0:
-            tech.research(UpgradeId.SHIELDWALL)
-        elif self.can_afford(UpgradeId.STIMPACK) and self.already_pending_upgrade(UpgradeId.STIMPACK) == 0:
+        if self.can_afford(UpgradeId.STIMPACK) and self.already_pending_upgrade(UpgradeId.STIMPACK) == 0:
             tech.research(UpgradeId.STIMPACK)
+        elif self.can_afford(UpgradeId.SHIELDWALL) and self.already_pending_upgrade(UpgradeId.SHIELDWALL) == 0:
+            tech.research(UpgradeId.SHIELDWALL)
         elif self.can_afford(UpgradeId.PUNISHERGRENADES) and self.already_pending_upgrade(UpgradeId.PUNISHERGRENADES) == 0:
             tech.research(UpgradeId.PUNISHERGRENADES)
-    
+
     sttechs = self.structures(UnitTypeId.STARPORTTECHLAB).ready.idle
     for tech in sttechs:
         if self.can_afford(UpgradeId.BANSHEECLOAK) and self.already_pending_upgrade(UpgradeId.BANSHEECLOAK) == 0:
             tech.research(UpgradeId.BANSHEECLOAK)
 
     engis = self.structures(UnitTypeId.ENGINEERINGBAY).ready.idle
+    infantry_tiers = [
+        (UpgradeId.TERRANINFANTRYWEAPONSLEVEL1, UpgradeId.TERRANINFANTRYARMORSLEVEL1),
+        (UpgradeId.TERRANINFANTRYWEAPONSLEVEL2, UpgradeId.TERRANINFANTRYARMORSLEVEL2),
+        (UpgradeId.TERRANINFANTRYWEAPONSLEVEL3, UpgradeId.TERRANINFANTRYARMORSLEVEL3),
+    ]
     for engi in engis:
-        if self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1) == 0:
-            engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)
-        elif self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) == 0:
-            engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL1)
-        elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2) == 0:
-            engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL2) 
-        elif self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL2) == 0:
-            engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL2) 
-        elif self.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 0:
-            engi.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3)
-        elif self.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL3) == 0:
-            engi.research(UpgradeId.TERRANINFANTRYARMORSLEVEL3)
-        elif self.can_afford(UpgradeId.TERRANBUILDINGARMOR) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.TERRANBUILDINGARMOR) == 0:
-            engi.research(UpgradeId.TERRANBUILDINGARMOR)
-        elif self.can_afford(UpgradeId.HISECAUTOTRACKING) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.HISECAUTOTRACKING) == 0:
-            engi.research(UpgradeId.HISECAUTOTRACKING)
-    
-    if self.minerals < 600 or self.vespene < 600:
+        for weapon, armor in infantry_tiers:
+            first, second = (armor, weapon) if prioritize_armor else (weapon, armor)
+            if self.can_afford(first) and self.already_pending_upgrade(first) == 0:
+                engi.research(first)
+                break
+            if self.can_afford(second) and self.already_pending_upgrade(second) == 0:
+                engi.research(second)
+                break
+        else:
+            if self.can_afford(UpgradeId.TERRANBUILDINGARMOR) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.TERRANBUILDINGARMOR) == 0:
+                engi.research(UpgradeId.TERRANBUILDINGARMOR)
+            elif self.can_afford(UpgradeId.HISECAUTOTRACKING) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.HISECAUTOTRACKING) == 0:
+                engi.research(UpgradeId.HISECAUTOTRACKING)
+
+    # vehicle/ship upgrades are only worth researching once we actually have mech units to benefit -
+    # a flat mineral/gas bank threshold doesn't track that at all
+    mech_army : Units = self.units.of_type({
+        UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED, UnitTypeId.CYCLONE, UnitTypeId.THOR,
+        UnitTypeId.VIKINGFIGHTER, UnitTypeId.VIKINGASSAULT, UnitTypeId.BANSHEE, UnitTypeId.BATTLECRUISER,
+    })
+    if mech_army.amount < 3:
         return
 
     armories = self.structures(UnitTypeId.ARMORY).ready.idle
+    vehicle_tiers = [
+        (UpgradeId.TERRANVEHICLEWEAPONSLEVEL1, UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1),
+        (UpgradeId.TERRANVEHICLEWEAPONSLEVEL2, UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL2),
+        (UpgradeId.TERRANVEHICLEWEAPONSLEVEL3, UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL3),
+    ]
     for armo in armories:
-        if self.can_afford(UpgradeId.TERRANVEHICLEWEAPONSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANVEHICLEWEAPONSLEVEL1) == 0:
-            armo.research(UpgradeId.TERRANVEHICLEWEAPONSLEVEL1)
-        elif self.can_afford(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1) == 0:
-            armo.research(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1)
-        elif self.can_afford(UpgradeId.TERRANVEHICLEWEAPONSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANVEHICLEWEAPONSLEVEL2) == 0:
-            armo.research(UpgradeId.TERRANVEHICLEWEAPONSLEVEL2)
-        elif self.can_afford(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL2) == 0:
-            armo.research(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL2)
-        elif self.can_afford(UpgradeId.TERRANVEHICLEWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANVEHICLEWEAPONSLEVEL3) == 0:
-            armo.research(UpgradeId.TERRANVEHICLEWEAPONSLEVEL3)
-        elif self.can_afford(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL3) == 0:
-            armo.research(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL3)
-        elif self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL1) == 0:
-            armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL1)
-        elif self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL2) == 0:
-            armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL2)
-        elif self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL3) == 0:
-            armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL3)
-    
+        for weapon, armor in vehicle_tiers:
+            first, second = (armor, weapon) if prioritize_armor else (weapon, armor)
+            if self.can_afford(first) and self.already_pending_upgrade(first) == 0:
+                armo.research(first)
+                break
+            if self.can_afford(second) and self.already_pending_upgrade(second) == 0:
+                armo.research(second)
+                break
+        else:
+            if self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL1) == 0:
+                armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL1)
+            elif self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL2) == 0:
+                armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL2)
+            elif self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL3) == 0:
+                armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL3)
+
     cores = self.structures(UnitTypeId.FUSIONCORE).ready.idle
     for core in cores:
         continue # not sure if we should buy any upgrade from fusion core since we play bio
@@ -185,7 +200,7 @@ async def handle_supply(self : BotAI):
 
     if self.supply_left < 6 and self.supply_used >= 14 and self.can_afford(UnitTypeId.SUPPLYDEPOT) and self.already_pending(UnitTypeId.SUPPLYDEPOT) < 2 and len(self.build_order) == 0:
 
-        if not self.army_advisor.is_wall_closed() and self.can_place_single(UnitTypeId.SUPPLYDEPOT, self.main_base_ramp.depot_in_middle):
+        if not self.army_advisor.is_wall_closed() and await self.can_place_single(UnitTypeId.SUPPLYDEPOT, self.main_base_ramp.depot_in_middle):
             await self.build(UnitTypeId.SUPPLYDEPOT, near=self.main_base_ramp.depot_in_middle, max_distance=0)
             return
 
@@ -205,8 +220,8 @@ async def handle_supply(self : BotAI):
             for i in range(20):
                 position = cc.position.towards_with_random_angle(Point2((x, y)), 8, (math.pi / 3))
                 position_further = cc.position.towards_with_random_angle(Point2((x, y)), 11, (math.pi / 3))
-                position.rounded.offset(HALF_OFFSET)
-                position_further.rounded.offset(HALF_OFFSET)
+                position = position.rounded.offset(HALF_OFFSET)
+                position_further = position_further.rounded.offset(HALF_OFFSET)
                 if await self.can_place_single(UnitTypeId.SUPPLYDEPOT, position):
                     await self.build(UnitTypeId.SUPPLYDEPOT, near=position, max_distance=4)
                     return
@@ -224,10 +239,11 @@ async def handle_command_centers(self : BotAI):
             if mfs:
                 mf: Unit = max(mfs, key=lambda x: x.mineral_contents)
                 oc(AbilityId.CALLDOWNMULE_CALLDOWNMULE, mf)
-    # Build orbital
+    # Build orbital - not .idle, see early_build_order's identical fix for why
     if self.can_afford(UnitTypeId.ORBITALCOMMAND) and len(self.build_order) == 0:
-        for cc in self.townhalls(UnitTypeId.COMMANDCENTER).idle:
-            cc(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND)
+        for cc in self.townhalls(UnitTypeId.COMMANDCENTER).ready:
+            if not cc.is_using_ability(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND):
+                cc(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND)
             break
     # lift base if too much damaged and in danger
     for cc in self.townhalls.ready:
@@ -276,3 +292,30 @@ async def get_safest_expansion(self : BotAI):
     if closest_expansion is not None:
         return closest_expansion
     return location
+
+
+def get_rally_point(self : BotAI) -> Point2:
+    # avoid rallying units to get stuck outside an unfinished wall
+    if not self.army_advisor.is_wall_closed():
+        return self.start_location
+    # actively under threat: hold right at the wall so units can actually reach anything
+    # stacking up on the other side - the generic forward-staging point below has no relation
+    # to where the ramp/wall actually is and can easily sit out of weapon range of our own door
+    if self.worker_rushed or self.army_advisor.zergling_rushed:
+        return self.main_base_ramp.barracks_in_middle
+    # once safe, rally straight to where the army already gathers/waits - reuses the same forward
+    # staging point micro() uses, so new units merge with the existing army instead of idling alone
+    return self.townhalls.closest_to(self.enemy_start_locations[0]).position.towards(self.enemy_start_locations[0], 10)
+
+
+def update_rally_points(self : BotAI):
+    # re-issuing a rally command every frame for every production structure would just be more
+    # order spam, so only do it when the rally point's determining state actually changes - it
+    # now depends on the rush flags too, not just wall-open/closed, since get_rally_point does
+    state = (self.army_advisor.is_wall_closed(), self.worker_rushed or self.army_advisor.zergling_rushed)
+    if state == self.rally_wall_state:
+        return
+    self.rally_wall_state = state
+    rally: Point2 = get_rally_point(self)
+    for structure in self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT}).ready:
+        structure(AbilityId.SMART, rally)

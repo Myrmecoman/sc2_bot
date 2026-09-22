@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Optional
 from bot.pathing.consts import ALL_STRUCTURES, ATTACK_TARGET_IGNORE, DANGEROUS_STRUCTURES
+from bot.pathing.order_utils import is_already_attacking, is_already_attack_moving_to
 from bot.pathing.pathing import Pathing
 from sc2.bot_ai import BotAI
 from sc2.position import Point2
@@ -32,11 +33,20 @@ class FlyingVikings:
                     target = self.pick_enemy_target(close_enemies)
 
             if target and unit.weapon_cooldown == 0:
-                unit.attack(target)
+                if not is_already_attacking(unit, target):
+                    unit.attack(target)
                 continue
 
-            # in danger, run away
-            if not self.pathing.is_position_safe(grid, unit.position):
+            # in danger, run away - unless the thing threatening us both outranges AND isn't
+            # slower than us, in which case backing off between shots is futile and just wastes
+            # movement; hold and trade instead. real_speed (not movement_speed) because that
+            # accounts for buffs/upgrades currently active on either unit
+            futile_to_kite: bool = (
+                target is not None
+                and target.air_range > unit.air_range
+                and target.real_speed >= unit.real_speed
+            )
+            if not futile_to_kite and not self.pathing.is_position_safe(grid, unit.position):
                 self.move_to_safety(unit, grid)
                 continue
 
@@ -48,7 +58,8 @@ class FlyingVikings:
                 else:
                     unit.move(attack_target)
             else:
-                unit.attack(attack_target)
+                if not is_already_attack_moving_to(unit, attack_target):
+                    unit.attack(attack_target)
 
     def move_to_safety(self, unit: Unit, grid: np.ndarray):
         """

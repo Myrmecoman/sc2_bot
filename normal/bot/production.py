@@ -85,20 +85,32 @@ def produce(self : BotAI):
     if self.produce_from_factories:
         for fac in self.structures(UnitTypeId.FACTORY).ready.idle:
                 if fac.has_techlab:
-                    if self.can_afford(UnitTypeId.SIEGETANK) and self.units(UnitTypeId.SIEGETANK).amount < self.army_advisor.max_tanks:
+                    if self.can_afford(UnitTypeId.SIEGETANK) and self.units.of_type({UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED}).amount < self.army_advisor.max_tanks:
                         fac.build(UnitTypeId.SIEGETANK)
-                elif fac.has_reactor and self.can_afford(UnitTypeId.HELLION):
-                    fac.build(UnitTypeId.HELLION)
-                    if self.can_afford(UnitTypeId.HELLION):
+                    elif self.can_afford(UnitTypeId.CYCLONE) and self.units(UnitTypeId.CYCLONE).amount < self.army_advisor.max_cyclones:
+                        fac.build(UnitTypeId.CYCLONE)
+                elif fac.has_reactor:
+                    if self.can_afford(UnitTypeId.CYCLONE) and self.units(UnitTypeId.CYCLONE).amount < self.army_advisor.max_cyclones:
+                        fac.build(UnitTypeId.CYCLONE)
+                        if self.can_afford(UnitTypeId.CYCLONE) and self.units(UnitTypeId.CYCLONE).amount < self.army_advisor.max_cyclones:
+                            fac.build(UnitTypeId.CYCLONE)
+                    elif self.can_afford(UnitTypeId.HELLION) and self.units(UnitTypeId.HELLION).amount < self.army_advisor.max_hellions:
                         fac.build(UnitTypeId.HELLION)
-                elif self.can_afford(UnitTypeId.HELLION):
+                        if self.can_afford(UnitTypeId.HELLION) and self.units(UnitTypeId.HELLION).amount < self.army_advisor.max_hellions:
+                            fac.build(UnitTypeId.HELLION)
+                elif self.can_afford(UnitTypeId.CYCLONE) and self.units(UnitTypeId.CYCLONE).amount < self.army_advisor.max_cyclones:
+                    fac.build(UnitTypeId.CYCLONE)
+                elif self.can_afford(UnitTypeId.HELLION) and self.units(UnitTypeId.HELLION).amount < self.army_advisor.max_hellions:
                     fac.build(UnitTypeId.HELLION)
-        
+
         for fac in self.structures(UnitTypeId.FACTORY).ready:
             if not fac.has_reactor:
                 continue
-            if len(fac.orders) == 1 and self.can_afford(UnitTypeId.HELLION):
-                fac.build(UnitTypeId.HELLION)
+            if len(fac.orders) == 1:
+                if self.can_afford(UnitTypeId.CYCLONE) and self.units(UnitTypeId.CYCLONE).amount < self.army_advisor.max_cyclones:
+                    fac.build(UnitTypeId.CYCLONE)
+                elif self.can_afford(UnitTypeId.HELLION) and self.units(UnitTypeId.HELLION).amount < self.army_advisor.max_hellions:
+                    fac.build(UnitTypeId.HELLION)
 
     if self.produce_from_barracks:
         total_marines = self.units.of_type({UnitTypeId.MARINE}).amount

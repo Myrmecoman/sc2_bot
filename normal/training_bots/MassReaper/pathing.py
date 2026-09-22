@@ -15,7 +15,7 @@ from sc2.position import Point2
 from sc2.unit import Unit
 from scipy import spatial
 
-from MapAnalyzer import MapData
+from map_analyzer import MapData
 
 # When adding enemies to the grids add a bit extra range so our units stay out of trouble
 RANGE_BUFFER: float = 3.0

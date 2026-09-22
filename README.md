@@ -7,17 +7,10 @@ This bot is able to almost always beat the CheaterInsane AIs against every race.
 
 If you are a novice bot writter I suggest you pick some ideas from this bot and copy a few blocks of code. However I do not recommend to straight up copy it and modify it because you need to understand how everything works else you will break everything. :)
 
+Pathing (grid-based movement, danger-zone avoidance) is implemented in-house at
+`normal/bot/pathing/grid_pathing.py` - no third-party map-analysis library, no compiled C
+extension. This replaced a vendored dependency (SC2MapAnalysis) that caused repeated deployment
+failures on the AI Arena ladder across several different compiled-binary/platform/ABI mismatches.
+
 # TODO
 
-Repairing not full life mechanical units.<br/>
-Army grouping and bio splitting before attacking.<br/>
-Do something about the APM bug, which cancels some actions.<br/>
-Defend Zozo and sharkbot worker rushes.<br/>
-Stop kitting against units that match our attack range (or reduce it).<br/>
-Print cyclones against skytoss + handle cyclone micro.<br/>
-Go factory before CC.<br/>
-Play more mecha.<br/>
-Siege the tanks while on defense waiting.<br/>
-Fix raven dropping turrets even on useless units like changelings.<br/>
-
-SmoothBrain Bot now uses the SC2MapAnalysis api : https://github.com/spudde123/SC2MapAnalysis/tree/develop

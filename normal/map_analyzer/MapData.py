@@ -1,40 +1,32 @@
 import math
-import time
-from itertools import chain
 from functools import lru_cache
-from os import mkdir, path
+from itertools import chain
 from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 from loguru import logger
-from numpy import float64, ndarray
+from numpy import ndarray
 from pkg_resources import DistributionNotFound, get_distribution
 from sc2.bot_ai import BotAI
 from sc2.position import Point2
-from scipy.ndimage import (
-    binary_fill_holes,
-    center_of_mass,
-    generate_binary_structure,
-    label as ndlabel,
-)
+from scipy.ndimage import binary_fill_holes, center_of_mass, generate_binary_structure
+from scipy.ndimage import label as ndlabel
 from scipy.spatial import distance
 
-from MapAnalyzer.Debugger import MapAnalyzerDebugger
-from MapAnalyzer.Pather import MapAnalyzerPather
-from MapAnalyzer.Region import Region
-from MapAnalyzer.utils import get_sets_with_mutual_elements, fix_map_ramps
+from map_analyzer.constructs import ChokeArea, MDRamp, RawChoke, VisionBlockerArea
+from map_analyzer.Debugger import MapAnalyzerDebugger
+from map_analyzer.Pather import MapAnalyzerPather
+from map_analyzer.Region import Region
+from map_analyzer.utils import fix_map_ramps, get_sets_with_mutual_elements
 
+from .cext import CMapChoke, CMapInfo
 from .constants import (
     BINARY_STRUCTURE,
     CORNER_MIN_DISTANCE,
     MAX_REGION_AREA,
     MIN_REGION_AREA,
 )
-
-from .decorators import progress_wrapped
 from .exceptions import CustomDeprecationWarning
-from MapAnalyzer.constructs import ChokeArea, MDRamp, VisionBlockerArea, RawChoke
-from .cext import CMapInfo, CMapChoke
 
 try:
     __version__ = get_distribution("sc2mapanalyzer")
@@ -60,16 +52,16 @@ class MapData:
     ) -> None:
         # store relevant data from api
         self.bot = bot
-        # temporary fix to set ramps correctly if they are broken in burnysc2 due to having
-        # destructables on them. ramp sides don't consider the destructables now,
-        # should update them during the game
+        # temporary fix to set ramps correctly if they are broken in burnysc2
+        # due to having destructables on them. ramp sides don't consider
+        # the destructables now, should update them during the game
         (
             self.bot.game_info.map_ramps,
             self.bot.game_info.vision_blockers,
         ) = fix_map_ramps(self.bot)
 
         self.corner_distance = (
-            corner_distance  # the lower this value is,  the sharper the corners will be
+            corner_distance  # the lower this value is, the sharper the corners will be
         )
         self.arcade = arcade
         self.version = __version__
@@ -135,8 +127,10 @@ class MapData:
         """
         Exposing the computed method
 
-            ``vision_blockers`` are not to be confused with :data:`self.map_vision_blockers`
-            ``vision_blockers`` are the raw data received from ``burnysc2`` and will be processed later on.
+            ``vision_blockers`` are not to be confused with
+            :data:`self.map_vision_blockers`
+            ``vision_blockers`` are the raw data received
+            from ``burnysc2`` and will be processed later on.
 
         """
         return self._vision_blockers
@@ -150,7 +144,8 @@ class MapData:
         """
         :rtype: numpy.ndarray
         Note:
-            To query what is the cost in a certain point, simple do ``my_grid[certain_point]`` where `certain_point`
+            To query what is the cost in a certain point,
+            simple do ``my_grid[certain_point]`` where `certain_point`
 
             is a :class:`tuple` or a :class:`sc2.position.Point2`
 
@@ -159,9 +154,11 @@ class MapData:
 
         This grid will have all non pathable cells set to :class:`numpy.inf`.
 
-        pathable cells will be set to the ``default_weight`` which it's default is ``1``.
+        pathable cells will be set to the ``default_weight``
+        which it's default is ``1``.
 
-        After you get the grid, you can add your own ``cost`` (also known as ``weight`` or ``influence``)
+        After you get the grid, you can add your own ``cost``
+        (also known as ``weight`` or ``influence``)
 
         This grid can, and **should** be reused in the duration of the frame,
         and should be regenerated(**once**) on each frame.
@@ -169,14 +166,17 @@ class MapData:
         Note:
             destructables that has been destroyed will be updated by default,
 
-            the only known use case for ``include_destructables`` usage is illustrated in the first example below
+            the only known use case for ``include_destructables`` usage is
+            illustrated in the first example below
 
         Example:
-            We want to check if breaking the destructables in our path will make it better,
+            We want to check if breaking the destructables in our path
+            will make it better,
 
             so we treat destructables as if they were pathable
 
-            >>> no_destructables_grid = self.get_pyastar_grid(default_weight = 1, include_destructables= False)
+            >>> no_destructables_grid = self.get_pyastar_grid(
+            >>>     default_weight = 1, include_destructables= False)
             >>> # 2 set up a grid with default weight of 300
             >>> custom_weight_grid = self.get_pyastar_grid(default_weight = 300)
 
@@ -200,16 +200,26 @@ class MapData:
         """
         :rtype:  Union[List[:class:`sc2.position.Point2`], None]
 
-        Given an origin point and a radius,  will return a list containing the lowest cost points
-        (if there are more than one)
+        Given an origin point and a radius, will return a list
+        containing the lowest cost points (if there are more than one)
 
         Example:
 
              >>> my_grid = self.get_air_vs_ground_grid()
              >>> position = (100, 80)
              >>> my_radius = 10
-             >>> self.find_lowest_cost_points(from_pos=position, radius=my_radius, grid=my_grid)
-             [(90, 80), (91, 76), (91, 77), (91, 78), (91, 79), (91, 80), (91, 81), (92, 74), (92, 75), (92, 76), (92, 77), (92, 78), (92, 79), (92, 80), (92, 81), (93, 73), (93, 74), (93, 75), (93, 76), (93, 77), (93, 78), (93, 79), (93, 80), (93, 81), (94, 72), (94, 73), (94, 74), (94, 75), (94, 76), (94, 77), (95, 73), (95, 74), (95, 75), (95, 76), (96, 74), (96, 75), (97, 74), (97, 75), (98, 74), (98, 75), (99, 74), (99, 75), (100, 74), (100, 75), (101, 74), (101, 75), (102, 74), (102, 75), (103, 74), (103, 75), (104, 74), (104, 75), (105, 74), (105, 75), (106, 74), (106, 75), (107, 74), (107, 75), (108, 74), (108, 75)]
+             >>> self.find_lowest_cost_points(
+             >>>    from_pos=position, radius=my_radius, grid=my_grid)
+             [(90, 80), (91, 76), (91, 77), (91, 78), (91, 79), (91, 80),
+             (91, 81), (92, 74), (92, 75), (92, 76), (92, 77), (92, 78),
+             (92, 79), (92, 80), (92, 81), (93, 73), (93, 74), (93, 75),
+             (93, 76), (93, 77), (93, 78), (93, 79), (93, 80), (93, 81),
+             (94, 72), (94, 73), (94, 74), (94, 75), (94, 76), (94, 77),
+             (95, 73), (95, 74), (95, 75), (95, 76), (96, 74), (96, 75),
+             (97, 74), (97, 75), (98, 74), (98, 75), (99, 74), (99, 75),
+             (100, 74), (100, 75), (101, 74), (101, 75), (102, 74), (102, 75),
+             (103, 74), (103, 75), (104, 74), (104, 75), (105, 74), (105, 75),
+             (106, 74), (106, 75), (107, 74), (107, 75), (108, 74), (108, 75)]
 
         See Also:
             * :meth:`.MapData.get_pyastar_grid`
@@ -242,9 +252,9 @@ class MapData:
     ) -> ndarray:
         """
         :rtype: numpy.ndarray
-        Climber grid is a grid modified by the c extension, and is used for units that can climb,
+        Climber grid is a grid modified by the c extension,
 
-        such as Reaper, Colossus
+        and is used for units that can climb, such as Reaper, Colossus
 
         This grid can be reused in the duration of the frame,
 
@@ -272,9 +282,8 @@ class MapData:
     def get_air_vs_ground_grid(self, default_weight: float = 100) -> ndarray:
         """
         :rtype: numpy.ndarray
-        ``air_vs_ground`` grid is computed in a way that lowers the cost of nonpathable terrain,
-
-         making air units naturally "drawn" to it.
+        ``air_vs_ground`` grid is computed in a way that lowers the
+         cost of nonpathable terrain, making air units naturally "drawn" to it.
 
         Caution:
             Requesting a grid with a ``default_weight`` of 1 is pointless,
@@ -319,10 +328,12 @@ class MapData:
     ) -> Optional[List[Point2]]:
         """
         :rtype: Union[List[:class:`sc2.position.Point2`], None]
-        Will return the path with lowest cost (sum) given a weighted array (``grid``), ``start`` , and ``goal``.
+        Will return the path with lowest cost (sum) given a
+        weighted array (``grid``), ``start`` , and ``goal``.
 
 
-        **IF NO** ``grid`` **has been provided**, will request a fresh grid from :class:`.Pather`
+        **IF NO** ``grid`` **has been provided**,
+        will request a fresh grid from :class:`.Pather`
 
         If no path is possible, will return ``None``
 
@@ -335,19 +346,22 @@ class MapData:
 
         getting every  n-``th`` point works better in practice
 
-        `` large`` is a boolean that determines whether we are doing pathing with large unit sizes
-        like Thor and Ultralisk. When it's false the pathfinding is using unit size 1, so if
-        you want to a guarantee that a unit with size > 1 fits through the path then large should be True.
+        `` large`` is a boolean that determines whether we are doing pathing
+        with large unit sizes like Thor and Ultralisk. When it's false the
+        pathfinding is using unit size 1, so if you want to a guarantee that a
+        unit with size > 1 fits through the path then large should be True.
 
-        ``smoothing`` tries to do a similar thing on the c side but to the maximum extent possible.
-        it will skip all the waypoints it can if taking the straight line forward is better
-        according to the influence grid
+        ``smoothing`` tries to do a similar thing on the c side but to the maximum
+        extent possible. it will skip all the waypoints it can if taking the
+        straight line forward is better according to the influence grid
 
         Example:
             >>> my_grid = self.get_pyastar_grid()
             >>> # start / goal could be any tuple / Point2
             >>> st, gl = (50,75) , (100,100)
-            >>> path = self.pathfind(start=st,goal=gl,grid=my_grid, large=False, smoothing=False, sensitivity=3)
+            >>> path = self.pathfind(
+            >>>     start=st, goal=gl, grid=my_grid, large=False,
+            >>>     smoothing=False, sensitivity=3)
 
         See Also:
             * :meth:`.MapData.get_pyastar_grid`
@@ -374,17 +388,20 @@ class MapData:
     ) -> Optional[Tuple[List[List[Point2]], Optional[List[int]]]]:
         """
         :rtype: Union[List[List[:class:`sc2.position.Point2`]], None]
-        Will return the path with lowest cost (sum) given a weighted array (``grid``), ``start`` , and ``goal``.
-        Returns a tuple where the first part is a list of path segments, second part is list of 2 tags for the
-        nydus network units that were used.
-        If one path segment is returned, it is a path from start node to goal node, no nydus node was used and
-        the second part of the tuple is None.
-        If two path segments are returned, the first one is from start node to a nydus network entrance,
-        and the second one is from some other nydus network entrance to the goal node. The second part of the tuple
-        includes first the tag of the nydus network node you should go into, and then the tag of the node you come
-        out from.
+        Will return the path with lowest cost (sum) given a weighted array
+        (``grid``), ``start`` , and ``goal``.
+        Returns a tuple where the first part is a list of path segments,
+        second part is list of 2 tags for the nydus network units that were used.
+        If one path segment is returned, it is a path from start node to goal node,
+        no nydus node was used and the second part of the tuple is None.
+        If two path segments are returned, the first one is from start node to
+        a nydus network entrance, and the second one is from some other nydus
+        network entrance to the goal node. The second part of the tuple
+        includes first the tag of the nydus network node you should go into,
+        and then the tag of the node you come out from.
 
-        **IF NO** ``grid`` **has been provided**, will request a fresh grid from :class:`.Pather`
+        **IF NO** ``grid`` **has been provided**, will request a
+        fresh grid from :class:`.Pather`
 
         If no path is possible, will return ``None``
 
@@ -397,20 +414,22 @@ class MapData:
 
         getting every  n-``th`` point works better in practice
 
-        `` large`` is a boolean that determines whether we are doing pathing with large unit sizes
-        like Thor and Ultralisk. When it's false the pathfinding is using unit size 1, so if
-        you want to a guarantee that a unit with size > 1 fits through the path then large should be True.
+        `` large`` is a boolean that determines whether we are doing pathing with
+        large unit sizes like Thor and Ultralisk. When it's false the pathfinding
+        is using unit size 1, so if you want to a guarantee that a unit with size > 1
+        fits through the path then large should be True.
 
-        ``smoothing`` tries to do a similar thing on the c side but to the maximum extent possible.
-        it will skip all the waypoints it can if taking the straight line forward is better
-        according to the influence grid
+        ``smoothing`` tries to do a similar thing on the c side but to the maximum
+        extent possible. it will skip all the waypoints it can if taking the straight
+        line forward is better according to the influence grid
 
         Example:
             >>> my_grid = self.get_pyastar_grid()
             >>> # start / goal could be any tuple / Point2
             >>> st, gl = (50,75) , (100,100)
-            >>> path = self.pathfind(start=st,goal=gl,grid=my_grid, large=False, smoothing=False, sensitivity=3)
-
+            >>> path = self.pathfind(
+            >>>     start=st, goal=gl, grid=my_grid,
+            >>>     large=False, smoothing=False, sensitivity=3)
         See Also:
             * :meth:`.MapData.get_pyastar_grid`
             * :meth:`.MapData.find_lowest_cost_points`
@@ -437,12 +456,14 @@ class MapData:
         """
         :rtype: numpy.ndarray
 
-        Will add cost to a `circle-shaped` area with a center ``position`` and radius ``radius``
+        Will add cost to a `circle-shaped` area with a center
+        ``position`` and radius ``radius``
 
         weight of 100
 
         Warning:
-            When ``safe=False`` the Pather will not adjust illegal values below 1 which could result in a crash`
+            When ``safe=False`` the Pather will not adjust illegal values
+            below 1 which could result in a crash`
 
         See Also:
             * :meth:`.MapData.add_cost_to_multiple_grids`
@@ -469,22 +490,28 @@ class MapData:
         """
         :rtype: List[numpy.ndarray]
 
-        Like ``add_cost``, will add cost to a `circle-shaped` area with a center ``position`` and radius ``radius``
-        Use this one for performance reasons if adding identical cost to multiple grids, so that the disk is only
-        calculated once.
+        Like ``add_cost``, will add cost to a `circle-shaped` area
+        with a center ``position`` and radius ``radius`` Use this one for
+        performance reasons if adding identical cost to multiple grids,
+        so that the disk is only calculated once.
 
         Example:
             >>> air_grid = self.get_clean_air_grid()
             >>> ground_grid = self.get_pyastar_grid()
             >>> # commented out for doc test
             >>> # air_grid, ground_grid = self.add_cost_to_multiple_grids(
-            >>> #    position=self.bot.game_info.map_center, radius=5, grids=[air_grid, ground_grid], weight=10)
+            >>> #    position=self.bot.game_info.map_center,
+            >>> #    radius=5,
+            >>> #    grids=[air_grid, ground_grid],
+            >>> #    weight=10)
 
         Warning:
-            When ``safe=False`` the Pather will not adjust illegal values below 1 which could result in a crash`
+            When ``safe=False`` the Pather will not adjust
+            illegal values below 1 which could result in a crash`
 
         Tip:
-            Performance against using `add_cost` for multiple grids, averaged over 1000 iterations
+            Performance against using `add_cost` for multiple grids,
+            averaged over 1000 iterations
             For `add_cost` the method was called once per grid
 
             2 grids `add_cost_to_multiple_grids`: 188.18 µs ± 12.73 ns per loop
@@ -519,7 +546,8 @@ class MapData:
     def show(self):
         """
 
-        Calling debugger to show, just like ``plt.show()``  but in case there will be changes in debugger,
+        Calling debugger to show, just like ``plt.show()``
+        but in case there will be changes in debugger,
 
         This method will always be compatible
 
@@ -528,7 +556,8 @@ class MapData:
 
     def close(self):
         """
-        Close an opened plot, just like ``plt.close()``  but in case there will be changes in debugger,
+        Close an opened plot, just like ``plt.close()``
+        but in case there will be changes in debugger,
 
         This method will always be compatible
 
@@ -540,7 +569,8 @@ class MapData:
         indices: Union[ndarray, Tuple[ndarray, ndarray]]
     ) -> Set[Union[Tuple[float, float], Point2]]:
         """
-        :rtype: :class:`.set` (Union[:class:`.tuple` (:class:`.int`, :class:`.int`), :class:`sc2.position.Point2`)
+        :rtype: :class:`.set` (Union[:class:`.tuple` (:class:`.int`, :class:`.int`),
+         :class:`sc2.position.Point2`)
 
         Convert indices to a set of points(``tuples``, not ``Point2`` )
 
@@ -571,7 +601,8 @@ class MapData:
         Convert points to numpy ndarray
 
         Caution:
-                Will handle safely(by ignoring) points that are ``out of bounds``, without warning
+                Will handle safely(by ignoring) points that are
+                ``out of bounds``, without warning
         """
         rows, cols = self.path_arr.shape
         # transpose so we can index into it with x, y instead of y, x
@@ -650,12 +681,14 @@ class MapData:
 
         Example:
                 Calculate a position for tanks in direction to the enemy forces
-                passing in the Area's corners as points and enemy army's location as target
+                passing in the Area's corners as points and enemy army's
+                location as target
 
                 >>> enemy_army_position = (50,50)
                 >>> my_base_location = self.bot.townhalls[0].position
                 >>> my_region = self.where_all(my_base_location)[0]
-                >>> best_siege_spot = self.closest_towards_point(points=my_region.corner_points, target=enemy_army_position)
+                >>> best_siege_spot = self.closest_towards_point(
+                >>>     points=my_region.corner_points, target=enemy_army_position)
                 >>> best_siege_spot
                 (49, 52)
 
@@ -699,7 +732,8 @@ class MapData:
         self, point: Union[Point2, tuple]
     ) -> List[Union[Region, ChokeArea, VisionBlockerArea, MDRamp]]:
         """
-        :rtype: List[Union[:class:`.Region`, :class:`.ChokeArea`, :class:`.VisionBlockerArea`, :class:`.MDRamp`]]
+        :rtype: List[Union[:class:`.Region`, :class:`.ChokeArea`,
+        :class:`.VisionBlockerArea`, :class:`.MDRamp`]]
 
         Will return a list containing all :class:`.Polygon` that occupy the given point.
 
@@ -724,16 +758,20 @@ class MapData:
                 >>> # now it is very easy to know which region is the enemy's natural
                 >>> # connected_regions is a property of a Region
                 >>> enemy_natural_region = enemy_main_base_region.connected_regions[0]
-                >>> # will return Region 1 or 6 for goldenwall depending on starting position
+                >>> # will return Region 1 or 6 for goldenwall
+                >>> # depending on starting position
 
 
         Tip:
 
             *avg performance*
 
-            * :class:`.Region` query 21.5 µs ± 652 ns per loop (mean ± std. dev. of 7 runs, 10000 loops each)
-            * :class:`.ChokeArea` ``query 18 µs`` ± 1.25 µs per loop (mean ± std. dev. of 7 runs, 100000 loops each)
-            * :class:`.MDRamp` query  22 µs ± 982 ns per loop (mean ± std. dev. of 7 runs, 10000 loops each)
+            * :class:`.Region` query 21.5 µs ± 652 ns per loop
+            (mean ± std. dev. of 7 runs, 10000 loops each)
+            * :class:`.ChokeArea` ``query 18 µs`` ± 1.25 µs per loop
+            (mean ± std. dev. of 7 runs, 100000 loops each)
+            * :class:`.MDRamp` query  22 µs ± 982 ns per loop
+            (mean ± std. dev. of 7 runs, 10000 loops each)
 
 
         """
@@ -749,16 +787,17 @@ class MapData:
         for choke in self.map_chokes:
             if choke.is_inside_point(point):
                 results.append(choke)
-        # assert (len(list(set(results))) == len(results)), f"results{results},  list(set(results)){list(set(results))}"
         return results
 
     def where(
         self, point: Union[Point2, tuple]
     ) -> Union[Region, MDRamp, ChokeArea, VisionBlockerArea]:
         """
-        :rtype: Union[:mod:`.Region`, :class:`.ChokeArea`, :class:`.VisionBlockerArea`, :class:`.MDRamp`]
+        :rtype: Union[:mod:`.Region`, :class:`.ChokeArea`,
+        :class:`.VisionBlockerArea`, :class:`.MDRamp`]
 
-        Will query a point on the map and will return the first result in the following order:
+        Will query a point on the map and will return the first r
+        esult in the following order:
 
             * :class:`.Region`
             * :class:`.MDRamp`
@@ -768,9 +807,12 @@ class MapData:
 
             *avg performance*
 
-            * :class:`.Region` query 7.09 µs ± 329 ns per loop (mean ± std. dev. of 7 runs, 100000 loops each)
-            * :class:`.ChokeArea` query  17.9 µs ± 1.22 µs per loop (mean ± std. dev. of 7 runs, 100000 loops each)
-            * :class:`.MDRamp` ``query 11.7 µs`` ± 1.13 µs per loop (mean ± std. dev. of 7 runs, 100000 loops each)
+            * :class:`.Region` query 7.09 µs ± 329 ns per loop
+            (mean ± std. dev. of 7 runs, 100000 loops each)
+            * :class:`.ChokeArea` query  17.9 µs ± 1.22 µs per loop
+            (mean ± std. dev. of 7 runs, 100000 loops each)
+            * :class:`.MDRamp` ``query 11.7 µs`` ± 1.13 µs per loop
+            (mean ± std. dev. of 7 runs, 100000 loops each)
 
         """
         if isinstance(point, Point2):
@@ -793,7 +835,8 @@ class MapData:
         Will query if a point is in, and in which Region using Set of Points <fast>
 
         Tip:
-            time benchmark 4.35 µs ± 27.5 ns per loop (mean ± std. dev. of 7 runs, 100000 loops each)
+            time benchmark 4.35 µs ± 27.5 ns per loop
+            (mean ± std. dev. of 7 runs, 100000 loops each)
 
             as long as polygon points is of type :class:`.set`, not :class:`.list`
 
@@ -842,10 +885,6 @@ class MapData:
 
             i += 1
 
-    @progress_wrapped(
-        estimated_time=0,
-        desc=f"\u001b[32m Version {__version__} Map Compilation Progress \u001b[37m",
-    )
     def _compile_map(self) -> None:
         self._calc_grid()
         self._calc_regions()
@@ -874,10 +913,6 @@ class MapData:
         s = generate_binary_structure(BINARY_STRUCTURE, BINARY_STRUCTURE)
         labeled_array, num_features = ndlabel(grid, structure=s)
 
-        # for some operations the array must have same numbers or rows and cols,  adding
-        # zeros to fix that
-        # rows, cols = labeled_array.shape
-        # self.region_grid = np.append(labeled_array, np.zeros((abs(cols - rows), cols)), axis=0)
         self.region_grid = labeled_array.astype(int)
         self.regions_labels = np.unique(self.region_grid)
         vb_points = self._vision_blockers
@@ -895,7 +930,8 @@ class MapData:
     def _calc_poly_areas(self) -> None:
         """
         Check for `Polygon` types that exist in other polygons
-        For example a choke or ramp may exist in a region, so should be added as an "area"
+        For example a choke or ramp may exist in a region,
+        so should be added as an "area"
         """
         self.extended_array_matrix = np.ones(
             (
@@ -921,9 +957,9 @@ class MapData:
                     poly.areas.append(area)
 
     def _set_map_ramps(self):
-        # some ramps coming from burnysc2 have broken data and the bottom_center and top_center
-        # may even be the same. by removing them they should be tagged as chokes in the c extension
-        # if they really are ones
+        # some ramps coming from burnysc2 have broken data and the bottom_center
+        # and top_center may even be the same. by removing them they should be
+        # tagged as chokes in the c extension if they really are ones
         viable_ramps = list(
             filter(
                 lambda x: x.bottom_center.distance_to(x.top_center) >= 1,
@@ -962,7 +998,6 @@ class MapData:
         chokes = [c for c in self.c_ext_map.chokes if c.id not in overlapping_choke_ids]
 
         for choke in chokes:
-
             points = [Point2(p) for p in choke.pixels]
             if len(points) > 0:
                 new_choke_array = self.points_to_numpy_array(points)
@@ -974,7 +1009,6 @@ class MapData:
                     map_data=self, array=new_choke_array, raw_choke=choke
                 )
                 for area in areas:
-
                     if isinstance(area, Region):
                         area.region_chokes.append(new_choke)
                         new_choke.areas.append(area)
@@ -1024,14 +1058,19 @@ class MapData:
         Draws influence (cost) values of a grid in game.
 
         Caution:
-            Setting the lower threshold too low impacts performance since almost every value will get drawn.
+            Setting the lower threshold too low impacts performance
+            since almost every value will get drawn.
 
-            It's recommended that this is set to the relevant grid's default weight value.
+            It's recommended that this is set to the relevant
+            grid's default weight value.
 
         Example:
                 >>> self.ground_grid = self.get_pyastar_grid(default_weight=1)
-                >>> self.ground_grid = self.add_cost((100, 100), radius=15, grid=self.ground_grid, weight=50)
-                >>> # self.draw_influence_in_game(self.ground_grid, lower_threshold=1) # commented out for doctest
+                >>> self.ground_grid = self.add_cost(
+                >>> (100, 100), radius=15, grid=self.ground_grid, weight=50)
+                >>> # commented out for doctest
+                >>> # self.draw_influence_in_game(
+                >>> #    self.ground_grid, lower_threshold=1)
 
         See Also:
             * :meth:`.MapData.get_pyastar_grid`

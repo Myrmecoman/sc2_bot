@@ -2,7 +2,7 @@ import inspect
 import os
 import sys
 import warnings
-from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 from loguru import logger
@@ -13,7 +13,7 @@ from sc2.position import Point2, Point3
 from .constants import COLORS, LOG_FORMAT, LOG_MODULE
 
 if TYPE_CHECKING:
-    from MapAnalyzer.MapData import MapData
+    from map_analyzer.MapData import MapData
 
 
 class LocalLogFilter:
@@ -74,10 +74,9 @@ class MapAnalyzerDebugger:
 
     @staticmethod
     def save(filename: str) -> bool:
-
         for i in inspect.stack():
             if "test_suite.py" in str(i):
-                logger.info(f"Skipping save operation on test runs")
+                logger.info("Skipping save operation on test runs")
                 logger.debug(f"index = {inspect.stack().index(i)}  {i}")
                 return True
         import matplotlib.pyplot as plt
@@ -164,12 +163,11 @@ class MapAnalyzerDebugger:
                 )
                 plt.scatter(x, y, color="w")
             elif choke.is_vision_blocker:
-
                 fontdict = {"family": "serif", "size": 10}
                 plt.text(
                     cm[0],
                     cm[1],
-                    f"VB<>",
+                    "VB<>",
                     fontdict=fontdict,
                     bbox=dict(fill=True, alpha=0.3, edgecolor="red", linewidth=2),
                 )
@@ -211,14 +209,14 @@ class MapAnalyzerDebugger:
                 plt.text(
                     choke.side_a[0],
                     choke.side_a[1],
-                    f"sA>",
+                    "sA>",
                     fontdict=fontdict,
                     bbox=dict(fill=True, alpha=0.5, edgecolor="green", linewidth=2),
                 )
                 plt.text(
                     choke.side_b[0],
                     choke.side_b[1],
-                    f"sB>",
+                    "sB>",
                     fontdict=fontdict,
                     bbox=dict(fill=True, alpha=0.5, edgecolor="red", linewidth=2),
                 )
@@ -281,8 +279,8 @@ class MapAnalyzerDebugger:
         fontdict: dict = None,
     ) -> None:
         import matplotlib.pyplot as plt
-        from mpl_toolkits.axes_grid1 import make_axes_locatable
         from matplotlib.cm import ScalarMappable
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
 
         if not fontdict:
             fontdict = {"family": "serif", "weight": "bold", "size": 20}
@@ -334,8 +332,8 @@ class MapAnalyzerDebugger:
         fontdict: dict = None,
     ) -> None:
         import matplotlib.pyplot as plt
-        from mpl_toolkits.axes_grid1 import make_axes_locatable
         from matplotlib.cm import ScalarMappable
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
 
         if not fontdict:
             fontdict = {"family": "serif", "weight": "bold", "size": 20}

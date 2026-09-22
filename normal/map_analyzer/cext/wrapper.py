@@ -1,11 +1,9 @@
 import numpy as np
 
 try:
-    from .mapanalyzerext import (
-        astar as ext_astar,
-        astar_with_nydus as ext_astar_nydus,
-        get_map_data as ext_get_map_data,
-    )
+    from .mapanalyzerext import astar as ext_astar
+    from .mapanalyzerext import astar_with_nydus as ext_astar_nydus
+    from .mapanalyzerext import get_map_data as ext_get_map_data
 except ImportError:
     from mapanalyzerext import (
         astar as ext_astar,
@@ -13,7 +11,8 @@ except ImportError:
         get_map_data as ext_get_map_data,
     )
 
-from typing import Optional, Tuple, Union, List, Set
+from typing import List, Optional, Set, Tuple, Union
+
 from sc2.position import Point2, Rect
 
 
@@ -24,7 +23,8 @@ class CMapChoke:
     lines all the lines from side to side
     side1 points on side1
     side2 points on side2
-    pixels all the points inside the choke area, should include the sides and the points inside
+    pixels all the points inside the choke area, should include the sides
+    and the points inside
     min_length minimum distance between the sides of the choke
     id an integer to represent the choke
     """
@@ -178,7 +178,8 @@ class CMapInfo:
         walkable_grid and height_map are matrices of type uint8
         """
 
-        # grids are transposed and the c extension atm calls the y axis the x axis and vice versa
+        # grids are transposed and the c extension atm calls
+        # the y axis the x axis and vice versa
         # so switch the playable area limits around
         c_start_y = int(playable_area.x)
         c_end_y = int(playable_area.x + playable_area.width)
@@ -189,7 +190,8 @@ class CMapInfo:
             walkable_grid, height_map, c_start_y, c_end_y, c_start_x, c_end_x
         )
 
-        # some maps may have places where the current method for building the climber grid isn't correct
+        # some maps may have places where the current method
+        # for building the climber grid isn't correct
         for map_exception in climber_grid_exceptions:
             if map_exception.lower() in map_name.lower():
                 for exceptions in climber_grid_exceptions[map_exception]:

@@ -184,7 +184,9 @@ class Pool12AllIn(BotAI):
             elif unit.is_gathering:
                 target = self.resource_by_tag.get(unit.order_target)
                 if target:
-                    move_target = self.speedmining_positions[target.position]
+                    move_target = self.speedmining_positions.get(target.position)
+                    if move_target is None:
+                        target = None
             if target and 2 * unit.radius < unit.distance_to(move_target) < SPEEDMINING_DISTANCE:
                 unit.move(move_target)
                 unit(AbilityId.SMART, target, True)

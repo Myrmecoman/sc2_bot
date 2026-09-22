@@ -33,4 +33,7 @@ class OutOfBoundsException(BaseException):
         self.point = p
 
     def __str__(self) -> str:
-        return f"[OutOfBoundsException]Point {self.point} is not inside the grid. No influence added."
+        return (
+            f"[OutOfBoundsException]Point {self.point} "
+            f"is not inside the grid. No influence added."
+        )

@@ -11,9 +11,9 @@ class Lift(BotAI):
     async def on_step(self, iteration: int):
 
         top_right = Point2((self.game_info.playable_area.right, self.game_info.playable_area.top))
-        bottom_right = Point2((self.game_info.playable_area.right, 0))
-        bottom_left = Point2((0, 0))
-        top_left = Point2((0, self.game_info.playable_area.top))
+        bottom_right = Point2((self.game_info.playable_area.right, self.game_info.playable_area.y))
+        bottom_left = Point2((self.game_info.playable_area.x, self.game_info.playable_area.y))
+        top_left = Point2((self.game_info.playable_area.x, self.game_info.playable_area.top))
         corners = [top_right, bottom_right, bottom_left, top_left]
         max_index = 0
         max_value = 100000

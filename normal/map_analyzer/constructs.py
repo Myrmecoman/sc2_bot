@@ -1,13 +1,13 @@
 from functools import lru_cache
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import numpy as np
 from loguru import logger
 from sc2.game_info import Ramp as sc2Ramp
 from sc2.position import Point2
 
-from .Polygon import Polygon
 from .cext import CMapChoke
+from .Polygon import Polygon
 
 if TYPE_CHECKING:  # pragma: no cover
     from .MapData import MapData
@@ -127,13 +127,12 @@ class MDRamp(ChokeArea):
         )
         # TODO  its white board time,  need to figure out some geometric intuition here
         dist = self.map_data.distance(raw_points[0], raw_points[1])
-        r = dist ** 0.5
+        r = dist**0.5
         if dist / 2 >= r:
             intersect = (raw_points[0] + raw_points[1]) / 2
             return intersect.offset(self.offset)
 
         intersects = raw_points[0].circle_intersection(p=raw_points[1], r=r)
-        # p = self.map_data.closest_towards_point(points=self.buildables.points, target=self.top_center)
         pt = max(intersects, key=lambda p: p.distance_to_point2(self.bottom_center))
         return pt.offset(self.offset)
 
@@ -160,12 +159,13 @@ class MDRamp(ChokeArea):
              Make this a private method
 
         """
-        from MapAnalyzer.Region import Region
+        from map_analyzer.Region import Region
 
         for p in self.outer_perimeter_points:
             areas = self.map_data.where_all(p)
             for area in areas:
-                # edge case  = its a VisionBlockerArea (and also on the perimeter) so we grab the touching Regions
+                # edge case  = its a VisionBlockerArea (and also on the perimeter)
+                # so we grab the touching Regions
                 if isinstance(area, VisionBlockerArea):
                     for sub_area in area.areas:
                         # add it to our Areas
@@ -206,7 +206,8 @@ class MDRamp(ChokeArea):
     def bottom_center(self) -> Point2:
         """
 
-        Alerts when sc2 fails to provide a bottom_center, and fallback to  :meth:`.center`
+        Alerts when sc2 fails to provide a bottom_center,
+        and fallback to  :meth:`.center`
 
         """
         if self.ramp.bottom_center is not None:

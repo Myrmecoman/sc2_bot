@@ -273,7 +273,7 @@ async def micro(self : BotAI):
     enemies: Units = self.enemy_units | self.enemy_structures
     if self.supply_army >= 4 or should_we_fight(self):
         if enemies.amount > 0:
-            pos = enemies.closest_to(self.start_location)
+            pos = enemies.closest_to(self.start_location).position
         else:
             pos = self.enemy_start_locations[0]
         attack = True

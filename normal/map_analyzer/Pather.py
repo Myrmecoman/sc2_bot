@@ -1,26 +1,26 @@
-from typing import List, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
-
 from loguru import logger
 from numpy import ndarray
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.position import Point2
 
-from MapAnalyzer.exceptions import OutOfBoundsException, PatherNoPointsException
-from MapAnalyzer.Region import Region
-from MapAnalyzer.utils import change_destructable_status_in_grid
+from map_analyzer.exceptions import PatherNoPointsException
+from map_analyzer.Region import Region
+from map_analyzer.utils import change_destructable_status_in_grid
+
 from .cext import astar_path, astar_path_with_nyduses
-from .destructibles import *
+from .destructibles import buildings_2x2, buildings_3x3, buildings_5x5
 
 if TYPE_CHECKING:
-    from MapAnalyzer.MapData import MapData
+    from map_analyzer.MapData import MapData
 
 
 def _bounded_circle(center, radius, shape):
     xx, yy = np.ogrid[: shape[0], : shape[1]]
     circle = (xx - center[0]) ** 2 + (yy - center[1]) ** 2
-    return np.nonzero(circle <= radius ** 2)
+    return np.nonzero(circle <= radius**2)
 
 
 def draw_circle(c, radius, shape=None):
@@ -52,7 +52,8 @@ class MapAnalyzerPather:
         self.terrain_height = self.map_data.terrain_height.copy().T
 
     def _set_default_grids(self):
-        # need to consider the placement arr because our base minerals, geysers and townhall
+        # need to consider the placement arr because our
+        # base minerals, geysers and townhall
         # are not pathable in the pathing grid
         # we manage those manually so they are accurate through the game
         self.default_grid = np.fmax(
@@ -168,7 +169,6 @@ class MapAnalyzerPather:
                 ret_grid[x_end - 1, y_end - 1] = 1
 
         if len(self.minerals_included) != self.map_data.bot.mineral_field.amount:
-
             new_positions = set(m.position for m in self.map_data.bot.mineral_field)
             old_mf_positions = set(self.minerals_included)
 
@@ -215,11 +215,13 @@ class MapAnalyzerPather:
         max_distance: float,
     ) -> Optional[Tuple[int, int]]:
         """
-        User may give a point that is in a nonpathable grid cell, for example inside a building or
-        inside rocks. The desired behavior is to move the point a bit so for example we can start or finish
-        next to the building the original point was inside of.
-        To make sure that we don't accidentally for example offer a point that is on low ground when the
-        first target was on high ground, we first try to find a point that maintains the terrain height.
+        User may give a point that is in a nonpathable grid cell, for example
+        inside a building or inside rocks. The desired behavior is to move the
+        point a bit so for example we can start or finish next to the building
+        the original point was inside of. To make sure that we don't accidentally
+        for example offer a point that is on low ground when the first target
+        was on high ground, we first try to find a point that maintains the
+        terrain height.
         After that we check for points on other terrain heights.
         """
         point = (int(point[0]), int(point[1]))
@@ -259,9 +261,10 @@ class MapAnalyzerPather:
         self, from_pos: tuple, radius: float, grid: np.ndarray
     ) -> Optional[np.ndarray]:
         """For use with evaluations that use numpy arrays
-            example: # Closest point to unit furthest from target
-                    distances = cdist([[unitpos, targetpos]], lowest_points, "sqeuclidean")
-                    lowest_points[(distances[0] - distances[1]).argmin()]
+        example:
+        # Closest point to unit furthest from target
+        distances = cdist([[unitpos, targetpos]], lowest_points, "sqeuclidean")
+        lowest_points[(distances[0] - distances[1]).argmin()]
         - 140 µs per loop
         """
 
@@ -500,8 +503,8 @@ class MapAnalyzerPather:
         safe: bool = True,
         initial_default_weights: float = 0,
     ) -> ndarray:
-        # if we don't touch any cell origins due to a small radius, add at least the cell
-        # the given position is in
+        # if we don't touch any cell origins due to a small radius,
+        # add at least the cell the given position is in
         if (
             len(disk[0]) == 0
             and 0 <= position[0] < arr.shape[0]
@@ -515,7 +518,8 @@ class MapAnalyzerPather:
         arr[disk] += weight
         if safe and np.any(arr[disk] < 1):
             logger.warning(
-                "You are attempting to set weights that are below 1. falling back to the minimum (1)"
+                "You are attempting to set weights that are below 1."
+                " falling back to the minimum (1)"
             )
             arr[disk] = np.where(arr[disk] < 1, 1, arr[disk])
 

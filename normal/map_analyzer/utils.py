@@ -1,10 +1,9 @@
 import lzma
 import os
 import pickle
+from typing import TYPE_CHECKING, List, Optional, Union
+
 import numpy as np
-
-from typing import List, Optional, TYPE_CHECKING, Union
-
 from s2clientprotocol.sc2api_pb2 import Response, ResponseObservation
 from sc2.bot_ai import BotAI
 from sc2.game_data import GameData
@@ -13,13 +12,26 @@ from sc2.game_state import GameState
 from sc2.position import Point2
 from sc2.unit import Unit
 
-from MapAnalyzer.constructs import MDRamp, VisionBlockerArea
+from map_analyzer.constructs import MDRamp, VisionBlockerArea
+
 from .cext import CMapChoke
-from .destructibles import *
+from .destructibles import (
+    destructable_2x2,
+    destructable_2x4,
+    destructable_2x6,
+    destructable_4x2,
+    destructable_4x4,
+    destructable_4x12,
+    destructable_6x2,
+    destructable_6x6,
+    destructable_12x4,
+    destructable_BLUR,
+    destructable_ULBR,
+)
 from .settings import ROOT_DIR
 
 if TYPE_CHECKING:
-    from MapAnalyzer.MapData import MapData
+    from map_analyzer.MapData import MapData
 
 
 def change_destructable_status_in_grid(grid: np.ndarray, unit: Unit, status: int):
@@ -127,7 +139,9 @@ def change_destructable_status_in_grid(grid: np.ndarray, unit: Unit, status: int
 
 def fix_map_ramps(bot: BotAI):
     """
-    following https://github.com/BurnySc2/python-sc2/blob/ffb9bd43dcbeb923d848558945a8c59c9662f435/sc2/game_info.py#L246
+    following
+    https://github.com/BurnySc2/python-sc2/blob/
+    ffb9bd43dcbeb923d848558945a8c59c9662f435/sc2/game_info.py#L246
     to fix burnysc2 ramp objects by removing destructables
     """
     pathing_grid = bot.game_info.pathing_grid.data_numpy.T.copy()
@@ -178,7 +192,7 @@ def get_sets_with_mutual_elements(
 
 
 def mock_map_data(map_file: str) -> "MapData":
-    from MapAnalyzer.MapData import MapData
+    from map_analyzer.MapData import MapData
 
     with lzma.open(f"{map_file}", "rb") as f:
         raw_game_data, raw_game_info, raw_observation = pickle.load(f)
@@ -222,7 +236,8 @@ def get_map_files_folder() -> str:
 
 def get_map_file_list() -> List[str]:
     """
-    easy way to produce less than all maps,  for example if we want to test utils, we only need one MapData object
+    easy way to produce less than all maps,
+    for example if we want to test utils, we only need one MapData object
     """
     map_files_folder = get_map_files_folder()
     map_files = os.listdir(map_files_folder)

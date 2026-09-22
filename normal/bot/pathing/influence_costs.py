@@ -262,16 +262,17 @@ INFLUENCE_COSTS: Dict[UnitTypeId, Dict] = {
 
 INFLUENCE_COSTS_EFFECTS: Dict[EffectId, Dict] = {
     EffectId.RAVAGERCORROSIVEBILECP: {
-        "AirCost": 50,
         "GroundCost": 50,
-        "AirRange": 1,
-        "GroundRange": 1,
+        # ground-only splash, doesn't damage flying units
     },
     EffectId.PSISTORMPERSISTENT: {
         "AirCost": 80,
         "GroundCost": 80,
-        "AirRange": 2,
-        "GroundRange": 2,
+    },
+    EffectId.NUKEPERSISTENT: {
+        "AirCost": 500,
+        "GroundCost": 500,
+        # near-guaranteed death for anything caught in the blast - avoid at almost any cost
     },
     EffectId.SCANNERSWEEP: {
         "DetectionRange": 13,

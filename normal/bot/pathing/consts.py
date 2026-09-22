@@ -27,6 +27,19 @@ ATTACK_TARGET_IGNORE_WITH_WORKERS: Set[UnitTypeId] = {
     UnitTypeId.MULE,
 }
 
+# "skytoss" - protoss air compositions cyclone lock-on is especially good against. Shared by
+# army_composition_advisor.py (decides whether to invest in cyclones at all) and cyclones.py
+# (decides what an already-built cyclone's lock-on prioritizes) - keep it a single definition so
+# the two decisions can't silently drift out of sync with each other
+SKYTOSS_TYPES: Set[UnitTypeId] = {
+    UnitTypeId.VOIDRAY,
+    UnitTypeId.ORACLE,
+    UnitTypeId.PHOENIX,
+    UnitTypeId.CARRIER,
+    UnitTypeId.TEMPEST,
+    UnitTypeId.MOTHERSHIP,
+}
+
 DANGEROUS_STRUCTURES: Set[UnitTypeId] = {
     UnitTypeId.PHOTONCANNON,
     UnitTypeId.SHIELDBATTERY,

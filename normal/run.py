@@ -16,15 +16,26 @@ from training_bots.resume_building_tester import ResumeBuilding
 from training_bots.MassReaper.main import MassReaper
 
 from sc2 import maps
-from sc2.data import Difficulty, Race
+from sc2.data import Difficulty, Race, AIBuild
 from sc2.main import run_game
 from sc2.player import Bot, Computer, Human
 
-map_names = ["BerlingradAIE", "HardwireAIE", "InsideAndOutAIE", "MoondanceAIE", "StargazersAIE", "WaterfallAIE"]
+map_names = ["IncorporealAIE",
+             "LastFantasyAIE",
+             "LeyLinesAIE",
+             "MagannathaAIE",
+             "PersephoneAIE",
+             "PylonAIE",
+             "TorchesAIE",
+             "UltraloveAIE"]
+
 bot = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBot")
 human = Human(Race.Terran, "Human", True)
 
-enemy = Computer(Race.Zerg, Difficulty.CheatInsane)
+#enemy = Computer(Race.Zerg, Difficulty.CheatInsane, AIBuild.Macro)
+#enemy = Computer(Race.Zerg, Difficulty.CheatInsane, AIBuild.Rush)
+#enemy = Computer(Race.Protoss, Difficulty.CheatInsane, AIBuild.Air)
+#enemy = Computer(Race.Terran, Difficulty.CheatInsane, AIBuild.Macro)
 #enemy = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBotEnemy")
 #enemy = Bot(Race.Terran, MassReaper(), "MassReaper")
 #enemy = Bot(Race.Protoss, WorkerRushBot(), "WorkerRush")
@@ -33,7 +44,7 @@ enemy = Computer(Race.Zerg, Difficulty.CheatInsane)
 #enemy = Bot(Race.Terran, Lift(), "Lift")
 #enemy = Bot(Race.Terran, LiftTopRight(), "LiftTopRight")
 #enemy = Bot(Race.Terran, PFrush(), "PFrush")
-#enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")
+enemy = Bot(Race.Zerg, Pool12AllIn(), "12pool")
 
 # Start game
 if __name__ == "__main__":
@@ -46,7 +57,7 @@ if __name__ == "__main__":
         # Local game
         print("Starting local game...")
         run_game(
-        #maps.get("sc2-ai-cup-2022"), 
         maps.get(map_names[random.randint(0, len(map_names) - 1)]),
-        [bot, enemy], realtime=False)
-        #[human, bot], realtime=True)
+        [bot, enemy], realtime=False
+        #[human, bot], realtime=True
+        )

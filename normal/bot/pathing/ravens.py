@@ -1,6 +1,7 @@
 import numpy as np
 from typing import Optional
 from bot.pathing.consts import ALL_STRUCTURES, ATTACK_TARGET_IGNORE, DANGEROUS_STRUCTURES
+from bot.pathing.order_utils import is_already_attacking, is_already_attack_moving_to
 from bot.pathing.pathing import Pathing
 from sc2.bot_ai import BotAI
 from sc2.position import Point2
@@ -37,22 +38,22 @@ class Ravens:
             self.auto_turret.pop(k, None)
 
         for unit in units:
-            
+
             # if the order target is an int, it means that we want to cast an ability on a unit
             if isinstance(unit.order_target, int):
-                return
-            # we also return if we want to place an auto turret
+                continue
+            # we also skip it if we want to place an auto turret
             if isinstance(unit.order_target, Point2) and unit.order_target in self.auto_turret.keys():
-                return
-            
+                continue
+
             # cast abilities
-            if self.ai.enemy_race == Race.Terran and self.raven_vs_terran(unit):
-                return
-            if self.ai.enemy_race == Race.Protoss and self.raven_vs_protoss(unit):
-                return
-            if self.ai.enemy_race == Race.Zerg and self.raven_vs_zerg(unit):
-                return
-            
+            if self.ai.enemy_race == Race.Terran and await self.raven_vs_terran(unit):
+                continue
+            if self.ai.enemy_race == Race.Protoss and await self.raven_vs_protoss(unit):
+                continue
+            if self.ai.enemy_race == Race.Zerg and await self.raven_vs_zerg(unit):
+                continue
+
             # in danger, run away
             if not self.pathing.is_position_safe(grid, unit.position):
                 self.move_to_safety(unit, grid)
@@ -61,9 +62,11 @@ class Ravens:
             # get to the target
             if self.ai.units.not_flying.amount > 0:
                 pos = self.ai.units.not_flying.closest_to(attack_target).position
-                unit.attack(pos)
+                if not is_already_attack_moving_to(unit, pos):
+                    unit.attack(pos)
             else:
-                unit.attack(attack_target)
+                if not is_already_attack_moving_to(unit, attack_target):
+                    unit.attack(attack_target)
 
     def move_to_safety(self, unit: Unit, grid: np.ndarray):
         """
@@ -82,56 +85,60 @@ class Ravens:
             move_to: Point2 = self.pathing.find_path_next_point(unit.position, pos, self.pathing.air_grid)
             unit.move(move_to)
 
-    def raven_vs_terran(self, unit: Unit):
-        if not self.ai.can_cast(unit, AbilityId.EFFECT_INTERFERENCEMATRIX) or unit.energy >= 125: # if there is nothing to matrix, at some point still spend energy
-            self.raven_vs_zerg(unit)
+    async def raven_vs_terran(self, unit: Unit):
+        if not await self.ai.can_cast(unit, AbilityId.EFFECT_INTERFERENCEMATRIX) or unit.energy >= 125: # if there is nothing to matrix, at some point still spend energy
+            return await self.raven_vs_zerg(unit)
 
         if self.ai.enemy_units.amount == 0:
             return False
-        
+
         for i in [UnitTypeId.SIEGETANKSIEGED, UnitTypeId.THOR, UnitTypeId.BATTLECRUISER]:
             if self.matrix_unit(unit, i):
                 return True
-        
-        return False
-    
 
-    def raven_vs_protoss(self, unit: Unit):
-        if not self.ai.can_cast(unit, AbilityId.EFFECT_INTERFERENCEMATRIX) or unit.energy >= 125: # if there is nothing to matrix, at some point still spend energy
-            return self.raven_vs_zerg(unit)
+        return False
+
+
+    async def raven_vs_protoss(self, unit: Unit):
+        if not await self.ai.can_cast(unit, AbilityId.EFFECT_INTERFERENCEMATRIX) or unit.energy >= 125: # if there is nothing to matrix, at some point still spend energy
+            return await self.raven_vs_zerg(unit)
 
         if self.ai.enemy_units.amount == 0:
             return False
-        
+
         for i in [UnitTypeId.COLOSSUS, UnitTypeId.CARRIER, UnitTypeId.ARCHON, UnitTypeId.IMMORTAL, UnitTypeId.WARPPRISM]:
             if self.matrix_unit(unit, i):
                 return True
-        
-        return False
-    
 
-    def raven_vs_zerg(self, unit: Unit):
-        if not self.ai.can_cast(unit, AbilityId.BUILDAUTOTURRET_AUTOTURRET) or self.ai.enemy_units.amount == 0:
+        return False
+
+
+    async def raven_vs_zerg(self, unit: Unit):
+        if not await self.ai.can_cast(unit, AbilityId.BUILDAUTOTURRET_AUTOTURRET):
             return False
-        
+
+        valid_enemies: Units = self.ai.enemy_units.filter(lambda u: u.type_id not in ATTACK_TARGET_IGNORE)
+        if valid_enemies.amount == 0:
+            return False
+
         can_place = None
         closest_dist = 10000
-        enemy: Unit = self.ai.enemy_units.closest_to(unit.position)
+        enemy: Unit = valid_enemies.closest_to(unit.position)
         if enemy is not None and enemy.distance_to(unit) < 10:
             for x in range(int(enemy.position.x - 3), int(enemy.position.x + 4)):
                 for y in range(int(enemy.position.y - 3), int(enemy.position.y + 4)):
                     pos = Point2((x, y))
-                    if self.ai.can_place(UnitTypeId.AUTOTURRET, pos):
+                    if await self.ai.can_place_single(UnitTypeId.AUTOTURRET, pos):
                         dist = unit.distance_to(pos)
                         if can_place is None or dist < closest_dist:
                             can_place = pos
                             closest_dist = dist
-        
+
         if can_place is not None:
             unit(AbilityId.BUILDAUTOTURRET_AUTOTURRET, can_place)
             self.auto_turret[can_place] = self.ai.time # save time at which we casted to free the position later
             return True
-        
+
         return False
 
 
@@ -140,7 +147,7 @@ class Ravens:
 
         if enemy_units.amount == 0:
             return False
-        
+
         counter = 0
         closest = enemy_units.sorted_by_distance_to(unit)
         while(counter < closest.amount and closest[counter].tag in self.matrices.keys()):
@@ -154,5 +161,5 @@ class Ravens:
             unit(AbilityId.EFFECT_INTERFERENCEMATRIX, closest)
             self.matrices[closest.tag] = self.ai.time # save time at which we casted to free the unit later
             return True
-        
+
         return False

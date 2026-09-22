@@ -1,5 +1,6 @@
 from bot.custom_utils import can_build_structure
 from bot.custom_utils import get_safest_expansion
+from bot.custom_utils import update_rally_points
 
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.upgrade_id import UpgradeId
@@ -13,7 +14,7 @@ from sc2.data import Race
 import math
 
 
-async def build_gas(self : BotAI):
+async def build_gas(self : BotAI) -> bool:
     for cc in self.townhalls.ready:
         vgs: Units = self.vespene_geyser.closer_than(12, cc)
         for vg in vgs:
@@ -22,17 +23,23 @@ async def build_gas(self : BotAI):
                 if workers:
                     worker: Unit = workers.closest_to(vg)
                     worker.build_gas(vg)
-                    break
+                    return True
+    return False
 
 
-async def build_cc(self : BotAI):
+async def build_cc(self : BotAI, build_worker: Unit = None) -> bool:
     location: Point2 = await get_safest_expansion(self)
     if location:
-        worker: Unit = self.select_build_worker(location) # select the nearest worker to that location
+        # prefer the worker the caller already has committed/walking there (e.g. the scripted
+        # build order's critical_worker) over reselecting - select_build_worker only considers
+        # gathering/idle workers, which would always exclude one that's already mid-move
+        worker: Unit = build_worker if build_worker is not None else self.select_build_worker(location)
         if worker is None:
-            return
+            return False
         self.worker_assigned_to_expand[worker.tag] = worker
         worker.build(UnitTypeId.COMMANDCENTER, location)
+        return True
+    return False
 
 
 async def try_build_on_line(self : BotAI, type : UnitTypeId, prod_structures : Units, shift = 0):
@@ -60,7 +67,7 @@ async def smart_build(self : BotAI, type : UnitTypeId):
         pos = self.main_base_ramp.barracks_correct_placement
         if self.enemy_race == Race.Zerg or self.enemy_race == Race.Protoss:
             pos = self.main_base_ramp.barracks_in_middle
-        if self.can_place_single(type, pos):
+        if await self.can_place_single(type, pos):
             worker.build(type, pos)
             return True
         return False
@@ -102,8 +109,8 @@ async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId):
         for i in range(20):
             position = cc.position.towards_with_random_angle(Point2((x, y)), 9, (math.pi / 3))
             position_further = cc.position.towards_with_random_angle(Point2((x, y)), 12, (math.pi / 3))
-            position.rounded.offset(HALF_OFFSET)
-            position_further.rounded.offset(HALF_OFFSET)
+            position = position.rounded.offset(HALF_OFFSET)
+            position_further = position_further.rounded.offset(HALF_OFFSET)
             if await self.can_place_single(type, position):
                 await self.build(type, near=position, max_distance=4)
                 return
@@ -132,12 +139,15 @@ def repair_buildings(self : BotAI):
         if self.structures.find_by_tag(key) is None: # the building died
             continue
         total_repairing = len(self.worker_assigned_to_repair[key])
-        
-        # removing dead SCVs from the lists
+
+        # keep only workers still actually repairing this specific target - one whose repair
+        # got interrupted or redirected elsewhere shouldn't keep occupying a counted slot while
+        # it just stands there idle
         new_value = []
         for i in range(total_repairing):
             worker_tag = self.worker_assigned_to_repair[key][i]
-            if self.workers.find_by_tag(worker_tag) is not None:
+            worker = self.workers.find_by_tag(worker_tag)
+            if worker is not None and worker.is_repairing and worker.order_target == key:
                 new_value.append(worker_tag)
         self.worker_assigned_to_repair[key] = new_value
         total_repairing = len(self.worker_assigned_to_repair[key])
@@ -156,6 +166,73 @@ def repair_buildings(self : BotAI):
                 total_repairing = len(self.worker_assigned_to_repair[key])
 
 
+def repair_mechanical_units(self : BotAI):
+    """Same idea as repair_buildings, but for damaged mechanical army units (tanks, hellions,
+    thors, cyclones, vikings, banshees, ravens, battlecruisers) instead of structures. Kept more
+    conservative than building repair (higher damage threshold, fewer repairers) since army units
+    take routine chip damage constantly in any engagement - repairing every scratch is what was
+    pulling workers off mining so often."""
+
+    if self.worker_rushed and not self.army_advisor.is_wall_closed():
+        return
+
+    # is_mechanical is also true for SCVs/MULEs in the actual game data - excluding them explicitly
+    # is required, not just a style choice, otherwise every worker that takes a scratch of damage
+    # gets queued as a repair target and pulls other workers off mining to chase it down
+    mech_units : Units = self.units.filter(lambda u: u.is_mechanical and u.type_id not in {UnitTypeId.SCV, UnitTypeId.MULE})
+
+    # only bother once meaningfully damaged, and only if it's actually safe to send a worker there
+    for i in mech_units:
+        grid = self.pathing.air_grid if i.is_flying else self.pathing.ground_grid
+        if i.health_percentage > 0.7 or not self.pathing.is_position_safe(grid, i.position):
+            if i.tag in self.worker_assigned_to_repair_mech.keys():
+                self.worker_assigned_to_repair_mech.pop(i.tag)
+            continue
+        if i.tag in self.worker_assigned_to_repair_mech.keys():
+            continue
+        self.worker_assigned_to_repair_mech[i.tag] = []
+
+    # workers repair_buildings already committed this frame shouldn't also get pulled here -
+    # issuing a command doesn't update a unit's own cached order state until next frame, so
+    # without this a worker could get claimed by both in the same step
+    already_repairing_structures = {tag for tags in self.worker_assigned_to_repair.values() for tag in tags}
+
+    for key in list(self.worker_assigned_to_repair_mech.keys()):
+        target = mech_units.find_by_tag(key)
+        if target is None: # the unit died
+            self.worker_assigned_to_repair_mech.pop(key, None)
+            continue
+        total_repairing = len(self.worker_assigned_to_repair_mech[key])
+
+        # keep only workers still actually repairing this specific target - see repair_buildings
+        new_value = []
+        for i in range(total_repairing):
+            worker_tag = self.worker_assigned_to_repair_mech[key][i]
+            worker = self.workers.find_by_tag(worker_tag)
+            if worker is not None and worker.is_repairing and worker.order_target == key:
+                new_value.append(worker_tag)
+        self.worker_assigned_to_repair_mech[key] = new_value
+        total_repairing = len(self.worker_assigned_to_repair_mech[key])
+
+        max_repairers = 2 if target.health_percentage < 0.3 else 1
+        if total_repairing >= max_repairers:
+            continue
+
+        # only ever pull workers that are otherwise just mining, never ones already tasked elsewhere
+        candidates : Units = self.workers.filter(lambda w: w.is_gathering or w.is_idle)
+        candidates = candidates.tags_not_in(already_repairing_structures)
+        sorted_workers : Units = candidates.sorted(lambda x: x.distance_to(target))
+        for wo in sorted_workers:
+            if wo.is_repairing or wo.is_constructing_scv:
+                continue
+            if wo.distance_to(target) < 30:
+                wo(AbilityId.EFFECT_REPAIR_SCV, target)
+                self.worker_assigned_to_repair_mech[key].append(wo.tag)
+                total_repairing = len(self.worker_assigned_to_repair_mech[key])
+                if total_repairing >= max_repairers:
+                    break
+
+
 def cancel_building(self : BotAI):
     for st in self.structures:
         if not st.is_ready and st.health_percentage < 0.1:
@@ -165,7 +242,7 @@ def cancel_building(self : BotAI):
 def resume_building_construction(self : BotAI):
     # checking if it is actually safe to resume construction
     for i in self.structures_without_construction_SCVs:
-        if (self.enemy_units.amount != 0 and self.enemy_units.closest_distance_to(i)) < 8 or (not self.army_advisor.is_wall_closed() and (self.worker_rushed or self.army_advisor.zergling_rushed)):
+        if (self.enemy_units.amount != 0 and self.enemy_units.closest_distance_to(i) < 8) or (not self.army_advisor.is_wall_closed() and (self.worker_rushed or self.army_advisor.zergling_rushed)):
             return
     
     # update dictionary if building or worker died
@@ -191,10 +268,19 @@ async def macro(self : BotAI):
 
     cancel_building(self)
     repair_buildings(self)
+    repair_mechanical_units(self)
     resume_building_construction(self)
+    update_rally_points(self)
 
-    if len(self.build_order) != 0 or self.workers.amount == 0:
+    if self.workers.amount == 0:
         return
+    # deliberately NOT gated on the scripted build_order being empty - every check below already
+    # gates itself (tech_requirement_progress, can_afford, already_pending, townhalls.amount), and
+    # early_build_order always runs earlier in the same step so a build it actually starts is
+    # already reflected in already_pending by the time these run. Blocking ALL of this on the
+    # scripted list being fully empty was the recurring root cause behind this session's "bot does
+    # nothing" bugs: any single stuck build_order step (bad placement, no worker, timing) silently
+    # blocked every later structure/expansion decision too, not just the stuck one
 
     if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTFLYING, 1):
         await smart_build(self, UnitTypeId.STARPORT)
@@ -203,7 +289,10 @@ async def macro(self : BotAI):
 
     if self.townhalls.amount >= 1 and can_build_structure(self, UnitTypeId.FACTORY, UnitTypeId.FACTORYFLYING, 1):
         await smart_build(self, UnitTypeId.FACTORY)
-    
+    # a second factory is only worth it once we're actually planning a real mech presence
+    if self.townhalls.amount >= 3 and (self.army_advisor.max_tanks + self.army_advisor.max_cyclones) > 10 and can_build_structure(self, UnitTypeId.FACTORY, UnitTypeId.FACTORYFLYING, 2):
+        await smart_build(self, UnitTypeId.FACTORY)
+
     if self.townhalls.amount >= 1 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 1):
         await smart_build(self, UnitTypeId.BARRACKS)
     if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 2):
@@ -237,21 +326,36 @@ async def macro(self : BotAI):
         if isinstance(w.order_target, int) and self.vespene_geyser.find_by_tag(w.order_target) is not None:
             active_refineries += 1
     
-    # build refineries
-    if self.worker_rushed and not self.army_advisor.is_wall_closed() and self.structures.of_type(UnitTypeId.REFINERY).amount != 0:
+    # build refineries - being walled in is still danger, not safety: the enemy is at the door,
+    # so gas stays deprioritized for the whole rush, not just until the wall physically closes
+    if (self.worker_rushed or self.army_advisor.zergling_rushed) and self.structures.of_type(UnitTypeId.REFINERY).amount != 0:
         if self.structure_type_build_progress(UnitTypeId.REFINERY) < 1:
             self.structures.of_type(UnitTypeId.REFINERY).first(AbilityId.CANCEL)
-    if self.townhalls.amount >= 1 and active_refineries < 1 and self.can_afford(UnitTypeId.REFINERY) and self.structures(UnitTypeId.BARRACKS).amount > 0 and (not self.worker_rushed or self.army_advisor.is_wall_closed()):
+
+    # stop building more refineries once we're sitting on a big banked gas surplus - it's not
+    # doing anything sitting in the bank, and more refineries just pulls more workers off minerals
+    # for no benefit. hysteresis: only pause once above GAS_BANK_HIGH, only resume once back below
+    # GAS_BANK_LOW, so this doesn't flip on/off every step while hovering near one threshold
+    GAS_BANK_HIGH = 600
+    GAS_BANK_LOW = 400
+    if self.gas_bank_high:
+        self.gas_bank_high = self.vespene > GAS_BANK_LOW
+    else:
+        self.gas_bank_high = self.vespene > GAS_BANK_HIGH
+
+    if self.townhalls.amount >= 1 and active_refineries < 1 and self.can_afford(UnitTypeId.REFINERY) and self.structures(UnitTypeId.BARRACKS).amount > 0 and not self.worker_rushed and not self.army_advisor.zergling_rushed and not self.gas_bank_high:
         await build_gas(self)
-    if self.townhalls.amount >= 2 and active_refineries < 2 and self.can_afford(UnitTypeId.REFINERY):
+    # wait for the factory before the 2nd gas - at 1 base/1 refinery there's no vehicle tech to
+    # spend the extra gas on yet, so it just sits bloating the mineral-to-gas worker ratio early
+    if self.townhalls.amount >= 2 and active_refineries < 2 and self.can_afford(UnitTypeId.REFINERY) and (self.structures(UnitTypeId.FACTORY).amount > 0 or self.already_pending(UnitTypeId.FACTORY) > 0) and not self.gas_bank_high:
         await build_gas(self)
-    if self.townhalls.amount >= 2 and self.structures(UnitTypeId.STARPORT).amount > 0 and active_refineries < 3 and self.can_afford(UnitTypeId.REFINERY):
+    if self.townhalls.amount >= 2 and self.structures(UnitTypeId.STARPORT).amount > 0 and active_refineries < 3 and self.can_afford(UnitTypeId.REFINERY) and not self.gas_bank_high:
         await build_gas(self)
-    if self.townhalls.amount >= 3 and active_refineries < 4 and self.can_afford(UnitTypeId.REFINERY):
+    if self.townhalls.amount >= 3 and active_refineries < 4 and self.can_afford(UnitTypeId.REFINERY) and not self.gas_bank_high:
         await build_gas(self)
-    if self.townhalls.amount >= 4 and active_refineries < 6 and self.can_afford(UnitTypeId.REFINERY):
+    if self.townhalls.amount >= 4 and active_refineries < 6 and self.can_afford(UnitTypeId.REFINERY) and not self.gas_bank_high:
         await build_gas(self)
-    if self.townhalls.amount >= 5 and active_refineries < 7 and self.can_afford(UnitTypeId.REFINERY):
+    if self.townhalls.amount >= 5 and active_refineries < 7 and self.can_afford(UnitTypeId.REFINERY) and not self.gas_bank_high:
         await build_gas(self)
-    if self.townhalls.amount >= 5 and active_refineries < 8 and self.can_afford(UnitTypeId.REFINERY) and self.minerals > 1200:
+    if self.townhalls.amount >= 5 and active_refineries < 8 and self.can_afford(UnitTypeId.REFINERY) and self.minerals > 1200 and not self.gas_bank_high:
         await build_gas(self)
