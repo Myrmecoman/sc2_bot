@@ -43,7 +43,7 @@ class Tanks:
         Otherwise the tank may unsiege.
         """
         if shootable_targets is None:
-            shootable_targets = self._get_shootable_ground_targets()
+            shootable_targets = self._get_shootable_units()
         # Keep siege mode while there is anything the tank can shoot
         # within the 14-range commitment distance.
         if (shootable_targets.amount > 0 and shootable_targets.closest_distance_to(unit) <= ENEMY_HOLD_RANGE):
@@ -54,10 +54,8 @@ class Tanks:
         return timeIsUp
 
 
-    def _get_shootable_ground_targets(self):
-        shootable_targets: Units = (
-        self.ai.enemy_units.filter(lambda u: (not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE_WITH_WORKERS)) | self.ai.enemy_structures.not_flying)
-        return shootable_targets
+    def _get_shootable_units(self):
+        return (self.ai.enemy_units.filter(lambda u: (not u.is_flying and u.type_id not in ATTACK_TARGET_IGNORE_WITH_WORKERS)))
 
 
     def _liberator_guard_point(self) -> Optional[Point2]:
