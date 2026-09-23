@@ -1,8 +1,7 @@
 # sc2_bot - SmoothBrain bot
 
 Simple sc2 bot using burnysc2 api.
-Its name is SmoothBrain and SmoothBrainFlat48 on the ai arena ladders.
-In the "normal" folder is located the normal macro bot. In the "flat48" folder is located the Flat48 version of this bot, which basically performs an all-in attack.
+Its name is SmoothBrain on the ai arena ladders.
 This bot is able to almost always beat the CheaterInsane AIs against every race.
 
 If you are a novice bot writter I suggest you pick some ideas from this bot and copy a few blocks of code. However I do not recommend to straight up copy it and modify it because you need to understand how everything works else you will break everything. :)
