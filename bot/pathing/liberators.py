@@ -36,7 +36,9 @@ class Liberators:
 
     def _can_leave_ag(self, unit: Unit) -> bool:
         held_since = self.ag_since.get(unit.tag)
-        return held_since is None or self.ai.time - held_since >= MIN_AG_DURATION
+        if held_since is None:
+            return False
+        return self.ai.time - held_since >= MIN_AG_DURATION
 
     def _nearby_enemy_tanks(self, unit: Unit) -> Units:
         return self.ai.enemy_units.of_type({UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED}).closer_than(self.ag_cast_range, unit)
@@ -185,6 +187,7 @@ class Liberators:
                 unit(AbilityId.MORPH_LIBERATORAAMODE)
             return True
         return False
+    
 
     def move_to_safety(self, unit: Unit, grid: np.ndarray):
         """
