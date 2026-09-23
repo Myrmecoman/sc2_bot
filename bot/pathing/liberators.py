@@ -91,26 +91,41 @@ class Liberators:
             unit.move(move_to)
 
     async def _try_siege_tanks(self, unit: Unit, grid: np.ndarray) -> bool:
-        """For a mobile (Fighter mode) Liberator: if an enemy tank is in cast range and the spot
-        is safe enough to commit to (once sieged it can't dodge), morph Defender Mode onto it.
-        Moves toward a tank that's close but not yet in range instead. Returns True if it issued
-        any order this call (including "still approaching"), so the caller doesn't also override it."""
+        """For a mobile (Fighter mode) Liberator: if an enemy tank is in cast range,
+        morph Defender Mode 4 units toward the tank rather than directly on the tank.
+
+        This leaves the Liberator's Defender Mode position offset from the target,
+        instead of sieging exactly on the target's position.
+        """
         close_tanks: Units = self._nearby_enemy_tanks(unit)
         if close_tanks:
             if self.pathing.is_position_safe(grid, unit.position):
                 target: Unit = close_tanks.closest_to(unit)
-                if await self.ai.can_cast(unit, AbilityId.MORPH_LIBERATORAGMODE, target.position):
-                    unit(AbilityId.MORPH_LIBERATORAGMODE, target.position)
+                # Place the Defender Mode zone 4 units away from the Liberator,
+                # in the direction of the target tank.
+                siege_pos: Point2 = target.position.towards(unit.position, 4.0)
+                if await self.ai.can_cast(
+                    unit,
+                    AbilityId.MORPH_LIBERATORAGMODE,
+                    siege_pos,
+                ):
+                    unit(AbilityId.MORPH_LIBERATORAGMODE, siege_pos)
                     return True
-            return False  # in range but not safe enough to root itself here - fall through to the normal danger handling
-
-        # no tank in cast range yet - if one's visible further out, close the distance, but only
-        # while it's actually safe to do so (a Fighter-mode Liberator is still shootable)
-        far_tanks: Units = self.ai.enemy_units.of_type({UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED})
+            return False  # in range but not safe enough to root itself here
+        # no tank in cast range yet - if one's visible further out, close the distance,
+        # but only while it's actually safe to do so
+        far_tanks: Units = self.ai.enemy_units.of_type({
+            UnitTypeId.SIEGETANK,
+            UnitTypeId.SIEGETANKSIEGED,
+        })
         if not far_tanks or not self.pathing.is_position_safe(grid, unit.position):
             return False
         nearest: Unit = far_tanks.closest_to(unit)
-        move_to: Point2 = self.pathing.find_path_next_point(unit.position, nearest.position, grid)
+        move_to: Point2 = self.pathing.find_path_next_point(
+            unit.position,
+            nearest.position,
+            grid,
+        )
         unit.move(move_to)
         return True
 
