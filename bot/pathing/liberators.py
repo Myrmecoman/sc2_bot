@@ -95,59 +95,76 @@ class Liberators:
         """For a mobile (Fighter mode) Liberator: hunt enemy Siege Tanks and
         morph into Defender Mode at a point 4 units away from the tank.
 
-        When the tank is outside cast range, only approach far enough to make
-        the desired siege position castable. Do not move all the way onto the tank.
+        The Liberator approaches only far enough for the desired Defender Mode
+        position to be within cast range. It does not approach the tank itself.
         """
         AG_OFFSET = 4.0
         CAST_BUFFER = 0.25
-        # Tank already close enough to attempt the siege.
-        close_tanks: Units = self._nearby_enemy_tanks(unit)
-        if close_tanks:
-            if self.pathing.is_position_safe(grid, unit.position):
-                target: Unit = close_tanks.closest_to(unit)
 
-                # Place the Defender Mode zone 4 units away from the tank,
-                # on the Liberator's side of the tank.
-                siege_pos: Point2 = target.position.towards(
-                    unit.position,
-                    AG_OFFSET,
-                )
-                if await self.ai.can_cast(
-                    unit,
-                    AbilityId.MORPH_LIBERATORAGMODE,
-                    siege_pos,
-                ):
-                    unit(
-                        AbilityId.MORPH_LIBERATORAGMODE,
-                        siege_pos,
-                    )
-                    return True
-            # Tank is close enough, but the current position is unsafe.
-            return False
-        # No tank currently within cast range.
-        far_tanks: Units = self.ai.enemy_units.of_type({
+        tanks: Units = self.ai.enemy_units.of_type({
             UnitTypeId.SIEGETANK,
             UnitTypeId.SIEGETANKSIEGED,
         })
-        if not far_tanks:
+
+        if not tanks:
             return False
+
         if not self.pathing.is_position_safe(grid, unit.position):
             return False
-        nearest: Unit = far_tanks.closest_to(unit)
-        approach_distance: float = (
-            self.ag_cast_range
-            + AG_OFFSET
-            - CAST_BUFFER
+
+        # Pick the closest tank.
+        target: Unit = tanks.closest_to(unit)
+
+        # The desired Defender Mode position is 4 units toward the Liberator
+        # from the tank.
+        siege_pos: Point2 = target.position.towards(
+            unit.position,
+            AG_OFFSET,
         )
-        approach_pos: Point2 = nearest.position.towards(
+
+        # If the desired siege position is within cast range, siege now.
+        if unit.distance_to(siege_pos) <= self.ag_cast_range - CAST_BUFFER:
+            if await self.ai.can_cast(
+                unit,
+                AbilityId.MORPH_LIBERATORAGMODE,
+                siege_pos,
+            ):
+                unit(
+                    AbilityId.MORPH_LIBERATORAGMODE,
+                    siege_pos,
+                )
+                return True
+
+            # We are close enough to cast, but the ability isn't currently
+            # available. Don't issue another movement order.
+            return False
+
+        # We are too far away to cast at the desired siege position.
+        #
+        # Move toward the position from which siege_pos will be castable.
+        # This keeps the Liberator approximately:
+        #
+        #     CAST_RANGE
+        #          |
+        #          v
+        #    Lib -------- siege_pos ---- 4 ---- Tank
+        #
+        # rather than moving directly onto the tank.
+        approach_distance: float = (
+            self.ag_cast_range - CAST_BUFFER
+        )
+
+        approach_pos: Point2 = siege_pos.towards(
             unit.position,
             approach_distance,
         )
+
         move_to: Point2 = self.pathing.find_path_next_point(
             unit.position,
             approach_pos,
             grid,
         )
+
         unit.move(move_to)
         return True
 
