@@ -32,7 +32,7 @@ POWER_CONFIDENCE_FLOOR = 0.3
 #
 # 0.5 seconds = approximately 11 SC2 game loops at normal speed.
 # Increase to 1.0 if you want even fewer simulations.
-COMBAT_SIM_INTERVAL = 0.5
+COMBAT_SIM_INTERVAL = 1.0
 
 
 # So far, all this does is track enemy army.
@@ -335,10 +335,6 @@ class ArmyCompositionAdvisor():
 
     def remove_unit(self, tag: int):
         self.known_enemy_units.pop(tag, None)
-
-        # Enemy composition changed.
-        # Force a fresh combat simulation next time.
-        self.invalidate_combat_simulation()
 
     def track_resource_losses(self, tag: int):
         return
