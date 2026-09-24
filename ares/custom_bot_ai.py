@@ -1,0 +1,554 @@
+"""Extension of sc2.BotAI to add custom functions."""
+
+from __future__ import annotations
+
+import argparse
+
+import numpy as np
+from cython_extensions import cy_closer_than, cy_distance_to_squared
+from loguru import logger
+from map_analyzer.destructibles import buildings_2x2, buildings_3x3
+
+try:
+    from propcache.api import cached_property
+except ImportError:
+    from functools import cached_property
+
+from s2clientprotocol import raw_pb2 as raw_pb
+from s2clientprotocol import sc2api_pb2 as sc_pb
+from s2clientprotocol import ui_pb2 as ui_pb
+from sc2.bot_ai import BotAI
+from sc2.constants import EQUIVALENTS_FOR_TECH_PROGRESS
+from sc2.dicts.upgrade_researched_from import UPGRADE_RESEARCHED_FROM
+from sc2.game_info import Ramp
+from sc2.ids.ability_id import AbilityId
+from sc2.ids.unit_typeid import UnitTypeId
+from sc2.ids.upgrade_id import UpgradeId
+from sc2.position import Point2, Point3
+from sc2.unit import Unit
+from sc2.units import Units
+
+from ares.consts import (
+    ALL_STRUCTURES,
+    COMMON_UNIT_IGNORE_TYPES,
+    ID,
+    TARGET,
+    TOWNHALL_TYPES,
+    WORKER_TYPES,
+    UnitTreeQueryType,
+    WallOffDetection,
+)
+from ares.dicts.unit_data import UNIT_DATA
+from ares.dicts.unit_tech_requirement import UNIT_TECH_REQUIREMENT
+from ares.managers.hub import Hub
+from ares.managers.manager_mediator import ManagerMediator
+
+
+class CustomBotAI(BotAI):
+    """Extension of sc2.BotAI to add custom functions."""
+
+    base_townhall_type: UnitTypeId
+    enemy_detectors: Units
+    enemy_parasitic_bomb_positions: list[Point2]
+    gas_type: UnitTypeId
+    unit_tag_dict: dict[int, Unit]
+    worker_type: UnitTypeId
+    manager_hub: Hub
+    """Hub in charge of handling the Managers"""
+    CANT_BUILD_LOCATION_INVALID: int = 44
+    _blocked_positions: set[Point2] = set()
+
+    @cached_property
+    def ladder_match(self) -> bool:
+        """Determines whether the current match is a ladder match.
+
+        Checks command-line arguments for ladder-specific flags.
+
+        Returns
+        -------
+        is_ladder : bool
+            True if running in an automated/managed environment,
+            otherwise False.
+        """
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--GamePort", type=int, nargs="?")
+        parser.add_argument("--OpponentId", type=str, nargs="?")
+        args, _ = parser.parse_known_args()
+
+        return args.GamePort is not None or args.OpponentId is not None
+
+    @property
+    def mediator(self) -> ManagerMediator:
+        """Register behavior.
+
+        Shortcut to `self.manager_hub.manager_mediator`
+
+
+        Returns
+        -------
+        ManagerMediator
+
+        """
+        return self.manager_hub.manager_mediator
+
+    async def on_step(self, iteration: int):  # pragma: no cover
+        """Here because all abstract methods have to be implemented.
+
+        Gets overridden in Ares.
+
+        Parameters
+        ----------
+        iteration :
+            The current game iteration
+
+        Returns
+        -------
+
+        """
+        pass
+
+    def draw_text_on_world(
+        self,
+        pos: Point2,
+        text: str,
+        size: int = 12,
+        y_offset: int = 0,
+        color=(0, 255, 255),
+    ) -> None:  # pragma: no cover
+        """Print out text to the game screen.
+
+        Parameters
+        ----------
+        pos :
+            Where the text should be drawn.
+        text :
+            What text to draw.
+        size :
+            How large the text should be.
+        y_offset :
+            How far offset the text should be along the y-axis to ensure visibility of
+            both text and whatever the text is describing.
+        color :
+            What color the text should be.
+
+        Returns
+        -------
+
+        """
+        z_height: float = self.get_terrain_z_height(pos)
+        self.client.debug_text_world(
+            text,
+            Point3((pos.x, pos.y + y_offset, z_height)),
+            color=color,
+            size=size,
+        )
+
+    @staticmethod
+    def get_total_supply(units: Units | list[Unit]) -> int:
+        """Get total supply of units.
+
+        Parameters
+        ----------
+        units :
+            Units object to return the total supply of
+
+        Returns
+        -------
+        int :
+            The total supply of the Units object.
+
+        """
+        return sum(
+            [
+                UNIT_DATA[unit.type_id]["supply"]
+                for unit in units
+                if unit.type_id not in ALL_STRUCTURES
+                # Skip units not in UNIT_DATA
+                and unit.type_id in UNIT_DATA
+            ]
+        )
+
+    def not_started_but_in_building_tracker(self, structure_type: UnitTypeId) -> int:
+        """
+        Figures out if worker in on route to build something, and
+        that structure_type doesn't exist yet.
+
+        Parameters
+        ----------
+        structure_type
+
+        Returns
+        -------
+
+        """
+        num_in_tracker: int = 0
+        building_tracker: dict = self.mediator.get_building_tracker_dict
+        for tag, _info in building_tracker.items():
+            structure_id: UnitTypeId = building_tracker[tag][ID]
+            if structure_id != structure_type:
+                continue
+
+            if (target := building_tracker[tag][TARGET]) and not self.structures.filter(
+                lambda s: cy_distance_to_squared(s.position, target.position) < 1.0
+            ):
+                num_in_tracker += 1
+
+        return num_in_tracker
+
+    def pending_or_complete_upgrade(self, upgrade_id: UpgradeId) -> bool:
+        if upgrade_id in self.state.upgrades:
+            return True
+
+        creation_ability_id = self.game_data.upgrades[
+            upgrade_id.value
+        ].research_ability.exact_id
+
+        researched_from: UnitTypeId = UPGRADE_RESEARCHED_FROM[upgrade_id]
+        upgrade_from_structures: Units = self.mediator.get_own_structures_dict[
+            researched_from
+        ]
+
+        for structure in upgrade_from_structures:
+            for order in structure.orders:
+                if order.ability.exact_id == creation_ability_id:
+                    return True
+
+        return False
+
+    def split_ground_fliers(
+        self, units: Units | list[Unit], return_as_lists: bool = False
+    ) -> tuple[Units, Units] | tuple[list[Unit], list[Unit]]:
+        """Split units into ground units and flying units.
+
+        Parameters
+        ----------
+        units :
+            Units object that should be split
+        return_as_lists :
+        Returns
+        -------
+        tuple[Units, Units] :
+            `tuple` where the first element is the ground units present in `Units` and
+            the second element is the flying units present in `Units`
+
+        """
+        ground, fly = [], []
+        for unit in units:
+            if unit.is_flying:
+                fly.append(unit)
+            else:
+                ground.append(unit)
+        if return_as_lists:
+            return ground, fly
+        else:
+            return Units(ground, self), Units(fly, self)
+
+    def tech_ready_for_unit(self, unit_type: UnitTypeId) -> bool:
+        """
+        Similar to python-sc2's `tech_requirement_progress` but this one specializes
+        in units and simply returns a boolean.
+        Since tech_requirement_progress is not reliable for non-structures.
+
+        Parameters
+        ----------
+        unit_type :
+            Unit type id we want to check if tech is ready for.
+
+        Returns
+        -------
+        bool :
+            Indicating tech is ready.
+        """
+        # special cases
+        if (
+            unit_type in WORKER_TYPES and self.townhalls.ready
+        ) or unit_type == UnitTypeId.OVERLORD:
+            return True
+
+        if unit_type not in UNIT_TECH_REQUIREMENT:
+            logger.warning(f"{unit_type} not in UNIT_TECH_REQUIREMENT dictionary")
+            return True
+
+        tech_buildings_required: set[UnitTypeId] = UNIT_TECH_REQUIREMENT[unit_type]
+
+        for tech_building_id in tech_buildings_required:
+            to_check = [tech_building_id]
+            # check for alternatives structures
+            # for example gateway might be a requirement, but we might have warpgates
+            if tech_building_id in EQUIVALENTS_FOR_TECH_PROGRESS:
+                to_check.append(
+                    next(iter(EQUIVALENTS_FOR_TECH_PROGRESS[tech_building_id]))
+                )
+
+            if not any(
+                s for s in self.structures if s.type_id in to_check and s.is_ready
+            ):
+                return False
+
+        return True
+
+    async def _give_units_same_order(
+        self,
+        order: AbilityId,
+        unit_tags: list[int] | set[int],
+        target: int | Point2 | Unit | None = None,
+    ) -> None:  # pragma: no cover
+        """
+        Give units corresponding to the given tags the same order.
+        @param order: the order to give to all units
+        @param unit_tags: the tags of the units to give the order to
+        @param target: either a Point2 of the location or the tag of the unit to target
+        """
+        if not target:
+            # noinspection PyProtectedMember
+            await self.client._execute(
+                action=sc_pb.RequestAction(
+                    actions=[
+                        sc_pb.Action(
+                            action_raw=raw_pb.ActionRaw(
+                                unit_command=raw_pb.ActionRawUnitCommand(
+                                    ability_id=order.value,
+                                    unit_tags=unit_tags,
+                                )
+                            )
+                        ),
+                    ]
+                )
+            )
+        elif isinstance(target, Point2):
+            # noinspection PyProtectedMember
+            await self.client._execute(
+                action=sc_pb.RequestAction(
+                    actions=[
+                        sc_pb.Action(
+                            action_raw=raw_pb.ActionRaw(
+                                unit_command=raw_pb.ActionRawUnitCommand(
+                                    ability_id=order.value,
+                                    target_world_space_pos=target.as_Point2D,
+                                    unit_tags=unit_tags,
+                                )
+                            )
+                        ),
+                    ]
+                )
+            )
+        else:
+            tag: int
+            if isinstance(target, Unit):
+                tag = target.tag
+            elif isinstance(target, int):
+                tag = target
+            else:
+                logger.warning(
+                    f"Got {target} argument, and not sure what to do with it. "
+                    f" `_give_units_same_order` will not execute."
+                )
+                return
+
+            # noinspection PyProtectedMember
+            await self.client._execute(
+                action=sc_pb.RequestAction(
+                    actions=[
+                        sc_pb.Action(
+                            action_raw=raw_pb.ActionRaw(
+                                unit_command=raw_pb.ActionRawUnitCommand(
+                                    ability_id=order.value,
+                                    target_unit_tag=tag,
+                                    unit_tags=unit_tags,
+                                )
+                            )
+                        ),
+                    ]
+                )
+            )
+
+    async def _do_archon_morph(self, templar: list[Unit]) -> None:  # pragma: no cover
+        command = raw_pb.ActionRawUnitCommand(
+            ability_id=AbilityId.MORPH_ARCHON.value,
+            unit_tags=[templar[0].tag, templar[1].tag],
+            queue_command=False,
+        )
+        action = raw_pb.ActionRaw(unit_command=command)
+        await self.client._execute(
+            action=sc_pb.RequestAction(actions=[sc_pb.Action(action_raw=action)])
+        )
+
+    async def unload_by_tag(
+        self, container: Unit, unit_tag: int, exit_towards: Point2 | None = None
+    ) -> None:  # pragma: no cover
+        """Unload a unit from a container based on its tag. Thanks, Sasha!"""
+        index: int = 0
+        # noinspection PyProtectedMember
+        if not container._proto.passengers:
+            return
+        # noinspection PyProtectedMember
+        for index, passenger in enumerate(container._proto.passengers):
+            if passenger.tag == unit_tag:
+                break
+            # noinspection PyProtectedMember
+            if index == len(container._proto.passengers) - 1:
+                logger.warning(f"Can't find passenger {unit_tag}")
+                return
+
+        await self.unload_container(container.tag, index)
+
+        if exit_towards and container.type_id in {
+            UnitTypeId.NYDUSCANAL,
+            UnitTypeId.NYDUSNETWORK,
+        }:
+            # by the time this is called, CustomBotAI will have manager_hub
+            # noinspection PyUnresolvedReferences
+            container(
+                AbilityId.RALLY_BUILDING,
+                exit_towards,
+            )
+            # by the time this is called, CustomBotAI will have manager_hub
+            # noinspection PyUnresolvedReferences
+            self.mediator.remove_from_nydus_travellers(unit_tag=unit_tag)
+
+    async def unload_container(
+        self, container_tag: int, index: int = 0
+    ) -> None:  # pragma: no cover
+        # noinspection PyProtectedMember
+        await self.client._execute(
+            action=sc_pb.RequestAction(
+                actions=[
+                    sc_pb.Action(
+                        action_raw=raw_pb.ActionRaw(
+                            unit_command=raw_pb.ActionRawUnitCommand(
+                                ability_id=0, unit_tags=[container_tag]
+                            )
+                        )
+                    ),
+                    sc_pb.Action(
+                        action_ui=ui_pb.ActionUI(
+                            cargo_panel=ui_pb.ActionCargoPanelUnload(unit_index=index)
+                        )
+                    ),
+                ]
+            )
+        )
+
+    def get_enemy_proxies(
+        self,
+        distance: float,
+        from_position: Point2,
+    ) -> list[Unit]:
+        dist: float = distance**2
+        return [
+            s
+            for s in self.enemy_structures
+            if cy_distance_to_squared(s.position, from_position) < dist
+        ]
+
+    def get_next_expansion_location(
+        self, mediator: ManagerMediator, check_location_is_safe: bool = True
+    ) -> Point2 | None:
+        grid: np.ndarray = mediator.get_ground_grid
+        for el in mediator.get_own_expansions:
+            location: Point2 = el[0]
+            if location in self._blocked_positions or (
+                check_location_is_safe
+                and not mediator.is_position_safe(grid=grid, position=location)
+                or self.location_is_blocked(mediator, location, check_own=True)
+            ):
+                continue
+
+            return location
+        return None
+
+    def location_is_blocked(
+        self, mediator: ManagerMediator, position: Point2, check_own: bool = False
+    ) -> bool:
+        """
+        Check if enemy or own townhalls are blocking `position`.
+
+        Parameters
+        ----------
+        mediator : ManagerMediator
+        position : Point2
+        check_own : bool
+
+        Returns
+        -------
+        bool : True if location is blocked by something.
+
+        """
+        if position in self._blocked_positions:
+            return True
+        close_enemy: Units = mediator.get_units_in_range(
+            start_points=[position],
+            distances=5.5,
+            query_tree=UnitTreeQueryType.EnemyGround,
+        )[0]
+
+        close_enemy = close_enemy.filter(lambda u: u.type_id != UnitTypeId.AUTOTURRET)
+        if close_enemy:
+            return True
+
+        if check_own and mediator.get_units_in_range(
+            start_points=[position],
+            distances=5.5,
+            query_tree=UnitTreeQueryType.AllOwn,
+        )[0].filter(lambda u: u.type_id in TOWNHALL_TYPES):
+            return True
+
+        neutral_units = self.destructables + self.watchtowers
+        return bool(cy_closer_than(neutral_units, 5.5, position))
+
+    def building_worker_blocked_by_burrowed_unit(
+        self, worker_tag: int, position: Point2
+    ) -> bool:
+        for error in self.state.action_errors:
+            if (
+                error.unit_tag == worker_tag
+                and error.result == self.CANT_BUILD_LOCATION_INVALID
+            ):
+                self._blocked_positions.add(position)
+                return True
+
+        return False
+
+    def draw_influence_in_game(
+        self,
+        grid: np.ndarray,
+        lower_threshold: float,
+        upper_threshold: float,
+        color: tuple[int, int, int],
+        size: int,
+    ) -> None:
+        height: float = self.get_terrain_z_height(self.game_info.map_center)
+        for x, y in zip(
+            *np.where((grid > lower_threshold) & (grid < upper_threshold)), strict=False
+        ):
+            pos: Point3 = Point3((x, y, height))
+            val = 9999 if grid[x, y] == np.inf else int(grid[x, y])
+            self.client.debug_text_world(str(val), pos, color, size)
+
+    def main_ramp_walled_off(self, ramp: Ramp) -> bool:
+        """
+        Check if a main base ramp is walled off.
+        `self.main_base_ramp` or `self.mediator.get_enemy_ramp`
+
+        Parameters
+        ----------
+        ramp : Either our own main ramp or enemy main ramp
+
+        Returns
+        -------
+        bool : True if ramp is walled off
+
+        """
+        close_ground_enemy: Units = self.mediator.get_units_in_range(
+            start_points=[ramp.top_center],
+            distances=WallOffDetection.DISTANCE.value,
+            query_tree=UnitTreeQueryType.EnemyGround,
+        )[0].filter(lambda u: u.type_id not in COMMON_UNIT_IGNORE_TYPES)
+
+        num_twos: int = close_ground_enemy(buildings_2x2).amount
+        num_threes: int = close_ground_enemy(buildings_3x3).amount
+        return (
+            WallOffDetection.TWOS.value * num_twos
+            + WallOffDetection.THREES.value * num_threes
+            >= WallOffDetection.THRESHOLD.value
+        )

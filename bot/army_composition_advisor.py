@@ -9,6 +9,7 @@ from sc2.data import Race
 from sc2.constants import TARGET_GROUND, TARGET_AIR
 from bot.pathing.consts import DANGEROUS_STRUCTURES, SKYTOSS_TYPES
 from bot.pathing.influence_costs import INFLUENCE_COSTS
+from sc2_helper.combat_simulator import CombatSimulator
 
 # rough supply-equivalent weight for each visible bunker/cannon/spine crawler/etc when sizing up
 # a fight - these don't have a supply cost but are still a real reason not to walk in
@@ -258,6 +259,8 @@ class ArmyCompositionAdvisor():
 
     def provide_advices(self):
         self.update_enemy_army(self.bot.enemy_units)
+        enemies:Units = self.bot.enemy_units
+        friendlies:Units = self.bot.units.exclude_type({UnitTypeId.SCV, UnitTypeId.MULE})
 
         # 130s was too narrow to catch anything but the very earliest pool-first timings - a
         # second CC is already up well before that, so a rush arriving any time in the first few
@@ -377,13 +380,22 @@ class ArmyCompositionAdvisor():
         # should_attack's own previous value - should_attack can go True from defending alone (a
         # single enemy scout near a structure), which isn't a real attack commitment and shouldn't
         # earn the easier "keep attacking" bar
-        CONTINUE_ATTACK_POWER_RATIO = 1.1
-        START_ATTACK_POWER_RATIO = 1.5
-        defending_and_winnable = self.defending and our_power > nearby_enemy_power
-        if self.bot.army_attacking:
-            self.should_attack = defending_and_winnable or our_power > CONTINUE_ATTACK_POWER_RATIO * enemy_power
-        else:
-            self.should_attack = defending_and_winnable or our_power > START_ATTACK_POWER_RATIO * enemy_power
+
+        simulator:CombatSimulator = CombatSimulator()
+        simulator.bad_micro(False)
+        simulator.enable_splash(True)
+        simulator.enable_timing_adjustment(True)
+        simulator.enable_surround_limits(True)
+        simulator.enable_melee_blocking(True)
+        simulator.workers_do_no_damage(False)
+        simulator.assume_reasonable_positioning(True)
+
+        winnable = False
+        if friendlies is not None and not friendlies.empty and enemies is not None and not enemies.empty:
+            winnable, _ = simulator.predict_engage(friendlies, enemies, False)
+
+        defending_and_winnable = self.defending and winnable
+        self.should_attack = defending_and_winnable or winnable
     
 
     def provide_advices_startup(self):

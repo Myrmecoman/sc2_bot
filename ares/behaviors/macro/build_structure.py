@@ -1,0 +1,197 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from cython_extensions.geometry import cy_distance_to_squared
+from loguru import logger
+from sc2.data import Race
+from sc2.ids.unit_typeid import UnitTypeId
+from sc2.position import Point2
+
+from ares.consts import BuildingSize
+from ares.dicts.structure_to_building_size import STRUCTURE_TO_BUILDING_SIZE
+
+if TYPE_CHECKING:
+    from ares import AresBot
+
+from ares.behaviors.macro.macro_behavior import MacroBehavior
+from ares.consts import BUILDING_SIZE_ENUM_TO_RADIUS
+from ares.managers.manager_mediator import ManagerMediator
+
+
+@dataclass
+class BuildStructure(MacroBehavior):
+    """Handy convenience building structure behavior.
+    Especially combined with `Mining` and ares built in placement solver.
+    Finds an ideal mining worker, and an available precalculated placement.
+    Then removes worker from mining records and provides a new role.
+
+
+    Example:
+    ```py
+    from ares.behaviors.macro import BuildStructure
+
+    # finds available barracks location near spawn base location
+    # assigns a scv and builds a barracks
+    self.register_behavior(
+        BuildStructure(
+            base_location=self.start_location,
+            structure_id=UnitTypeId.BARRACKS
+        )
+    )
+    ```
+
+    Attributes:
+        base_location: The base location to build near.
+        structure_id: The structure type we want to build.
+        max_on_route: The max number of workers on route to build this. Defaults to 1.
+        first_pylon: Will look for the first pylon in placements dict.
+            Defaults to False.
+        static_defence: Will look for static defense in placements dict.
+            Defaults to False.
+        wall: Find wall placement if possible. Only the main base is currently
+            supported. Defaults to False.
+        closest_to: Find placement at this base closest to the given point. Optional.
+        to_count: Prevent going over this amount in total.
+            Defaults to 0, turning this check off.
+        to_count_per_base: Prevent going over this amount at this base location.
+            Defaults to 0, turning this check off.
+        tech_progress_check: Check if tech is ready before trying to build.
+            Defaults to 0.85; setting it to 0.0 turns this check off.
+        supply_depot: Choose a predefined supply depot location.
+            Defaults to False.
+        missile_turret: Choose a predefined missile turret location.
+            Defaults to False.
+        sensor_tower: Choose a predefined sensor tower location.
+            Defaults to False.
+        upgrade_structure: Choose a predefined upgrade structurer location.
+            Defaults to False.
+        production: Choose a predefined production location.
+            Defaults to False.
+        bunker: Choose a predefined bunker location.
+            Defaults to False.
+        reaper_wall: Choose a predefined reaper wall location.
+            Defaults to False.
+        find_alternative: If no placements are available at this base, optionally
+            search nearby bases. Defaults to True.
+
+    """
+
+    base_location: Point2
+    structure_id: UnitTypeId
+    max_on_route: int = 1
+    first_pylon: bool = False
+    static_defence: bool = False
+    wall: bool = False
+    closest_to: Point2 | None = None
+    to_count: int = 0
+    to_count_per_base: int = 0
+    tech_progress_check: float = 0.85
+    supply_depot: bool = False
+    missile_turret: bool = False
+    sensor_tower: bool = False
+    upgrade_structure: bool = False
+    production: bool = True
+    bunker: bool = False
+    reaper_wall: bool = False
+    find_alternative: bool = True
+
+    def execute(self, ai: AresBot, config: dict, mediator: ManagerMediator) -> bool:
+        if self.structure_id not in STRUCTURE_TO_BUILDING_SIZE:
+            logger.error(
+                f"Invalid structure type passed to `BuildStructure`: "
+                f"{self.structure_id}"
+            )
+            return False
+
+        # already enough workers on route to build this
+        if (
+            ai.not_started_but_in_building_tracker(self.structure_id)
+            >= self.max_on_route
+        ):
+            return False
+        # if `to_count` is set, see if there is already enough
+        if self.to_count and self._enough_existing(ai, mediator):
+            return False
+        # if we have enough at this base
+        if self.to_count_per_base and self._enough_existing_at_this_base(mediator):
+            return False
+
+        # tech progress
+        if (
+            self.tech_progress_check
+            and ai.tech_requirement_progress(self.structure_id)
+            < self.tech_progress_check
+        ):
+            return False
+
+        if ai.race == Race.Zerg:
+            ai.request_zerg_placement(self.base_location, self.structure_id)
+            return True
+
+        within_psionic_matrix: bool = (
+            ai.race == Race.Protoss and self.structure_id != UnitTypeId.PYLON
+        )
+
+        if (
+            placement := mediator.request_building_placement(
+                base_location=self.base_location,
+                structure_type=self.structure_id,
+                first_pylon=self.first_pylon,
+                static_defence=self.static_defence,
+                wall=self.wall,
+                find_alternative=self.find_alternative,
+                within_psionic_matrix=within_psionic_matrix,
+                closest_to=self.closest_to,
+                supply_depot=self.supply_depot,
+                missile_turret=self.missile_turret,
+                sensor_tower=self.sensor_tower,
+                upgrade_structure=self.upgrade_structure,
+                production=self.production,
+                bunker=self.bunker,
+                reaper_wall=self.reaper_wall,
+            )
+        ) and (
+            worker := mediator.select_worker(
+                target_position=placement,
+                force_close=True,
+            )
+        ):
+            mediator.build_with_specific_worker(
+                worker=worker,
+                structure_type=self.structure_id,
+                pos=placement,
+            )
+            return True
+        return False
+
+    def _enough_existing(self, ai: AresBot, mediator: ManagerMediator) -> bool:
+        existing_structures = mediator.get_own_structures_dict[self.structure_id]
+        num_existing: int = len(
+            [s for s in existing_structures if s.is_ready]
+        ) + ai.structure_pending(self.structure_id)
+        return num_existing >= self.to_count
+
+    def _enough_existing_at_this_base(self, mediator: ManagerMediator) -> bool:
+        placement_dict: dict = mediator.get_placements_dict
+        size: BuildingSize = STRUCTURE_TO_BUILDING_SIZE[self.structure_id]
+        potential_placements: dict[Point2, dict] = placement_dict[self.base_location][
+            size
+        ]
+        taken: list[Point2] = [
+            placement
+            for placement in potential_placements
+            if not potential_placements[placement]["available"]
+        ]
+        num_structures: int = 0
+        radius_sq: float = BUILDING_SIZE_ENUM_TO_RADIUS[size] ** 2
+        structures_dict = mediator.get_own_structures_dict
+        for t in taken:
+            if [
+                s
+                for s in structures_dict[self.structure_id]
+                if cy_distance_to_squared(s.position, t) < radius_sq
+            ]:
+                num_structures += 1
+        return num_structures >= self.to_count_per_base

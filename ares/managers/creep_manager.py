@@ -1,0 +1,787 @@
+from __future__ import annotations
+
+import random
+from functools import cached_property
+from typing import Any
+
+import numpy as np
+from cython_extensions import cy_distance_to, cy_distance_to_squared
+from cython_extensions.general_utils import cy_has_creep, cy_in_pathing_grid_ma
+from map_analyzer import MapData
+from sc2.ids.ability_id import AbilityId
+from sc2.ids.unit_typeid import UnitTypeId
+from sc2.position import Point2
+from sc2.unit import Unit
+from sc2.units import Units
+from scipy.ndimage import convolve
+
+from ares.cache import property_cache_once_per_frame
+from ares.consts import (
+    CREEP_TUMOR_TYPES,
+    TOWNHALL_TYPES,
+    ManagerName,
+    ManagerRequestType,
+)
+from ares.managers.manager import Manager
+from ares.managers.manager_mediator import IManagerMediator, ManagerMediator
+
+
+class CreepManager(Manager, IManagerMediator):
+    _creep_grid: np.ndarray
+    _creep_tiles: tuple[np.ndarray, np.ndarray]
+    _creep_edges: tuple[np.ndarray, np.ndarray]
+    EDGE_FILTER: np.ndarray = np.array([[-1, -1, -1], [-1, 8, -1], [-1, -1, -1]])
+
+    def __init__(self, ai, config: dict, mediator: ManagerMediator) -> None:
+        super().__init__(ai, config, mediator)
+        self._creep_coverage: float = 0.0
+        self._overlord_spotter_dict: dict[int, Point2] = {}
+        self._setup_overlord_spotter_dict: bool = False
+        # Cache for queen edge positions when ability not available
+        self._queen_edge_position_cache: dict[int, dict] = {}
+
+        self.manager_requests_dict = {
+            ManagerRequestType.FIND_NEARBY_CREEP_EDGE_POSITION: (
+                lambda kwargs: self._find_nearby_creep_edge_position(**kwargs)
+            ),
+            ManagerRequestType.GET_CLOSEST_CREEP_TILE: (
+                lambda kwargs: self._get_closest_creep_tile(**kwargs)
+            ),
+            ManagerRequestType.GET_CREEP_COVERAGE: lambda kwargs: self._creep_coverage,
+            ManagerRequestType.GET_CREEP_EDGES: lambda kwargs: self.get_creep_edges,
+            ManagerRequestType.GET_CREEP_GRID: lambda kwargs: self.get_creep_grid,
+            ManagerRequestType.GET_CREEP_TILES: lambda kwargs: self.get_creep_tiles,
+            ManagerRequestType.GET_NEXT_TUMOR_ON_PATH: (
+                lambda kwargs: self._get_next_tumor_on_path(**kwargs)
+            ),
+            ManagerRequestType.GET_OVERLORD_CREEP_SPOTTER_POSTIONS: (
+                lambda kwargs: self._get_overlord_creep_spotter_positions(**kwargs)
+            ),
+            ManagerRequestType.GET_POSITION_BLOCKS_EXPO: (
+                lambda kwargs: self._position_blocks_expansion(**kwargs)
+            ),
+            ManagerRequestType.GET_RANDOM_CREEP_POSITION: (
+                lambda kwargs: self._get_random_creep_position(**kwargs)
+            ),
+            ManagerRequestType.GET_TUMOR_INFLUENCE_LOWEST_COST_POSITION: (
+                lambda kwargs: self._get_tumor_influence_lowest_cost_position(**kwargs)
+            ),
+            ManagerRequestType.SHOULD_CALCULATE_TUMOR_SPREAD: (
+                lambda kwargs: self.should_calculate_tumor_spread
+            ),
+        }
+
+    def manager_request(
+        self,
+        receiver: ManagerName,
+        request: ManagerRequestType,
+        reason: str | None = None,
+        **kwargs,
+    ) -> Any:
+        """Fetch information from this Manager so another Manager can use it.
+
+        Parameters
+        ----------
+        receiver :
+            This Manager.
+        request :
+            What kind of request is being made
+        reason :
+            Why the reason is being made
+        kwargs :
+            Additional keyword args if needed for the specific request, as determined
+            by the function signature (if appropriate)
+
+        Returns
+        -------
+        BotMode | list[BotMode] | None :
+            Either one of the ability dictionaries is being returned or a function that
+            returns None was called from a different manager (please don't do that).
+
+        """
+        return self.manager_requests_dict[request](kwargs)
+
+    @property_cache_once_per_frame
+    def get_creep_edges(self) -> tuple[np.ndarray, np.ndarray]:
+        if self.ai.last_game_loop % 16 == 0 or not hasattr(self, "_creep_edges"):
+            creep_grid = self.get_creep_grid
+            edges = convolve(creep_grid, self.EDGE_FILTER, mode="constant")
+
+            # Get the pathable grid and create a filter for areas near
+            # unpathable terrain
+            pathable_grid = self.ai.game_info.pathing_grid.data_numpy
+
+            # Create a 3x3 kernel to check surrounding area
+            kernel = np.ones((3, 3), dtype=np.uint8)
+
+            # Convolve pathable grid - areas near unpathable terrain
+            # will have values < 9
+            pathable_convolved = convolve(
+                pathable_grid.astype(np.uint8), kernel, mode="constant", cval=1
+            )
+
+            # Only keep edges where all surrounding tiles are pathable (value == 9)
+            valid_pathable_mask = pathable_convolved == 9
+
+            # Combine edge detection with pathable mask
+            valid_edges = (edges > 1) & valid_pathable_mask
+
+            # Filter out edges too close to own townhalls (within 2.5 distance)
+            own_townhalls = self.manager_mediator.get_own_structures_dict[
+                UnitTypeId.HATCHERY
+            ]
+            if own_townhalls:
+                # Create coordinates arrays for vectorized distance calculation
+                edge_coords_y, edge_coords_x = np.where(valid_edges)
+                townhall_distance_mask = np.ones(len(edge_coords_y), dtype=bool)
+
+                for townhall in own_townhalls:
+                    # Calculate squared distances to this townhall
+                    distances_squared = (edge_coords_x - townhall.position[0]) ** 2 + (
+                        edge_coords_y - townhall.position[1]
+                    ) ** 2
+                    # Mark edges within 2.5 distance as invalid
+                    townhall_distance_mask &= distances_squared >= 6.25  # 2.5^2
+
+                # Apply the townhall distance filter
+                valid_edge_indices = np.where(townhall_distance_mask)[0]
+                edge_y, edge_x = (
+                    edge_coords_y[valid_edge_indices],
+                    edge_coords_x[valid_edge_indices],
+                )
+            else:
+                edge_y, edge_x = np.where(valid_edges)
+
+            self._creep_edges = edge_y, edge_x
+
+        return self._creep_edges
+
+    @property_cache_once_per_frame
+    def get_creep_grid(self) -> np.ndarray:
+        return self.ai.state.creep.data_numpy
+
+    @property_cache_once_per_frame
+    def get_creep_tiles(self) -> np.ndarray:
+        positions = np.where(self.get_creep_grid == 1.0)
+        return np.column_stack(positions)
+
+    @property_cache_once_per_frame
+    def existing_tumor_positions_or_order_targets(self) -> list[Point2]:
+        own_structures_dict: dict[UnitTypeId, Units] = (
+            self.manager_mediator.get_own_structures_dict
+        )
+        positions: list[Point2] = [
+            u.position
+            for creep_tumor_type in CREEP_TUMOR_TYPES
+            for u in own_structures_dict[creep_tumor_type]
+        ]
+        positions.extend(
+            [
+                u.order_target
+                for u in self.manager_mediator.get_own_army_dict[UnitTypeId.QUEEN]
+                if u.is_using_ability(AbilityId.BUILD_CREEPTUMOR)
+            ]
+        )
+        return positions
+
+    @property_cache_once_per_frame
+    def get_tumor_influence_grid(self) -> np.ndarray:
+        """Get a grid showing tumor influence (cost) across the map."""
+        # Start with base cost grid from map data
+        tumor_influence_grid: np.ndarray = (
+            self.manager_mediator.get_cached_ground_grid.copy()
+        )
+
+        map_data: MapData = self.manager_mediator.get_map_data_object
+
+        # Add cost around existing tumors
+        for position in self.existing_tumor_positions_or_order_targets:
+            # Add high cost around each tumor (discourages clustering)
+            tumor_influence_grid = map_data.add_cost(
+                grid=tumor_influence_grid, position=position, weight=50.0, radius=5.0
+            )
+
+        return tumor_influence_grid
+
+    async def update(self, iteration: int) -> None:
+        # once every 5 seconds, calculate creep coverage
+        if self.ai.state.game_loop % 112 == 0:
+            # Get the creep and pathing grids
+            creep_grid = self.get_creep_grid.T
+            pathing_grid = self.manager_mediator.get_ground_grid
+
+            # Create a mask of pathable terrain (where pathing_grid is not np.inf)
+            pathable_mask = ~np.isinf(pathing_grid)
+
+            # Count pathable tiles with creep and total pathable tiles
+            pathable_with_creep = np.sum((creep_grid == 1) & pathable_mask)
+            total_pathable_tiles = np.sum(pathable_mask)
+
+            # Calculate coverage percentage
+            self._creep_coverage = (
+                (pathable_with_creep / total_pathable_tiles) * 100
+                if total_pathable_tiles > 0
+                else 0.0
+            )
+
+        # Clean up expired cache entries (every frame)
+        self._cleanup_expired_cache()
+
+    def _cleanup_expired_cache(self) -> None:
+        """Remove cache entries older than 64 frames."""
+        current_frame = self.ai.state.game_loop
+        expired_tags = []
+
+        for tag, cache_data in self._queen_edge_position_cache.items():
+            if current_frame - cache_data["frame"] >= 64:
+                expired_tags.append(tag)
+
+        for tag in expired_tags:
+            del self._queen_edge_position_cache[tag]
+
+    def _get_closest_creep_tile(self, pos: Point2) -> Point2 | None:
+        """Find the closest creep tile to the given position.
+
+        Args:
+            pos: A Point2 object representing the position to check
+
+        Returns:
+            Point2 object representing the closest creep tile coordinates
+            or None if no creep tiles
+        """
+        # Get the array of creep tile coordinates
+        tiles = self.get_creep_tiles
+
+        if tiles is None or tiles.size == 0:
+            return None
+
+        # Calculate squared distances efficiently with NumPy broadcasting
+        # Note: position is (x,y), but creep_tiles are stored as (y,x)
+        squared_distances = (tiles[:, 0] - pos[1]) ** 2 + (tiles[:, 1] - pos[0]) ** 2
+
+        # Find the index of the minimum distance
+        min_index = np.argmin(squared_distances)
+
+        # Return the closest point as Point2(x, y)
+        # Convert from (y,x) format to (x,y) for Point2
+        return Point2((float(tiles[min_index][1]), float(tiles[min_index][0])))
+
+    def _get_next_tumor_on_path(
+        self,
+        grid: np.ndarray,
+        from_pos: Point2,
+        to_pos: Point2,
+        max_distance: float = 999.9,
+        min_distance: float = 0.0,
+        min_separation: float = 5.0,
+        find_alternative: bool = True,
+    ) -> Point2 | None:
+        """
+        Determines the next tumor position on the path, using vectorized operations
+        to find positions along the creep edge that maintain proper separation.
+
+        Parameters:
+            grid : np.ndarray
+                A 2D array to path on.
+            from_pos : Point2
+                The starting position from which the path is evaluated.
+            to_pos : Point2
+                The target position on the grid where the path leads.
+            max_distance : float, optional
+                The maximum allowable distance from the `from_pos` to the
+                next tumor position.
+                Default is 999.9.
+            min_distance: float, optional
+                The minimum allowable distance from the `from_pos` to the
+                next tumor position.
+                Default is 0.0.
+            min_separation: float, optional
+                The minimum distance required between the new
+                tumor and existing tumors/queen routes.
+                Default is 3.0.
+            find_alternative: bool, optional
+                Find an alternative position if the closest position is
+                too close to existing tumors
+                Switch to False if possible to avoid unnecessary checks.
+                Default is True.
+
+        Returns:
+            Point2 or None
+                Returns the next suitable tumor position on the grid if a valid
+                position is found within the specified conditions.
+                Returns None if no valid position exists.
+        """
+
+        if path := self.manager_mediator.find_raw_path(
+            start=from_pos, target=to_pos, grid=grid, sensitivity=12
+        ):
+            grid = self.manager_mediator.get_ground_grid
+            creep_grid = self.get_creep_grid
+            min_separation_squared = min_separation**2
+            for point in path:
+                if not cy_has_creep(creep_grid, point) and (
+                    creep_pos := self._get_closest_creep_tile(pos=point)
+                ):
+                    distance: float = cy_distance_to(from_pos, creep_pos)
+
+                    # Check if position is within desired distance range
+                    if (
+                        max_distance > distance > min_distance
+                        and self._valid_creep_placement(
+                            creep_pos,
+                            grid=grid,
+                            visible_check=False,
+                            creep_grid=creep_grid,
+                        )
+                    ):
+                        too_close = False
+                        # Check if far enough from enemy townhalls
+                        if not all(
+                            cy_distance_to(creep_pos, townhall.position) >= 15.0
+                            for townhall in self.ai.enemy_structures(TOWNHALL_TYPES)
+                        ):
+                            too_close = True
+
+                        own_ths: list[Unit] = (
+                            self.manager_mediator.get_own_structures_dict[
+                                UnitTypeId.HATCHERY
+                            ]
+                        )
+                        # can act a bit weird near pending hatchery, avoid it
+                        if not all(
+                            cy_distance_to_squared(creep_pos, townhall.position)
+                            >= 12.25
+                            for townhall in own_ths
+                        ):
+                            too_close = True
+                        if not find_alternative:
+                            return creep_pos
+
+                        for pos in self.existing_tumor_positions_or_order_targets:
+                            if (
+                                cy_distance_to_squared(pos, creep_pos)
+                                < min_separation_squared
+                            ):
+                                too_close = True
+                                break
+
+                        if not too_close:
+                            # If this position is good, return it immediately
+                            return creep_pos
+                        else:
+                            # find a nearby alternative on the creep edge
+                            alternative_pos = self._find_nearby_creep_edge_position(
+                                creep_pos, min_separation
+                            )
+                            if alternative_pos:
+                                return alternative_pos
+
+                        return None
+
+        return None
+
+    def _find_nearby_creep_edge_position(
+        self,
+        position: Point2,
+        search_radius: float = 15.0,
+        closest_valid: bool = True,
+        spread_dist: float = 3.0,
+        townhall_avoid_dist: float = 15.0,
+        unit_tag: int | None = None,
+        cache_result: bool = False,
+    ) -> Point2 | None:
+        """Find the closest creep edge position near a given position using convolution.
+
+        Parameters
+        ----------
+        position : Point2
+            The center position to search around
+        search_radius : int, optional
+            Radius in tiles to search around the position, by default 15
+        closest_valid: bool, optional
+            Find the closest valid creep edge position?
+            Default is True.
+        spread_dist : float, optional
+            Minimum distance from existing tumors, by default 3.0
+        townhall_avoid_dist : float, optional
+            Minimum distance from enemy townhalls, by default 15.0
+        unit_tag : int | None, optional
+            Unit tag to check if queen ability is available, by default None
+        cache_result : bool, optional
+            Should we cache the result to save computation?
+            unit_tag should be set if this is True
+            by default False
+
+
+        Returns
+        -------
+        Point2 | None
+            The closest edge position, or None if no edges found
+        """
+        # Handle caching for queens when ability not available
+        if (
+            unit_tag is not None
+            and cache_result
+            and unit_tag in self._queen_edge_position_cache
+        ):
+            cache_data = self._queen_edge_position_cache[unit_tag]
+            return cache_data["position"]
+
+        # Clear cache for this unit if ability becomes available
+        if (
+            unit_tag is not None
+            and not cache_result
+            and unit_tag in self._queen_edge_position_cache
+        ):
+            del self._queen_edge_position_cache[unit_tag]
+
+        edge_y, edge_x = self.get_creep_edges
+
+        if len(edge_x) == 0:
+            return None
+
+        creep_grid = self.get_creep_grid
+        expansion_block_mask = self._expansion_block_mask
+        grid: np.ndarray = self.manager_mediator.get_ground_grid
+
+        # Calculate distances from the search position
+        distances = np.sqrt((edge_x - position[0]) ** 2 + (edge_y - position[1]) ** 2)
+
+        # Filter to only edges within search radius
+        within_radius = distances <= search_radius
+        if not np.any(within_radius):
+            return None
+
+        within_x = edge_x[within_radius]
+        within_y = edge_y[within_radius]
+        valid_mask = creep_grid[within_y, within_x] > 0.0
+        valid_mask &= ~expansion_block_mask[within_y, within_x]
+
+        valid_edges = []
+        for i, (x, y) in enumerate(
+            zip(within_x[valid_mask], within_y[valid_mask], strict=False)
+        ):
+            edge_pos = Point2((float(x), float(y)))
+            if not self._valid_creep_placement(
+                edge_pos,
+                grid,
+                creep_grid=creep_grid,
+                expansion_block_mask=expansion_block_mask,
+            ):
+                continue
+
+            # Check if far enough from all existing tumors
+            if not all(
+                cy_distance_to(edge_pos, tumor_pos) >= spread_dist
+                for tumor_pos in self.existing_tumor_positions_or_order_targets
+            ):
+                continue
+
+            valid_edges.append((i, edge_pos))
+
+        if not valid_edges:
+            return None
+
+        # Find the closest valid edge
+        if closest_valid:
+            idx, pos = min(
+                valid_edges, key=lambda pos: cy_distance_to_squared(position, pos[1])
+            )
+        else:
+            idx, pos = max(
+                valid_edges, key=lambda pos: cy_distance_to_squared(position, pos[1])
+            )
+
+        # Cache the result for queens when ability not available
+        if unit_tag is not None and cache_result and pos is not None:
+            self._queen_edge_position_cache[unit_tag] = {
+                "position": pos,
+                "frame": self.ai.state.game_loop,
+            }
+
+        return pos
+
+    def _get_overlord_creep_spotter_positions(
+        self, overlords: list[Unit] | Units, target_pos: Point2
+    ) -> dict[int, Point2]:
+        """Find optimal positions for overlords to provide vision for creep spread.
+
+        This function finds the edge of creep and distributes
+        overlord positions evenly around it.
+
+        Parameters
+        ----------
+        overlords : list[Unit] | Units
+            The overlords that will be positioned for creep vision.
+
+        Returns
+        -------
+        dict[int: Point2]
+            Dictionary mapping overlord tag to position where it should move.
+        """
+        if not overlords:
+            return {}
+
+        edge_y, edge_x = self.get_creep_edges
+
+        if len(edge_x) == 0:
+            return {}
+
+        # Calculate distances in numpy
+        distances = np.sqrt(
+            (edge_x - target_pos[0]) ** 2 + (edge_y - target_pos[1]) ** 2
+        )
+
+        num_to_keep = len(edge_x) - 1
+        closest_indices = np.argpartition(distances, num_to_keep)[:num_to_keep]
+
+        # Filter arrays to only closest edges
+        edge_x_filtered = edge_x[closest_indices]
+        edge_y_filtered = edge_y[closest_indices]
+        distances_filtered = distances[closest_indices]
+
+        # Sort by distance (closest first)
+        sort_indices = np.argsort(distances_filtered)
+        edge_x_sorted = edge_x_filtered[sort_indices]
+        edge_y_sorted = edge_y_filtered[sort_indices]
+
+        # Now convert to Point2 objects
+        edge_points = [
+            Point2((float(x), float(y)))
+            for x, y in zip(edge_x_sorted, edge_y_sorted, strict=False)
+        ]
+
+        # Select positions with minimum separation
+        target_positions: list[Point2] = []
+        min_separation = 18.0  # Minimum distance between overlord positions
+
+        for edge_point in edge_points:
+            if (
+                cy_distance_to_squared(edge_point, self.ai.enemy_start_locations[0])
+                < 2500
+            ):
+                continue
+            # Check if this point is far enough from already selected positions
+            if not any(
+                cy_distance_to(edge_point, existing) < min_separation
+                for existing in target_positions
+            ):
+                target_positions.append(edge_point)
+
+                # Stop when we have enough positions
+                if len(target_positions) >= len(overlords):
+                    break
+
+        # Assign closest overlord to each position to minimize movement
+        result = {}
+        available_overlords = list(overlords)
+
+        for position in target_positions:
+            if not available_overlords:
+                break
+
+            # Find closest available overlord
+            closest_overlord = min(
+                available_overlords,
+                key=lambda o: cy_distance_to_squared(position, o.position),
+            )
+            final_position = position
+            # keep the overlord where it is if close
+            if (
+                not closest_overlord.is_moving
+                and cy_distance_to_squared(closest_overlord.position, position) < 81.0
+            ):
+                final_position = closest_overlord.position
+
+            # Ensure within map bounds
+            map_width, map_height = self.ai.game_info.map_size
+            final_position = Point2(
+                (
+                    max(1, min(map_width - 1, final_position[0])),
+                    max(1, min(map_height - 1, final_position[1])),
+                )
+            )
+
+            result[closest_overlord.tag] = final_position
+            available_overlords.remove(closest_overlord)
+
+        return result
+
+    def _get_tumor_influence_lowest_cost_position(
+        self, position: Point2
+    ) -> Point2 | None:
+        """
+        Determines the lowest cost position influenced by the tumor through a request
+        to the creep manager.
+
+        This method sends a request to the creep manager to retrieve the position
+        with the lowest cost under tumor influence. The operation is executed
+        via the manager_request function.
+
+        Parameters:
+            position : Point2
+                Tumor position.
+
+        Returns:
+            Point2:
+                Furthest placement with lowest cost under tumor influence.
+
+        """
+        map_data: MapData = self.manager_mediator.get_map_data_object
+        lowest_points = map_data.lowest_cost_points_array(
+            from_pos=position, radius=9, grid=self.get_tumor_influence_grid
+        )
+
+        # Sort by distance (closest first) to minimize tumor movement
+        candidates = sorted(
+            lowest_points,
+            key=lambda spot: cy_distance_to_squared(spot, position),
+        )
+        grid: np.ndarray = self.manager_mediator.get_ground_grid
+        creep_grid = self.get_creep_grid
+
+        # Test candidates starting from furthest (lowest cost areas)
+        for candidate in reversed(candidates):
+            candidate_pos = Point2(candidate)
+
+            # Quick distance check - must be 3+ tiles from tumor
+            if cy_distance_to(candidate_pos, position) < 3.0:
+                continue
+
+            # Additional validation for creep placement
+            if self._valid_creep_placement(candidate_pos, grid, creep_grid=creep_grid):
+                return candidate_pos
+
+        return None
+
+    def _tumor_spread_interval(self) -> int:
+        """Return how often tumor spread logic should run, in frames."""
+        coverage = self._creep_coverage
+
+        if coverage < 40.0:
+            return 0
+
+        return int(coverage / 2)
+
+    @property_cache_once_per_frame
+    def should_calculate_tumor_spread(self) -> bool:
+        """Gate expensive tumor-spread searches based on creep coverage."""
+        interval = self._tumor_spread_interval()
+        if interval <= 0:
+            return True
+        return self.ai.state.game_loop % interval == 0
+
+    def _position_blocks_expansion(self, position: Point2) -> bool:
+        """Will the creep tumor block expansion"""
+        mask: np.ndarray = self._expansion_block_mask
+        x: int = int(position[0])
+        y: int = int(position[1])
+        if 0 <= y < mask.shape[0] and 0 <= x < mask.shape[1]:
+            return bool(mask[y, x])
+        return False
+
+    @cached_property
+    def _expansion_block_mask(self) -> np.ndarray:
+        """Tiles within 5 distance of an expansion location, indexed [y][x]."""
+        map_width, map_height = self.ai.game_info.map_size
+        ys, xs = np.ogrid[:map_height, :map_width]
+        mask: np.ndarray = np.zeros((map_height, map_width), dtype=bool)
+        for expansion in self.ai.expansion_locations_list:
+            dist_sq = (xs + 0.5 - expansion[0]) ** 2 + (ys + 0.5 - expansion[1]) ** 2
+            mask |= dist_sq < 25.0
+        return mask
+
+    def _valid_creep_placement(
+        self,
+        position: Point2,
+        grid: np.ndarray,
+        visible_check: bool = False,
+        creep_grid: np.ndarray | None = None,
+        expansion_block_mask: np.ndarray | None = None,
+    ) -> bool:
+        origin_x: int = int(round(position[0]))
+        origin_y: int = int(round(position[1]))
+
+        map_width, map_height = self.ai.game_info.map_size
+        if (
+            origin_x < 0
+            or origin_x >= map_width
+            or origin_y < 0
+            or origin_y >= map_height
+        ):
+            return False
+
+        if visible_check and not self.ai.is_visible(position):
+            return False
+
+        if creep_grid is None:
+            creep_grid = self.get_creep_grid
+
+        if not cy_has_creep(creep_grid, position):
+            return False
+
+        if expansion_block_mask is None:
+            expansion_block_mask = self._expansion_block_mask
+
+        block_x: int = int(position[0])
+        block_y: int = int(position[1])
+        if (
+            0 <= block_y < expansion_block_mask.shape[0]
+            and 0 <= block_x < expansion_block_mask.shape[1]
+            and bool(expansion_block_mask[block_y, block_x])
+        ):
+            return False
+
+        if not cy_in_pathing_grid_ma(grid, position):
+            return False
+
+        return self.manager_mediator.is_position_safe(grid=grid, position=position)
+
+    def _get_random_creep_position(
+        self, position: Point2, max_attempts: int = 20
+    ) -> Point2 | None:
+        """Find a random valid creep position within tumor range.
+
+        Parameters:
+            position : Point2
+                The position to search from.
+            max_attempts : int
+                Maximum attempts to find a valid position.
+
+        Returns:
+            Point2 | None
+                Random creep position.
+        """
+        grid: np.ndarray = self.manager_mediator.get_ground_grid
+        creep_grid = self.get_creep_grid
+        for _ in range(max_attempts):
+            # Generate random angle and distance
+            angle = random.uniform(0, 2 * np.pi)
+            distance = random.uniform(
+                6.0, 9.0
+            )  # Random distance between min and max range
+
+            candidate_pos = Point2(
+                (
+                    position[0] + distance * np.cos(angle),
+                    position[1] + distance * np.sin(angle),
+                )
+            )
+
+            cand_pos_x: int = candidate_pos[0]
+            cand_pos_y: int = candidate_pos[1]
+            # Check bounds
+            if (
+                cand_pos_x < 1
+                or cand_pos_x >= self.ai.game_info.map_size[0] - 1
+                or cand_pos_y < 1
+                or cand_pos_y >= self.ai.game_info.map_size[1] - 1
+            ):
+                continue
+
+            if self._valid_creep_placement(
+                candidate_pos, grid=grid, creep_grid=creep_grid
+            ):
+                return candidate_pos
+
+        return None

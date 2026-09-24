@@ -1,0 +1,995 @@
+"""Keep constants here for ease of use."""
+
+from __future__ import annotations
+
+from enum import Enum, auto
+
+from sc2.data import Race
+from sc2.ids.ability_id import AbilityId
+from sc2.ids.effect_id import EffectId
+from sc2.ids.unit_typeid import UnitTypeId
+
+# Strings:
+
+# general/config
+ACTIVE_GRID: str = "ActiveGrid"
+AIR: str = "Air"
+AIR_AVOIDANCE: str = "AirAvoidance"
+AIR_COST: str = "AirCost"
+AIR_RANGE: str = "AirRange"
+AIR_VS_GROUND: str = "AirVsGround"
+ATTACK_DISENGAGE_FURTHER_THAN: str = "AttackDisengageIfTargetFurtherThan"
+ATTACK_ENGAGE_CLOSER_THAN: str = "AttackEngageIfTargetCloserThan"
+BLINDING_CLOUD: str = "BlindingCloud"
+BOOST_BACK_TO_TOWNHALL: str = "BoostBackToTownHall"
+BUILD_CHOICES: str = "BuildChoices"
+BUILD_SELECTION: str = "BuildSelection"
+BUILDING_PLACEMENTS: str = "building_placements.yml"
+BUILDS: str = "Builds"
+CHAT_DEBUG: str = "ChatDebug"
+COMBAT: str = "Combat"
+CONFIG_FILE: str = "config.yml"
+CORROSIVE_BILE: str = "CorrosiveBile"
+COST: str = "Cost"
+COST_MULTIPLIER: str = "CostMultiplier"
+CYCLE: str = "Cycle"
+DANGER_THRESHOLD: str = "DangerThreshold"
+DANGER_TILES: str = "DangerTiles"
+DISTANCES: str = "Distances"
+DEBUG: str = "Debug"
+DEBUG_GAME_STEP: str = "DebugGameStep"
+DEBUG_OPTIONS: str = "DebugOptions"
+EFFECTS: str = "Effects"
+EFFECTS_RANGE_BUFFER: str = "EffectsRangeBuffer"
+FEATURES: str = "Features"
+FLYING_ENEMY_LEAVING_BASES: str = "FlyingEnemyLeavingBases"
+FLYING_ENEMY_NEAR_BASES: str = "FlyingEnemyNearBases"
+GAME_STEP: str = "GameStep"
+GROUND: str = "Ground"
+GROUND_AVOIDANCE: str = "GroundAvoidance"
+GROUND_COST: str = "GroundCost"
+GROUND_ENEMY_LEAVING_BASES: str = "GroundEnemyLeavingBases"
+GROUND_ENEMY_NEAR_BASES: str = "GroundEnemyNearBases"
+GROUND_RANGE: str = "GroundRange"
+GROUND_TO_AIR: str = "GroundToAir"
+KD8_CHARGE: str = "KD8Charge"
+LIBERATOR_ZONE: str = "LiberatorZone"
+LURKER_SPINE: str = "LurkerSpine"
+MIN_GAMES_WINRATE_BASED: str = "MinGamesWinrateBased"
+MINERAL_BOOST: str = "MineralBoost"
+MINERAL_DISTANCE_FACTOR: str = "MineralDistanceFactor"
+MINERAL_STACKING: str = "MineralStacking"
+MINING: str = "Mining"
+NUKE: str = "Nuke"
+OPENING_BUILD_ORDER: str = "OpeningBuildOrder"
+ORACLE: str = "Oracle"
+PARASITIC_BOMB: str = "ParasiticBomb"
+PATHING: str = "Pathing"
+PATHING_GRID: str = "PathingGrid"
+PLACEMENT: str = "Placement"
+RANGE: str = "Range"
+RANGE_BUFFER: str = "RangeBuffer"
+RESOURCE_DEBUG: str = "ResourceDebug"
+SHADE_COMMENCED: str = "SHADE_COMMENCED"
+SHADE_OWNER: str = "SHADE_OWNER"
+SHOW_BUILDING_FORMATION: str = "ShowBuildingFormation"
+SHOW_PATHING_COST: str = "ShowPathingCost"
+STORM: str = "Storm"
+STRATEGY_MANAGER: str = "StrategyManager"
+TACTICAL_GROUND: str = "TacticalGround"
+TACTICAL_GROUND_GRID: str = "TacticalGroundGrid"
+TOWNHALL_DISTANCE_FACTOR: str = "TownhallDistanceFactor"
+UNIT_CONTROL: str = "UnitControl"
+UNIT_SQUADS: str = "UnitSquads"
+UNITS: str = "Units"
+USE_DATA: str = "UseData"
+WINRATE_BASED: str = "WinrateBased"
+WORKER_ON_ROUTE_TIMEOUT: str = "WorkerOnRouteTimeout"
+
+# building manager
+BUILDING: str = "Building"
+BUILDING_PURPOSE: str = "building_purpose"
+CANCEL_ORDER: str = "CancelOrder"
+ID: str = "id"
+STRUCTURE_ORDER_COMPLETE: str = "structure_order_complete"
+TARGET: str = "target"
+TIME_ORDER_COMMENCED: str = "time_order_commenced"
+
+# build runner / resource_manager
+GAS: str = "gas"
+MINERAL: str = "mineral"
+NAT: str = "NAT"
+PROXY: str = "PROXY"
+THIRD: str = "THIRD"
+
+# data manager
+DATA_DIR: str = "./data"
+DURATION: str = "Duration"
+LOSS: str = "Loss"
+RACE: str = "EnemyRace"
+RESULT: str = "Result"
+STRATEGY_USED: str = "StrategyUsed"
+TEST_OPPONENT_ID: str = "test_123"
+TIE: str = "Tie"
+WIN: str = "Win"
+
+# main
+ADD_SHADES_ON_FRAME: int = (
+    120  #: The frame at which point Adept Shades are treated as units
+)
+BANNED_PHRASES: list[str] = [
+    "COCOON",
+    "EGG",
+    "CHANGELING",
+    "FLYING",
+    "PHASE",
+]  #: UnitTypeIds with these words in them have Cost issues
+SHADE_DURATION: int = 160  #: how long a Shade lasts in frames
+
+# nydus
+ENTRY: str = "entry"
+EXIT: str = "exit"
+EXIT_TOWARDS: str = "exit_towards"  # use this point to set rally
+UNIT_TYPE: str = "unit_type"
+
+# pathing manager
+AIR_VS_GROUND_DEFAULT: int = 10
+
+# terrain manager
+CURIOUS: str = "CURIOUS"
+GLITTERING: str = "GLITTERING"
+OXIDE: str = "OXIDE"
+LIGHTSHADE: str = "LIGHTSHADE"
+
+# unit memory manager
+MAX_SNAPSHOTS_PER_UNIT: int = 10
+
+# chat debug
+COOLDOWN: set[str] = {"COOLDOWN"}
+CREATE: set[str] = {"CREATE", "MAKE"}
+FOOD: set[str] = {"FOOD", "SUPPLY"}
+GOD: set[str] = {"GOD"}
+KILL: set[str] = {"DESTROY", "KILL"}
+RESOURCES: set[str] = {"RESOURCES", "MONEY"}
+SHOW_MAP: set[str] = {"REVEAL", "SHOW", "SHOW-MAP"}
+TECH_TREE: set[str] = {"TECH", "TECH-TREE"}
+UPGRADES: set[str] = {"UPGRADES"}
+
+# Enums:
+
+
+class BuildingPlacementOptions(str, Enum):
+    BUNKERS = "Bunkers"
+    BUNKERS_WALL = "BunkersWall"
+    FIRST_PYLON = "FirstPylon"
+    GATE_KEEPER = "GateKeeper"
+    LOWER_SPAWN = "LowerSpawn"
+    MISSILE_TURRETS = "MissileTurrets"
+    PRODUCTION = "Production"
+    PRODUCTION_WALL = "ProductionWall"
+    PYLONS = "Pylons"
+    PYLONS_REAPER_WALL = "PylonsReaperWall"
+    PYLONS_WALL = "PylonsWall"
+    SENSOR_TOWERS = "SensorTowers"
+    STATIC_DEFENCES = "StaticDefences"
+    STATIC_DEFENCES_REAPER_WALL = "StaticDefencesReaperWall"
+    STATIC_DEFENCES_WALL = "StaticDefencesWall"
+    SUPPLY_DEPOTS = "SupplyDepots"
+    SUPPLY_DEPOTS_WALL = "SupplyDepotsWall"
+    THREE_BY_THREES = "ThreeByThrees"
+    THREE_BY_THREES_WALL = "ThreeByThreesWall"
+    THREE_BY_THREES_REAPER_WALL = "ThreeByThreesReaperWall"
+    UPPER_SPAWN = "UpperSpawn"
+    UPGRADE_STRUCTURES = "UpgradeStructures"
+    UPGRADE_STRUCTURES_WALL = "UpgradeStructuresWall"
+    VS_ALL = "VsAll"
+    VS_PROTOSS = "VsProtoss"
+    VS_RANDOM = "VsRandom"
+    VS_TERRAN = "VsTerran"
+    VS_ZERG = "VsZerg"
+
+
+class BuildingSize(str, Enum):
+    FIVE_BY_FIVE = "FIVE_BY_FIVE"
+    THREE_BY_THREE = "THREE_BY_THREE"
+    TWO_BY_TWO = "TWO_BY_TWO"
+
+
+BUILDING_SIZE_ENUM_TO_RADIUS: dict[BuildingSize, float] = {
+    BuildingSize.FIVE_BY_FIVE: 2.5,
+    BuildingSize.THREE_BY_THREE: 1.5,
+    BuildingSize.TWO_BY_TWO: 1.0,
+}
+
+
+class BuildOrderOptions(str, Enum):
+    ADDONSWAP = "ADDONSWAP"
+    CANCEL_GAS = "CANCEL_GAS"
+    CHRONO = "CHRONO"
+    CORE = "CORE"
+    GAS = "GAS"
+    GATE = "GATE"
+    EXPAND = "EXPAND"
+    ORBITAL = "ORBITAL"
+    OVERLORD_SCOUT = "OVERLORD_SCOUT"
+    SUPPLY = "SUPPLY"
+    WORKER = "WORKER"
+    WORKER_SCOUT = "WORKER_SCOUT"
+
+    @classmethod
+    def contains_key(cls, name):
+        return name in cls.__members__
+
+
+class BuildOrderTargetOptions(str, Enum):
+    ENEMY_FOURTH = "ENEMY_FOURTH"
+    ENEMY_NAT = "ENEMY_NAT"
+    ENEMY_NAT_HG_SPOT = "ENEMY_NAT_HG_SPOT"
+    ENEMY_NAT_VISION = "ENEMY_NAT_VISION"
+    ENEMY_RAMP = "ENEMY_RAMP"
+    ENEMY_SPAWN = "ENEMY_SPAWN"
+    ENEMY_THIRD = "ENEMY_THIRD"
+    FIFTH = "FIFTH"
+    FOURTH = "FOURTH"
+    MAP_CENTER = "MAP_CENTER"
+    NAT = "NAT"
+    NAT_WALL = "NAT_WALL"
+    RAMP = "RAMP"
+    REAPER_WALL = "REAPER_WALL"
+    SIXTH = "SIXTH"
+    SPAWN = "SPAWN"
+    THIRD = "THIRD"
+    SUPPLY = "SUPPLY"
+    PRODUCTION = "PRODUCTION"
+    UPGRADE = "UPGRADE"
+    BUNKER = "BUNKER"
+
+    @classmethod
+    def contains_key(cls, name):
+        return name in cls.__members__
+
+    @classmethod
+    def list_options(cls):
+        options = [member.value for role, member in cls.__members__.items()]
+        return options
+
+
+class BuildingPurpose(Enum):
+    """Populate this with reasons a building was built."""
+
+    NORMAL_BUILDING = auto()
+
+
+class EngagementResult(int, Enum):
+    """Possible engagement results."""
+
+    VICTORY_EMPHATIC = 10
+    VICTORY_OVERWHELMING = 9
+    VICTORY_DECISIVE = 8
+    VICTORY_CLOSE = 7
+    VICTORY_MARGINAL = 6
+    TIE = 5
+    LOSS_MARGINAL = 4
+    LOSS_CLOSE = 3
+    LOSS_DECISIVE = 2
+    LOSS_OVERWHELMING = 1
+    LOSS_EMPHATIC = 0
+
+
+class ManagerRequestType(str, Enum):
+    """Populate this with manager requests."""
+
+    # AbilityTrackerManager
+    GET_UNIT_TO_ABILITY_DICT = "GET_UNIT_TO_ABILITY_DICT"
+    UPDATE_ABILITY_COOLDOWN = "UPDATE_ABILITY_COOLDOWN"
+    UPDATE_UNIT_TO_ABILITY_DICT = "UPDATE_UNIT_TO_ABILITY_DICT"
+
+    # BuildingManager
+    BUILD_WITH_SPECIFIC_WORKER = "BUILD_WITH_SPECIFIC_WORKER"
+    CANCEL_STRUCTURE = "CANCEL_STRUCTURE"
+    GET_BUILDING_COUNTER = "GET_BUILDING_COUNTER"
+    GET_BUILDING_TRACKER_DICT = "GET_BUILDING_TRACKER_DICT"
+
+    # CombatSimManager
+    CAN_WIN_FIGHT = "CAN_WIN_FIGHT"
+
+    # CreepManager
+    FIND_NEARBY_CREEP_EDGE_POSITION = "FIND_NEARBY_CREEP_EDGE_POSITION"
+    GET_CLOSEST_CREEP_TILE = "GET_CLOSEST_CREEP_TILE"
+    GET_CREEP_COVERAGE = "GET_CREEP_COVERAGE"
+    GET_CREEP_EDGES = "GET_CREEP_EDGES"
+    GET_CREEP_GRID = "GET_CREEP_GRID"
+    GET_CREEP_TILES = "GET_CREEP_TILES"
+    GET_NEXT_TUMOR_ON_PATH = "GET_NEXT_TUMOR_ON_PATH"
+    GET_OVERLORD_CREEP_SPOTTER_POSTIONS = "GET_OVERLORD_CREEP_SPOTTER_POSTIONS"
+    GET_POSITION_BLOCKS_EXPO = "GET_POSITION_BLOCKS_EXPO"
+    GET_RANDOM_CREEP_POSITION = "GET_RANDOM_CREEP_POSITION"
+    GET_TUMOR_INFLUENCE_LOWEST_COST_POSITION = (
+        "GET_TUMOR_INFLUENCE_LOWEST_COST_POSITION"
+    )
+    SHOULD_CALCULATE_TUMOR_SPREAD = "SHOULD_CALCULATE_TUMOR_SPREAD"
+
+    # DataManager
+    GET_CHOSEN_OPENING = "GET_CHOSEN_OPENING"
+
+    # EnemyToBaseManager
+    GET_FLYING_ENEMY_NEAR_BASES = "GET_FLYING_ENEMY_NEAR_BASES"
+    GET_GROUND_ENEMY_NEAR_BASES = "GET_GROUND_ENEMY_NEAR_BASES"
+    GET_MAIN_AIR_THREATS_NEAR_TOWNHALL = "GET_MAIN_AIR_THREATS_NEAR_TOWNHALL"
+    GET_MAIN_GROUND_THREATS_NEAR_TOWNHALL = "GET_MAIN_GROUND_THREATS_NEAR_TOWNHALL"
+    GET_TH_TAG_WITH_LARGEST_GROUND_THREAT = "GET_TH_TAG_WITH_LARGEST_GROUND_THREAT"
+
+    # FlyingStructureManager
+    GET_FLYING_STRUCTURE_TRACKER = "GET_FLYING_STRUCTURE_TRACKER"
+    MOVE_STRUCTURE = "MOVE_STRUCTURE"
+
+    # IntelManager
+    GET_DID_ENEMY_RUSH = "GET_DID_ENEMY_RUSH"
+    GET_ENEMY_EXPANDED = "GET_ENEMY_EXPANDED"
+    GET_ENEMY_HAS_BASE_OUTSIDE_NATURAL = "GET_ENEMY_HAS_BASE_OUTSIDE_NATURAL"
+    GET_ENEMY_FOUR_GATE = "GET_ENEMY_FOUR_GATE"
+    GET_ENEMY_LING_RUSHED = "GET_ENEMY_LING_RUSHED"
+    GET_ENEMY_MARAUDER_RUSH = "GET_ENEMY_MARAUDER_RUSH"
+    GET_ENEMY_MARINE_RUSH = "GET_ENEMY_MARINE_RUSH"
+    GET_ENEMY_RAVAGER_RUSH = "GET_ENEMY_RAVAGER_RUSH"
+    GET_ENEMY_ROACH_RUSHED = "GET_ENEMY_ROACH_RUSHED"
+    GET_ENEMY_WAS_GREEDY = "GET_ENEMY_WAS_GREEDY"
+    GET_ENEMY_WENT_FOUR_GATE = "GET_ENEMY_WENT_FOUR_GATE"
+    GET_ENEMY_WENT_MARINE_RUSH = "GET_ENEMY_WENT_MARINE_RUSH"
+    GET_ENEMY_WENT_MARAUDER_RUSH = "GET_ENEMY_WENT_MARAUDER_RUSH"
+    GET_ENEMY_WENT_REAPER = "GET_ENEMY_WENT_REAPER"
+    GET_ENEMY_WORKER_RUSHED = "GET_ENEMY_WORKER_RUSHED"
+    GET_IS_PROXY_ZEALOT = "GET_IS_PROXY_ZEALOT"
+
+    # NydusManager
+    FIND_NYDUS_AT_LOCATION = "FIND_NYDUS_AT_LOCATION"
+    GET_BANNED_NYDUS_TRAVELLERS = "GET_BANNED_NYDUS_TRAVELLERS"
+    GET_ENEMY_MAIN_NYDUS_POINTS = "GET_ENEMY_MAIN_NYDUS_POINTS"
+    GET_PRIMARY_NYDUS_ENEMY_MAIN = "GET_PRIMARY_ENEMY_NYDUS_MAIN"
+    GET_PRIMARY_NYDUS_OWN_MAIN = "GET_PRIMARY_ENEMY_OWN_MAIN"
+    ADD_TO_NYDUS_TRAVELLERS = "ADD_TO_NYDUS_TRAVELLERS"
+    CLEAR_NYDUS_TRAVELLERS = "CLEAR_NYDUS_TRAVELLERS"
+    GET_NYDUS_TRAVELLERS = "GET_NYDUS_TRAVELLERS"
+    REMOVE_FROM_NYDUS_TRAVELLERS = "REMOVE_FROM_NYDUS_TRAVELLERS"
+
+    # PathManager
+    FIND_LOW_PRIORITY_PATH = "FIND_LOW_PRIORITY_PATH"
+    FIND_LOWEST_COST_POINTS = "FIND_LOWEST_COST_POINTS"
+    FIND_RAW_PATH = "FIND_RAW_PATH"
+    GET_AIR_AVOIDANCE_GRID = "GET_AIR_AVOIDANCE_GRID"
+    GET_AIR_GRID = "GET_AIR_GRID"
+    GET_AIR_VS_GROUND_GRID = "GET_AIR_VS_GROUND_GRID"
+    GET_CACHED_GROUND_GRID = "GET_CACHED_GROUND_GRID"
+    GET_CLIMBER_GRID = "GET_CLIMBER_GRID"
+    GET_CLOSEST_SAFE_SPOT = "GET_CLOSEST_SAFE_SPOT"
+    GET_FORCEFIELD_POSITIONS = "GET_FORCEFIELD_POSITIONS"
+    GET_GROUND_AVOIDANCE_GRID = "GET_GROUND_AVOIDANCE_GRID"
+    GET_GROUND_GRID = "GET_GROUND_GRID"
+    GET_GROUND_TO_AIR_GRID = "GET_GROUND_TO_AIR_GRID"
+    GET_MAP_DATA = "GET_MAP_DATA"
+    GET_PRIORITY_GROUND_AVOIDANCE_GRID = "GET_PRIORITY_GROUND_AVOIDANCE_GRID"
+    GET_TACTICAL_GROUND_GRID = "GET_TACTICAL_GROUND_GRID"
+    GET_WHOLE_MAP_ARRAY = "GET_WHOLE_MAP_ARRAY"
+    GET_WHOLE_MAP_TREE = "GET_WHOLE_MAP_TREE"
+    IS_POSITION_SAFE = "IS_POSITION_SAFE"
+    NEIGHBOURING_TILES_ARE_INPATHABLE = "NEIGHBOURING_TILES_ARE_INPATHABLE"
+    PATH_NEXT_POINT = "PATH_NEXT_POINT"
+    NYDUS_PATH_NEXT_POINT = "NYDUS_PATH_NEXT_POINT"
+
+    # PlacementManager
+    GET_GATEKEEPER_POSITIONS = "GET_GATEKEEPER_POSITIONS"
+    CAN_PLACE_STRUCTURE = "CAN_PLACE_STRUCTURE"
+    GET_PLACEMENTS_DICT = "GET_PLACEMENTS_DICT"
+    GET_PVZ_NAT_GATEKEEPER_POS = "GET_PVZ_NAT_GATEKEEPER_POS"
+    MAKE_PLACEMENT_AVAILABLE = "MAKE_PLACEMENT_AVAILABLE"
+    REQUEST_BUILDING_PLACEMENT = "REQUEST_BUILDING_PLACEMENT"
+    REQUEST_WARP_IN = "REQUEST_WARP_IN_SPOT"
+
+    # ResourceManager
+    GET_MINERAL_PATCH_TO_LIST_OF_WORKERS = "GET_MINERAL_PATCH_TO_LIST_OF_WORKERS"
+    GET_MINERAL_TARGET_DICT = "GET_MINERAL_TARGET_DICT"
+    GET_NUM_AVAILABLE_MIN_PATCHES = "GET_NUM_AVAILABLE_MIN_PATCHES"
+    GET_WORKER_TAG_TO_TOWNHALL_TAG = "GET_WORKER_TAG_TO_TOWNHALL_TAG"
+    GET_WORKER_TO_GAS_BUILDING_DICT = "GET_WORKER_TO_GAS_BUILDING_DICT"
+    GET_WORKER_TO_MINERAL_PATCH_DICT = "GET_WORKER_TO_MINERAL_PATCH_DICT"
+    REMOVE_GAS_BUILDING = "REMOVE_GAS_BUILDING"
+    REMOVE_MINERAL_FIELD = "REMOVE_MINERAL_FIELD"
+    REMOVE_WORKER_FROM_MINERAL = "REMOVE_WORKER_FROM_MINERAL"
+    SELECT_WORKER = "SELECT_WORKER"
+    SET_WORKERS_PER_GAS = "SET_WORKERS_PER_GAS"
+
+    # SquadManager
+    GET_POSITION_OF_MAIN_SQUAD = "GET_POSITION_OF_MAIN_SQUAD"
+    GET_SQUADS = "GET_SQUADS"
+    REMOVE_TAG_FROM_SQUADS = "REMOVE_TAG_FROM_SQUADS"
+
+    # TerrainManager
+    BUILDING_POSITION_BLOCKED_BY_BURROWED_UNIT = (
+        "BUILDING_POSITION_BLOCKED_BY_BURROWED_UNIT"
+    )
+    GET_BEHIND_MINERAL_POSITIONS = "GET_BEHIND_MINERAL_POSITIONS"
+    GET_CLOSEST_OVERLORD_SPOT = "GET_CLOSEST_OVERLORD_SPOT"
+    GET_DEFENSIVE_THIRD = "GET_DEFENSIVE_THIRD"
+    GET_ENEMY_EXPANSIONS = "GET_ENEMY_EXPANSIONS"
+    GET_ENEMY_FOURTH = "GET_ENEMY_FOURTH"
+    GET_ENEMY_NAT = "GET_ENEMY_NAT"
+    GET_ENEMY_RAMP = "GET_ENEMY_RAMP"
+    GET_ENEMY_THIRD = "GET_ENEMY_THIRD"
+    GET_FLOOD_FILL_AREA = "GET_FLOOD_FILL_AREA"
+    GET_INITIAL_PATHING_GRID = "GET_INITIAL_PATHING_GRID"
+    GET_IS_FREE_EXPANSION = "GET_IS_FREE_EXPANSION"
+    GET_MAP_CHOKE_POINTS = "GET_MAP_CHOKE_POINTS"
+    GET_OL_SPOT_NEAR_ENEMY_NATURAL = "GET_OL_SPOT_NEAR_ENEMY_NATURAL"
+    GET_OL_SPOTS = "GET_OL_SPOTS"
+    GET_OWN_EXPANSIONS = "GET_OWN_EXPANSIONS"
+    GET_OWN_NAT = "GET_OWN_NAT"
+    GET_POSITIONS_BLOCKED_BY_BURROWED_ENEMY = "GET_POSITIONS_BLOCKED_BY_BURROWED_ENEMY"
+
+    # UnitCacheManager
+    GET_CACHED_ENEMY_ARMY = "GET_CACHED_ENEMY_ARMY"
+    GET_ENEMY_ARMY_CENTER_MASS = "GET_ENEMY_ARMY_CENTER_MASS"
+    GET_CACHED_ENEMY_ARMY_DICT = "GET_CACHED_ENEMY_ARMY_DICT"
+    GET_CACHED_ENEMY_WORKERS = "GET_CACHED_ENEMY_WORKERS"
+    GET_OLD_OWN_ARMY_DICT = "GET_OLD_OWN_ARMY_DICT"
+    GET_CACHED_OWN_ARMY = "GET_CACHED_OWN_ARMY"
+    GET_CACHED_OWN_ARMY_DICT = "GET_CACHED_OWN_ARMY_DICT"
+    GET_OWN_UNIT_COUNT = "GET_OWN_UNIT_COUNT"
+    GET_OWN_STRUCTURES_DICT = "GET_OWN_STRUCTURES_DICT"
+    GET_UNITS_FROM_TAGS = "GET_UNITS_FROM_TAGS"
+    GET_REMOVED_UNITS = "GET_REMOVED_UNITS"
+
+    # UnitMemoryManager
+    GET_ALL_ENEMY = "GET_ALL_ENEMY"
+    GET_ANY_ENEMY_IN_RANGE = "GET_ANY_ENEMY_IN_RANGE"
+    GET_ENEMY_GROUND = "GET_ENEMY_GROUND"
+    GET_ENEMY_FLIERS = "GET_ENEMY_FLIERS"
+    GET_ENEMY_TREE = "GET_ENEMY_TREE"
+    GET_OWN_TREE = "GET_OWN_TREE"
+    GET_UNITS_IN_RANGE = "GET_UNITS_IN_RANGE"
+    GET_IS_DETECTED = "GET_IS_DETECTED"
+
+    # UnitRoleManager
+    ASSIGN_ROLE = "ASSIGN_ROLE"
+    BATCH_ASSIGN_ROLE = "BATCH_ASSIGN_ROLE"
+    CLEAR_ROLE = "CLEAR_ROLE"
+    GET_ALL_FROM_ROLES_EXCEPT = "GET_ALL_FROM_ROLES_EXCEPT"
+    GET_UNIT_ROLE_DICT = "GET_UNIT_ROLE_DICT"
+    GET_UNITS_FROM_ROLE = "GET_UNITS_FROM_ROLE"
+    GET_UNITS_FROM_ROLES = "GET_UNITS_FROM_ROLES"
+    SWITCH_ROLES = "SWITCH_ROLES"
+
+
+class ManagerName(str, Enum):
+    """The names of the various managers."""
+
+    ABILITY_TRACKER_MANAGER = "AbilityTrackerManager"
+    BUILDING_MANAGER = "BuildingManager"
+    COMBAT_SIM_MANAGER = "CombatSimManager"
+    CREEP_MANAGER = "CreepManager"
+    DATA_MANAGER = "DataManager"
+    ENEMY_TO_BASE_MANAGER = "EnemyToBaseManager"
+    FLYING_STRUCTURE_MANAGER = "FlyingStructureManager"
+    GRID_MANAGER = "GridManager"
+    INTEL_MANAGER = "IntelManager"
+    NYDUS_MANAGER = "NydusManager"
+    PATH_MANAGER = "PathManager"
+    PLACEMENT_MANAGER = "PlacementManager"
+    RESOURCE_MANAGER = "ResourceManager"
+    SQUAD_MANAGER = "SquadManager"
+    TERRAIN_MANAGER = "TerrainManager"
+    UNIT_CACHE_MANAGER = "UnitCacheManager"
+    UNIT_MEMORY_MANAGER = "UnitMemoryManager"
+    UNIT_ROLE_MANAGER = "UnitRoleManager"
+    WARP_IN_MANAGER = "WarpInManager"
+
+
+class MapName(str, Enum):
+    LEY_LINES_AIE = "Ley Lines AIE"
+
+
+class UnitRole(str, Enum):
+    """Roles for units"""
+
+    ADEPT_SHADES = "ADEPT_SHADES"
+    ATTACKING = "ATTACKING"
+    # the main attacking squad on the map
+    ATTACKING_MAIN_SQUAD = "ATTACKING_MAIN_SQUAD"
+    # units that require transporting to battlefield (medivac / bio for example)
+    ATTACKING_TRANSPORT_SQUAD = "ATTACKING_TRANSPORT_SQUAD"
+    BASE_DEFENDER = "BASE_DEFENDER"  # units split off to defend expansions
+    BASE_BLOCKER = "BASE_BLOCKER"  # blocking an enemy base
+    BANE_FODDER = "BANE_FODDER"  # units assigned to attack enemy banes
+    BUILDING = "BUILDING"  # workers that have been assigned to create a building
+    DEFENDING = "DEFENDING"  # units in a combat zone near one of our bases
+    DROPPERLORD_CREEP = "DROPPERLORD_CREEP"  # drops queen to lay creep
+    DROPPERLORD_OFFENSIVE = "DROPPERLORD_OFFENSIVE"  # offenive dropperlord
+    DROP_SHIP = "DROP_SHIP"  # medivacs / prism/ dropperlord
+    DROP_UNITS_ATTACKING = (
+        "DROP_UNITS_ATTACKING"  # units dropped off, that now need to attack
+    )
+    DROP_UNITS_TO_LOAD = "DROP_UNITS_TO_LOAD"  # units that require picking up
+    FLANK_GROUP_ONE = "FLANK_GROUP_ONE"
+    FLANK_GROUP_TWO = "FLANK_GROUP_TWO"
+    FLANK_GROUP_THREE = "FLANK_GROUP_THREE"
+    GAS_STEAL_PREVENTER = "GAS_STEAL_PREVENTER"
+    GATE_KEEPER = "GATE_KEEPER"
+    GATHERING = "GATHERING"  # workers that are mining
+    HARASSING = "HARASSING"  # units that are harassing
+    HARASSING_ADEPT = "HARASSING_ADEPT"
+    HARASSING_BANSHEE = "HARASSING_BANSHEE"
+    HARASSING_MUTAS = "HARASSING_MUTAS"
+    HARASSING_ORACLE = "HARASSING_ORACLE"
+    HARASSING_PHOENIX = "HARASSING_PHOENIX"
+    HARASSING_REAPER = "HARASSING_REAPER"
+    HARASSING_LINGS = "HARASSING_LINGS"
+    HEALING = "HEALING"
+    HIGH_GROUND_SPOTTER = "HIGH_GROUND_SPOTTER"
+    IDLE = "IDLE"  # not doing anything
+    MAP_CONTROL = "MAP_CONTROL"  # units controlling the map (lings/hellions?)
+    MORPHING = "MORPHING"  # units currently morphing
+    NYDUS_SPOTTER = "NYDUS_SPOTTER"
+    OFFENSIVE_REPAIR = "OFFENSIVE_REPAIR"  # with the main force
+    OVERLORD_HUNTER = "OVERLORD_HUNTER"  # units looking for overlords
+    PERSISTENT_BUILDER = "PERSISTENT_BUILDER"  # does not get reassigned automatically
+    PROXY_WORKER = "PROXY_WORKER"
+    REPAIRING = "REPAIRING"  # repairing scvs
+    SCOUTING = "SCOUTING"
+    SURROUNDING = "SURROUNDING"  # units currently in a surround
+    UNDER_REPAIR = "UNDER_REPAIR"  # units currently under repair
+    # queen / creep based roles
+    OVERLORD_CREEP_SPOTTER = "OVERLORD_CREEP_SPOTTER"
+    QUEEN_OFFENSIVE_DROPPERLORD = "QUEEN_OFFENSIVE_DROPPERLORD"
+    QUEEN_CREEP = "QUEEN_CREEP"
+    QUEEN_CREEP_DROPPERLORD = "QUEEN_CREEP_DROPPERLORD"
+    QUEEN_DEFENCE = "QUEEN_DEFENCE"
+    QUEEN_INJECT = "QUEEN_INJECT"
+    QUEEN_NYDUS = "QUEEN_NYDUS"
+    QUEEN_OFFENSIVE = "QUEEN_OFFENSIVE"
+    # control groups, use for anything not specified
+    CONTROL_GROUP_ONE = "CONTROL_GROUP_ONE"
+    CONTROL_GROUP_TWO = "CONTROL_GROUP_TWO"
+    CONTROL_GROUP_THREE = "CONTROL_GROUP_THREE"
+    CONTROL_GROUP_FOUR = "CONTROL_GROUP_FOUR"
+    CONTROL_GROUP_FIVE = "CONTROL_GROUP_FIVE"
+    CONTROL_GROUP_SIX = "CONTROL_GROUP_SIX"
+    CONTROL_GROUP_SEVEN = "CONTROL_GROUP_SEVEN"
+    CONTROL_GROUP_EIGHT = "CONTROL_GROUP_EIGHT"
+    CONTROL_GROUP_NINE = "CONTROL_GROUP_NINE"
+    # reserved for build order runner, use at your own risk :D
+    BUILD_RUNNER_SCOUT = "BUILD_RUNNER_SCOUT"
+
+
+class UnitTreeQueryType(str, Enum):
+    """Identifiers for which unit trees to query for UnitMemoryManager"""
+
+    AllOwn = "AllOwn"
+    AllEnemy = "AllEnemy"
+    EnemyFlying = "EnemyFlying"
+    EnemyGround = "EnemyGround"
+
+
+class WallOffDetection(Enum):
+    THREES = 3.6704408393270125
+    TWOS = 2.1278778266151512
+    THRESHOLD = 6
+    DISTANCE = 3.5
+
+
+# sets:
+
+REACTOR_TYPES: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.BARRACKSREACTOR,
+        UnitTypeId.FACTORYREACTOR,
+        UnitTypeId.STARPORTREACTOR,
+        UnitTypeId.REACTOR,
+    }
+)
+
+REACTOR_TRAIN_ABILITIES: list[AbilityId] = [
+    AbilityId.BARRACKSTRAIN_MARINE,
+    AbilityId.BARRACKSTRAIN_REAPER,
+    AbilityId.FACTORYTRAIN_HELLION,
+    AbilityId.FACTORYTRAIN_WIDOWMINE,
+    AbilityId.STARPORTTRAIN_MEDIVAC,
+    AbilityId.STARPORTTRAIN_VIKINGFIGHTER,
+    AbilityId.STARPORTTRAIN_LIBERATOR,
+]
+
+TECHLAB_TYPES: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.BARRACKSTECHLAB,
+        UnitTypeId.FACTORYTECHLAB,
+        UnitTypeId.STARPORTTECHLAB,
+        UnitTypeId.TECHLAB,
+    }
+)
+
+ADD_ONS: dict[UnitTypeId, UnitTypeId] = {
+    UnitTypeId.BARRACKSREACTOR: UnitTypeId.BARRACKS,
+    UnitTypeId.FACTORYREACTOR: UnitTypeId.FACTORY,
+    UnitTypeId.STARPORTREACTOR: UnitTypeId.STARPORT,
+    UnitTypeId.BARRACKSTECHLAB: UnitTypeId.BARRACKS,
+    UnitTypeId.FACTORYTECHLAB: UnitTypeId.FACTORY,
+    UnitTypeId.STARPORTTECHLAB: UnitTypeId.STARPORT,
+}
+
+ALL_PRODUCTION_STRUCTURES: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.BARRACKS,
+        UnitTypeId.FACTORY,
+        UnitTypeId.STARPORT,
+        UnitTypeId.GATEWAY,
+        UnitTypeId.WARPGATE,
+        UnitTypeId.ROBOTICSFACILITY,
+        UnitTypeId.STARGATE,
+    }
+)
+
+ALL_STRUCTURES: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.ARMORY,
+        UnitTypeId.ASSIMILATOR,
+        UnitTypeId.ASSIMILATORRICH,
+        UnitTypeId.AUTOTURRET,
+        UnitTypeId.BANELINGNEST,
+        UnitTypeId.BARRACKS,
+        UnitTypeId.BARRACKSFLYING,
+        UnitTypeId.BARRACKSREACTOR,
+        UnitTypeId.BARRACKSTECHLAB,
+        UnitTypeId.BUNKER,
+        UnitTypeId.BYPASSARMORDRONE,
+        UnitTypeId.COMMANDCENTER,
+        UnitTypeId.COMMANDCENTERFLYING,
+        UnitTypeId.CREEPTUMOR,
+        UnitTypeId.CREEPTUMORBURROWED,
+        UnitTypeId.CREEPTUMORQUEEN,
+        UnitTypeId.CYBERNETICSCORE,
+        UnitTypeId.DARKSHRINE,
+        UnitTypeId.ELSECARO_COLONIST_HUT,
+        UnitTypeId.ENGINEERINGBAY,
+        UnitTypeId.EVOLUTIONCHAMBER,
+        UnitTypeId.EXTRACTOR,
+        UnitTypeId.EXTRACTORRICH,
+        UnitTypeId.FACTORY,
+        UnitTypeId.FACTORYFLYING,
+        UnitTypeId.FACTORYREACTOR,
+        UnitTypeId.FACTORYTECHLAB,
+        UnitTypeId.FLEETBEACON,
+        UnitTypeId.FORGE,
+        UnitTypeId.FUSIONCORE,
+        UnitTypeId.GATEWAY,
+        UnitTypeId.GHOSTACADEMY,
+        UnitTypeId.GREATERSPIRE,
+        UnitTypeId.HATCHERY,
+        UnitTypeId.HIVE,
+        UnitTypeId.HYDRALISKDEN,
+        UnitTypeId.INFESTATIONPIT,
+        UnitTypeId.LAIR,
+        UnitTypeId.LURKERDENMP,
+        UnitTypeId.MEDIVACMENGSKACGLUESCREENDUMMY,
+        UnitTypeId.MISSILETURRET,
+        UnitTypeId.NEXUS,
+        UnitTypeId.NYDUSCANAL,
+        UnitTypeId.NYDUSCANALATTACKER,
+        UnitTypeId.NYDUSCANALCREEPER,
+        UnitTypeId.NYDUSNETWORK,
+        UnitTypeId.ORACLESTASISTRAP,
+        UnitTypeId.ORBITALCOMMAND,
+        UnitTypeId.ORBITALCOMMANDFLYING,
+        UnitTypeId.PHOTONCANNON,
+        UnitTypeId.PLANETARYFORTRESS,
+        UnitTypeId.POINTDEFENSEDRONE,
+        UnitTypeId.PYLON,
+        UnitTypeId.PYLONOVERCHARGED,
+        UnitTypeId.RAVENREPAIRDRONE,
+        UnitTypeId.REACTOR,
+        UnitTypeId.REFINERY,
+        UnitTypeId.REFINERYRICH,
+        UnitTypeId.RESOURCEBLOCKER,
+        UnitTypeId.ROACHWARREN,
+        UnitTypeId.ROBOTICSBAY,
+        UnitTypeId.ROBOTICSFACILITY,
+        UnitTypeId.SENSORTOWER,
+        UnitTypeId.SHIELDBATTERY,
+        UnitTypeId.SIEGETANKMENGSKACGLUESCREENDUMMY,
+        UnitTypeId.SPAWNINGPOOL,
+        UnitTypeId.SPINECRAWLER,
+        UnitTypeId.SPINECRAWLERUPROOTED,
+        UnitTypeId.SPIRE,
+        UnitTypeId.SPORECRAWLER,
+        UnitTypeId.SPORECRAWLERUPROOTED,
+        UnitTypeId.STARGATE,
+        UnitTypeId.STARPORT,
+        UnitTypeId.STARPORTFLYING,
+        UnitTypeId.STARPORTREACTOR,
+        UnitTypeId.STARPORTTECHLAB,
+        UnitTypeId.SUPPLYDEPOT,
+        UnitTypeId.SUPPLYDEPOTLOWERED,
+        UnitTypeId.TECHLAB,
+        UnitTypeId.TEMPLARARCHIVE,
+        UnitTypeId.TWILIGHTCOUNCIL,
+        UnitTypeId.ULTRALISKCAVERN,
+        UnitTypeId.WARPGATE,
+    }
+)
+
+BURROWED_ALIAS: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.BANELINGBURROWED,
+        UnitTypeId.CREEPTUMORBURROWED,
+        UnitTypeId.DRONEBURROWED,
+        UnitTypeId.HYDRALISKBURROWED,
+        UnitTypeId.INFESTORBURROWED,
+        UnitTypeId.INFESTORTERRANBURROWED,
+        UnitTypeId.LURKERMPBURROWED,
+        UnitTypeId.QUEENBURROWED,
+        UnitTypeId.RAVAGERBURROWED,
+        UnitTypeId.ROACHBURROWED,
+        UnitTypeId.SWARMHOSTBURROWEDMP,
+        UnitTypeId.ULTRALISKBURROWED,
+        UnitTypeId.WIDOWMINEBURROWED,
+        UnitTypeId.ZERGLINGBURROWED,
+    }
+)
+
+CHANGELING_TYPES: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.CHANGELING,
+        UnitTypeId.CHANGELINGZERGLING,
+        UnitTypeId.CHANGELINGZERGLINGWINGS,
+        UnitTypeId.CHANGELINGMARINE,
+        UnitTypeId.CHANGELINGMARINESHIELD,
+        UnitTypeId.CHANGELINGZEALOT,
+    }
+)
+
+COMMON_UNIT_IGNORE_TYPES: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.EGG,
+        UnitTypeId.LARVA,
+        UnitTypeId.CREEPTUMORBURROWED,
+        UnitTypeId.CREEPTUMORQUEEN,
+        UnitTypeId.CREEPTUMOR,
+        UnitTypeId.MULE,
+    }
+)
+
+CREEP_TUMOR_TYPES: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.CREEPTUMOR,
+        UnitTypeId.CREEPTUMORQUEEN,
+        UnitTypeId.CREEPTUMORBURROWED,
+    }
+)
+
+DETECTORS: frozenset[UnitTypeId | EffectId] = frozenset(
+    {
+        UnitTypeId.OBSERVER,
+        UnitTypeId.OBSERVERSIEGEMODE,
+        UnitTypeId.PHOTONCANNON,
+        UnitTypeId.RAVEN,
+        UnitTypeId.MISSILETURRET,
+        EffectId.SCANNERSWEEP,
+        UnitTypeId.OVERSEER,
+        UnitTypeId.OVERSEERSIEGEMODE,
+        UnitTypeId.SPORECRAWLER,
+    }
+)
+
+DROP_ROLES: frozenset[UnitRole] = frozenset(
+    {
+        UnitRole.DROP_SHIP,
+        UnitRole.DROP_UNITS_TO_LOAD,
+        UnitRole.DROP_UNITS_ATTACKING,
+    }
+)
+
+EGG_BUTTON_NAMES: frozenset[str] = frozenset({"Drone", "Overlord"})
+
+# we ignore these when detecting if an expansion location is blocked
+FLYING_IGNORE: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.OBSERVER,
+        UnitTypeId.OVERLORD,
+        UnitTypeId.OVERSEER,
+        UnitTypeId.BARRACKSFLYING,
+        UnitTypeId.COMMANDCENTERFLYING,
+        UnitTypeId.ORBITALCOMMANDFLYING,
+        UnitTypeId.FACTORYFLYING,
+        UnitTypeId.STARPORTFLYING,
+        UnitTypeId.PHOENIX,
+    }
+)
+
+GAS_BUILDINGS: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.ASSIMILATOR,
+        UnitTypeId.EXTRACTOR,
+        UnitTypeId.REFINERY,
+        UnitTypeId.ASSIMILATORRICH,
+        UnitTypeId.EXTRACTORRICH,
+        UnitTypeId.REFINERYRICH,
+    }
+)
+
+GATEWAY_UNITS: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.ZEALOT,
+        UnitTypeId.ADEPT,
+        UnitTypeId.STALKER,
+        UnitTypeId.DARKTEMPLAR,
+        UnitTypeId.HIGHTEMPLAR,
+        UnitTypeId.SENTRY,
+    }
+)
+
+# These are not really rocks, but end up in the destructible collection
+IGNORE_DESTRUCTABLES: set[UnitTypeId] = {
+    UnitTypeId.INHIBITORZONESMALL,
+    UnitTypeId.INHIBITORZONEFLYINGLARGE,
+    UnitTypeId.INHIBITORZONEFLYINGMEDIUM,
+    UnitTypeId.INHIBITORZONEFLYINGLARGE,
+    UnitTypeId.INHIBITORZONELARGE,
+    UnitTypeId.INHIBITORZONEMEDIUM,
+    UnitTypeId.ACCELERATIONZONEFLYINGLARGE,
+    UnitTypeId.ACCELERATIONZONEFLYINGMEDIUM,
+    UnitTypeId.ACCELERATIONZONEFLYINGSMALL,
+    UnitTypeId.ACCELERATIONZONELARGE,
+    UnitTypeId.ACCELERATIONZONEMEDIUM,
+    UnitTypeId.ACCELERATIONZONESMALL,
+    UnitTypeId.CLEANINGBOT,
+}
+
+IGNORE_IN_COST_DICT: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.BROODLING,
+        UnitTypeId.INTERCEPTOR,
+        UnitTypeId.LARVA,
+        UnitTypeId.LOCUSTMP,
+        UnitTypeId.LOCUSTMPFLYING,
+        UnitTypeId.MULE,
+        UnitTypeId.POINTDEFENSEDRONE,
+        UnitTypeId.INFESTEDTERRANSEGG,
+        UnitTypeId.INFESTEDTERRAN,
+        UnitTypeId.INFESTORBURROWED,
+        UnitTypeId.REFINERYRICH,
+        UnitTypeId.ASSIMILATORRICH,
+        UnitTypeId.EXTRACTORRICH,
+    }
+)
+
+IGNORED_UNIT_TYPES_MEMORY_MANAGER: set[UnitTypeId] = set()
+
+# roles where most of our force is likely to be
+MAIN_COMBAT_ROLES: set[UnitRole] = {
+    UnitRole.ATTACKING,
+    UnitRole.DEFENDING,
+}
+
+
+TOWNHALL_TYPES: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.HATCHERY,
+        UnitTypeId.LAIR,
+        UnitTypeId.HIVE,
+        UnitTypeId.COMMANDCENTER,
+        UnitTypeId.COMMANDCENTERFLYING,
+        UnitTypeId.ORBITALCOMMAND,
+        UnitTypeId.ORBITALCOMMANDFLYING,
+        UnitTypeId.PLANETARYFORTRESS,
+        UnitTypeId.NEXUS,
+    }
+)
+
+TOWNHALL_TYPES_NO_PF: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.HATCHERY,
+        UnitTypeId.LAIR,
+        UnitTypeId.HIVE,
+        UnitTypeId.COMMANDCENTER,
+        UnitTypeId.COMMANDCENTERFLYING,
+        UnitTypeId.ORBITALCOMMAND,
+        UnitTypeId.ORBITALCOMMANDFLYING,
+        UnitTypeId.NEXUS,
+    }
+)
+
+UNITS_TO_AVOID_TYPES: set[UnitTypeId] = {
+    UnitTypeId.CREEPTUMOR,
+    UnitTypeId.CREEPTUMORBURROWED,
+    UnitTypeId.CREEPTUMORQUEEN,
+    UnitTypeId.LURKERMPBURROWED,
+    UnitTypeId.INFESTORBURROWED,
+    UnitTypeId.ROACHBURROWED,
+    UnitTypeId.SPORECRAWLER,
+}
+
+UNITS_TO_IGNORE: set[UnitTypeId] = set()
+UNIT_TYPES_WITH_NO_ROLE: set[UnitTypeId] = set()
+
+WORKER_TYPES: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.DRONE,
+        UnitTypeId.PROBE,
+        UnitTypeId.SCV,
+    }
+)
+
+ALL_WORKER_TYPES: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.DRONE,
+        UnitTypeId.PROBE,
+        UnitTypeId.SCV,
+        UnitTypeId.DRONEBURROWED,
+        UnitTypeId.MULE,
+    }
+)
+
+RACE_SUPPLY: dict[Race.ValueType, UnitTypeId] = {
+    Race.Protoss: UnitTypeId.PYLON,
+    Race.Terran: UnitTypeId.SUPPLYDEPOT,
+    Race.Zerg: UnitTypeId.OVERLORD,
+}
+
+REQUIRE_POWER_STRUCTURE_TYPES: frozenset[UnitTypeId] = frozenset(
+    {
+        UnitTypeId.PHOTONCANNON,
+        UnitTypeId.SHIELDBATTERY,
+        UnitTypeId.GATEWAY,
+        UnitTypeId.WARPGATE,
+        UnitTypeId.ROBOTICSFACILITY,
+        UnitTypeId.ROBOTICSBAY,
+        UnitTypeId.STARGATE,
+        UnitTypeId.CYBERNETICSCORE,
+        UnitTypeId.FORGE,
+        UnitTypeId.TEMPLARARCHIVE,
+        UnitTypeId.FLEETBEACON,
+        UnitTypeId.TWILIGHTCOUNCIL,
+        UnitTypeId.DARKSHRINE,
+    }
+)
+
+LOSS_EMPHATIC_OR_WORSE: set[EngagementResult] = {EngagementResult.LOSS_EMPHATIC}
+
+LOSS_OVERWHELMING_OR_WORSE: set[EngagementResult] = LOSS_EMPHATIC_OR_WORSE | {
+    EngagementResult.LOSS_OVERWHELMING
+}
+
+LOSS_DECISIVE_OR_WORSE: set[EngagementResult] = LOSS_OVERWHELMING_OR_WORSE | {
+    EngagementResult.LOSS_DECISIVE
+}
+
+LOSS_CLOSE_OR_WORSE: set[EngagementResult] = LOSS_DECISIVE_OR_WORSE | {
+    EngagementResult.LOSS_CLOSE
+}
+
+LOSS_MARGINAL_OR_WORSE: set[EngagementResult] = LOSS_CLOSE_OR_WORSE | {
+    EngagementResult.LOSS_MARGINAL
+}
+
+VICTORY_EMPHATIC_OR_BETTER: set[EngagementResult] = {EngagementResult.VICTORY_EMPHATIC}
+
+VICTORY_OVERWHELMING_OR_BETTER: set[EngagementResult] = VICTORY_EMPHATIC_OR_BETTER | {
+    EngagementResult.VICTORY_OVERWHELMING
+}
+
+VICTORY_DECISIVE_OR_BETTER: set[EngagementResult] = VICTORY_OVERWHELMING_OR_BETTER | {
+    EngagementResult.VICTORY_DECISIVE
+}
+
+VICTORY_CLOSE_OR_BETTER: set[EngagementResult] = VICTORY_DECISIVE_OR_BETTER | {
+    EngagementResult.VICTORY_CLOSE
+}
+
+VICTORY_MARGINAL_OR_BETTER: set[EngagementResult] = VICTORY_CLOSE_OR_BETTER | {
+    EngagementResult.VICTORY_MARGINAL
+}
+
+TIE_OR_BETTER: set[EngagementResult] = VICTORY_MARGINAL_OR_BETTER | {
+    EngagementResult.TIE
+}
+
+LOSS_MARGINAL_OR_BETTER: set[EngagementResult] = TIE_OR_BETTER | {
+    EngagementResult.LOSS_MARGINAL
+}
