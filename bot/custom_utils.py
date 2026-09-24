@@ -351,7 +351,12 @@ def get_defend_point(self : BotAI) -> Point2:
     enemy_base = self.enemy_start_locations[0]
     direction = enemy_base - base.position
     direction = direction.normalized
-    return base.position + direction * 10
+    distanceModifier = 10
+    if townhalls.amount >= 3:
+        distanceModifier = 15
+    elif townhalls.amount >= 4:
+        distanceModifier = 20
+    return base.position + direction * distanceModifier
     #ramp_point: Optional[Point2] = _closest_ramp_point(self, base.position)
     #return ramp_point if ramp_point is not None else base.position
 
