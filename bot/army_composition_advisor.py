@@ -830,7 +830,7 @@ class ArmyCompositionAdvisor():
             self.defending and winnable
         )
 
-        fullSupply = (self.bot.supply_cap >= 200 and self.bot.supply_left <= 2)
+        fullSupply = (self.bot.supply_cap >= 200 and self.bot.supply_left <= 4)
         self.should_attack = (defending_and_winnable or winnable or fullSupply)
 
     # -------------------------------------------------------------

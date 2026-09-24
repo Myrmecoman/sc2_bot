@@ -14,32 +14,44 @@ from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.ability_id import AbilityId
 
 
+# ---------------------------------------------------------------------------
+# Liberator behaviour
+# ---------------------------------------------------------------------------
+
+# Once we COMMAND the Liberator to siege, it cannot be ordered to unsiege
+# until this much game time has passed.
+#
+# This timer starts at the MORPH_LIBERATORAGMODE command, NOT when
+# UnitTypeId.LIBERATORAG happens to appear in the observation.
 MIN_AG_DURATION = 3.0
-# Once sieged, keep AG mode while a worthwhile enemy is nearby.
+# Once the minimum AG lock has expired, keep AG mode if there is something
+# worthwhile close enough to shoot.
 AG_HOLD_CHECK_RANGE = 6.0
-# Desired distance from the enemy when choosing the AG position.
+# Put the desired AG position this far from the target.
 AG_OFFSET = 4.0
-# Don't try to cast right on the edge of the ability range.
+# Stay slightly inside the actual ability range.
 CAST_BUFFER = 0.25
-# Prevent repeatedly issuing morph commands during transformation.
+# Do not spam morph commands.
 MORPH_COMMAND_COOLDOWN = 0.5
 
 
 class Liberators:
     """
-    Liberators prioritize enemy Siege Tanks.
+    Liberator controller.
 
     Fighter mode:
-        1. Find a Siege Tank if one exists.
-        2. Otherwise find another worthwhile enemy.
-        3. Move into position and morph to Defender Mode.
+        - Siege enemy Siege Tanks first.
+        - If there are no tanks, siege another worthwhile enemy.
+        - If there is nothing to siege, behave normally with the army.
 
     Defender mode:
-        - Hold for at least MIN_AG_DURATION.
-        - Stay sieged while worthwhile enemies remain nearby.
-        - Unsiege once there is nothing worthwhile to shoot.
+        - Once we issue the siege command, AG is LOCKED for MIN_AG_DURATION.
+        - After that, remain AG while worthwhile enemies are nearby.
+        - Unsiege only when there is nothing worthwhile nearby.
 
-    We intentionally do NOT remember which unit caused the siege.
+    IMPORTANT:
+        The AG lock starts when MORPH_LIBERATORAGMODE is issued.
+        We do not rely on observing LIBERATORAG to start the timer.
     """
 
     def __init__(self, ai: BotAI, pathing: Pathing):
@@ -52,47 +64,73 @@ class Liberators:
             ]._proto.cast_range
         )
 
-        # Game time at which each Liberator entered AG mode.
-        self.ag_since: dict[int, float] = {}
+        # ------------------------------------------------------------------
+        # AG state
+        # ------------------------------------------------------------------
 
-        # Last time we issued either morph command.
+        # unit tag -> earliest game time at which we may unsiege
+        #
+        # This is created AT THE MOMENT WE ISSUE THE SIEGE COMMAND.
+        self.ag_locked_until: dict[int, float] = {}
+
+        # Last morph command issued for each Liberator.
         self.last_morph_command: dict[int, float] = {}
 
     # ======================================================================
     # STATE
     # ======================================================================
 
-    def _track_ag_state(self, unit: Unit) -> None:
-        if unit.type_id == UnitTypeId.LIBERATORAG:
-            self.ag_since.setdefault(unit.tag, self.ai.time)
-        else:
-            # Only clear once we actually see the unit back in Fighter mode.
-            self.ag_since.pop(unit.tag, None)
+    def _ag_is_locked(self, unit: Unit) -> bool:
+        """
+        True if this Liberator is still inside its mandatory AG hold period.
+        """
 
-    def _can_leave_ag(self, unit: Unit) -> bool:
-        since = self.ag_since.get(unit.tag)
+        locked_until = self.ag_locked_until.get(unit.tag)
 
-        if since is None:
+        if locked_until is None:
             return False
 
-        return self.ai.time - since >= MIN_AG_DURATION
+        return self.ai.time < locked_until
 
     def _can_morph(self, unit: Unit) -> bool:
+        """
+        Small command cooldown so we don't spam morph orders.
+        """
+
         last = self.last_morph_command.get(unit.tag)
 
         if last is None:
             return True
 
-        return self.ai.time - last >= MORPH_COMMAND_COOLDOWN
+        return (
+            self.ai.time - last
+            >= MORPH_COMMAND_COOLDOWN
+        )
 
     def _remember_morph(self, unit: Unit) -> None:
         self.last_morph_command[unit.tag] = self.ai.time
+
+    def _lock_ag(self, unit: Unit) -> None:
+        """
+        Start the AG hold timer immediately when we issue the siege command.
+        """
+
+        self.ag_locked_until[unit.tag] = (
+            self.ai.time + MIN_AG_DURATION
+        )
+
+    def _clear_ag_state(self, unit: Unit) -> None:
+        self.ag_locked_until.pop(unit.tag, None)
 
     # ======================================================================
     # TARGET SELECTION
     # ======================================================================
 
     def _siege_tanks(self) -> Units:
+        """
+        Enemy Siege Tanks have absolute priority.
+        """
+
         return self.ai.enemy_units.of_type(
             {
                 UnitTypeId.SIEGETANK,
@@ -102,14 +140,15 @@ class Liberators:
 
     def _other_siege_targets(self) -> Units:
         """
-        Return worthwhile enemies that a Liberator AG can actually usefully
-        siege on.
+        Fallback targets when there are no Siege Tanks.
 
-        Workers / ignored units are excluded.
+        Workers / ignored targets are excluded.
         """
+
         return self.ai.enemy_units.filter(
             lambda u: (
-                u.type_id not in ATTACK_TARGET_IGNORE_WITH_WORKERS
+                u.type_id
+                not in ATTACK_TARGET_IGNORE_WITH_WORKERS
                 and u.type_id
                 not in {
                     UnitTypeId.SIEGETANK,
@@ -118,13 +157,17 @@ class Liberators:
             )
         )
 
-    def _find_siege_target(self, unit: Unit) -> Optional[Unit]:
+    def _find_siege_target(
+        self,
+        unit: Unit,
+    ) -> Optional[Unit]:
         """
-        Siege Tanks ALWAYS have priority.
+        Target priority:
 
-        If there is at least one tank, choose the closest tank.
+            1. Siege Tank
+            2. Anything else worthwhile
 
-        Otherwise choose the closest worthwhile enemy.
+        We do NOT remember the target after sieging.
         """
 
         tanks = self._siege_tanks()
@@ -140,7 +183,7 @@ class Liberators:
         return None
 
     # ======================================================================
-    # MAIN ATTACK
+    # HANDLE ATTACKERS
     # ======================================================================
 
     async def handle_attackers(
@@ -152,32 +195,39 @@ class Liberators:
         grid = self.pathing.air_grid
 
         for unit in units:
-            self._track_ag_state(unit)
 
             # --------------------------------------------------------------
             # Defender Mode
             # --------------------------------------------------------------
 
             if unit.type_id == UnitTypeId.LIBERATORAG:
+
                 await self._maybe_leave_ag(unit)
+
                 continue
 
             # --------------------------------------------------------------
-            # Fighter Mode -> try to siege something
+            # Fighter Mode
             # --------------------------------------------------------------
 
-            if await self._try_siege(unit, grid):
+            if await self._try_siege(
+                unit,
+                grid,
+            ):
                 continue
 
             # --------------------------------------------------------------
-            # No siege target: behave like normal army support
+            # No siege target
             # --------------------------------------------------------------
 
             if not self.pathing.is_position_safe(
                 grid,
                 unit.position,
             ):
-                self.move_to_safety(unit, grid)
+                self.move_to_safety(
+                    unit,
+                    grid,
+                )
                 continue
 
             if not is_already_attack_moving_to(
@@ -198,20 +248,35 @@ class Liberators:
         grid = self.pathing.air_grid
 
         for unit in units:
-            self._track_ag_state(unit)
+
+            # --------------------------------------------------------------
+            # Defender Mode
+            # --------------------------------------------------------------
 
             if unit.type_id == UnitTypeId.LIBERATORAG:
+
                 await self._maybe_leave_ag(unit)
+
                 continue
 
-            if await self._try_siege(unit, grid):
+            # --------------------------------------------------------------
+            # Fighter Mode
+            # --------------------------------------------------------------
+
+            if await self._try_siege(
+                unit,
+                grid,
+            ):
                 continue
 
             if not self.pathing.is_position_safe(
                 grid,
                 unit.position,
             ):
-                self.move_to_safety(unit, grid)
+                self.move_to_safety(
+                    unit,
+                    grid,
+                )
                 continue
 
             move_to = self.pathing.find_path_next_point(
@@ -232,15 +297,15 @@ class Liberators:
         grid: np.ndarray,
     ) -> bool:
         """
-        Find something to siege.
+        Try to put a Fighter-mode Liberator into Defender Mode.
 
-        Priority:
-            Siege Tank
-            -> anything else worthwhile
+        Tanks have priority.
 
-        Returns True if we handled the Liberator this frame.
+        Once the morph command is successfully issued, the AG lock starts
+        IMMEDIATELY.
         """
 
+        # Don't spam commands while a previous morph command is still fresh.
         if not self._can_morph(unit):
             return True
 
@@ -249,7 +314,7 @@ class Liberators:
         if target is None:
             return False
 
-        # Don't deliberately fly through unsafe airspace.
+        # Don't fly into an unsafe position just to siege.
         if not self.pathing.is_position_safe(
             grid,
             unit.position,
@@ -257,7 +322,7 @@ class Liberators:
             return False
 
         # --------------------------------------------------------------
-        # Desired Defender Mode position
+        # Calculate desired AG position
         # --------------------------------------------------------------
 
         siege_pos = target.position.towards(
@@ -265,10 +330,13 @@ class Liberators:
             AG_OFFSET,
         )
 
-        cast_range = self.ag_cast_range - CAST_BUFFER
+        cast_range = (
+            self.ag_cast_range
+            - CAST_BUFFER
+        )
 
         # --------------------------------------------------------------
-        # Already close enough to siege
+        # Close enough to morph
         # --------------------------------------------------------------
 
         if unit.distance_to(siege_pos) <= cast_range:
@@ -278,9 +346,15 @@ class Liberators:
                 AbilityId.MORPH_LIBERATORAGMODE,
                 siege_pos,
             ):
-                # Don't overwrite the position with movement while waiting
-                # for the ability to become available.
+                # We are in position, but cannot cast yet.
+                #
+                # IMPORTANT:
+                # Do NOT move away.
                 return True
+
+            # ----------------------------------------------------------
+            # ISSUE THE SIEGE COMMAND
+            # ----------------------------------------------------------
 
             unit(
                 AbilityId.MORPH_LIBERATORAGMODE,
@@ -289,10 +363,25 @@ class Liberators:
 
             self._remember_morph(unit)
 
+            # ----------------------------------------------------------
+            # THIS IS THE IMPORTANT FIX
+            # ----------------------------------------------------------
+            #
+            # Start the AG lock RIGHT NOW.
+            #
+            # We do NOT wait for:
+            #
+            #     unit.type_id == LIBERATORAG
+            #
+            # because the observation of the transformation can occur
+            # later and state tracking should not determine whether the
+            # unit immediately gets an unsiege command.
+            self._lock_ag(unit)
+
             return True
 
         # --------------------------------------------------------------
-        # Approach the AG position
+        # Too far away -> approach
         # --------------------------------------------------------------
 
         approach_pos = siege_pos.towards(
@@ -319,23 +408,38 @@ class Liberators:
         unit: Unit,
     ) -> bool:
         """
-        Decide whether a Defender Mode Liberator should unsiege.
+        Decide whether an AG Liberator should unsiege.
 
-        We deliberately do NOT check the air safety grid here.
+        There is NO air-grid safety check here.
 
-        A Liberator being exposed to AA while in AG mode is normal.
-        If we used the air grid as an immediate unsiege condition, the
-        Liberator could siege and instantly unsiege again.
+        Most importantly:
+
+            if ag_locked_until has not expired:
+                DO NOTHING.
+
+        This prevents the immediate siege -> unsiege behaviour.
         """
 
-        # Never unsiege before the minimum hold duration.
-        if not self._can_leave_ag(unit):
+        # --------------------------------------------------------------
+        # HARD AG LOCK
+        # --------------------------------------------------------------
+        #
+        # This is the first check.
+        #
+        # Nothing else is allowed to cause an unsiege before this expires.
+        #
+
+        if self._ag_is_locked(unit):
             return False
 
-        # Is there anything worthwhile near the Liberator?
+        # --------------------------------------------------------------
+        # After the lock expires, look for worthwhile targets nearby.
+        # --------------------------------------------------------------
+
         enemies = self.ai.enemy_units.filter(
             lambda u: (
-                u.type_id not in ATTACK_TARGET_IGNORE_WITH_WORKERS
+                u.type_id
+                not in ATTACK_TARGET_IGNORE_WITH_WORKERS
             )
         )
 
@@ -343,10 +447,13 @@ class Liberators:
             AG_HOLD_CHECK_RANGE,
             unit,
         ):
-            # Something is still worth shooting.
+            # There is still something to shoot.
             return False
 
-        # Nothing worthwhile nearby -> return to Fighter Mode.
+        # --------------------------------------------------------------
+        # Nothing worthwhile nearby -> unsiege
+        # --------------------------------------------------------------
+
         if not self._can_morph(unit):
             return True
 
@@ -356,10 +463,13 @@ class Liberators:
 
         self._remember_morph(unit)
 
+        # Remove the lock after actually deciding to leave AG.
+        self._clear_ag_state(unit)
+
         return True
 
     # ======================================================================
-    # SAFETY MOVEMENT
+    # SAFETY
     # ======================================================================
 
     def move_to_safety(

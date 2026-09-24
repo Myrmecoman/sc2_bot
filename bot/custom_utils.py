@@ -203,7 +203,9 @@ def is_supply_critical(self : BotAI) -> bool:
     spending minerals on expansions/refineries (see macro.py) - NOT used to gate unit production,
     which should stay as steady as possible and just naturally stalls on its own on the SC2 side
     if we do end up supply-blocked."""
-    return self.supply_cap < 200 and self.supply_left < 6 and self.supply_used >= 14
+    if self.supply_cap < 110:
+        return self.supply_cap < 200 and self.supply_left < 6 and self.supply_used >= 14
+    return self.supply_cap < 200 and self.supply_left < 8 and self.supply_used >= 14
 
 
 HALF_OFFSET = Point2((.5, .5))
