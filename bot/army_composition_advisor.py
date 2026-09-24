@@ -103,6 +103,7 @@ class ArmyCompositionAdvisor():
 
         # Reuse one simulator instead of constructing one every frame.
         self._combat_simulator = CombatSimulator()
+        self.hard_win = False
 
         # Last cached result.
         self._cached_winnable = False
@@ -206,6 +207,7 @@ class ArmyCompositionAdvisor():
                 friendlies,
                 enemies,
                 False,
+                1
             )
 
             self._last_combat_sim_signature = signature
@@ -817,20 +819,16 @@ class ArmyCompositionAdvisor():
         # predict_engage() does NOT run every frame.
         # ---------------------------------------------------------
 
-        winnable = self._predict_engage_cached(
-            friendlies,
-            enemies,
-        )
+        winnable = self._predict_engage_cached(friendlies, enemies)
+        self.hard_win = winnable
 
         # ---------------------------------------------------------
         # Attack decision
         # ---------------------------------------------------------
 
-        defending_and_winnable = (
-            self.defending and winnable
-        )
+        defending_and_winnable = (self.defending and winnable)
 
-        fullSupply = (self.bot.supply_cap >= 200 and self.bot.supply_left <= 4)
+        fullSupply = (self.bot.supply_cap >= 196 and self.bot.supply_left <= 4)
         self.should_attack = (defending_and_winnable or winnable or fullSupply)
 
     # -------------------------------------------------------------
