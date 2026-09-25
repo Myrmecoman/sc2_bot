@@ -3,7 +3,11 @@ workers, hits-and-runs everything else, cloaks when it is in danger, and flies h
 
 A target that is DEFENDED - the spot a banshee would have to shoot it from is inside enemy anti-air range - is not a target:
 without this a banshee flies in, is driven out by the danger, flies back in, ... and never fires a shot. It picks another
-one, or goes on to another base."""
+one, or goes on to another base.
+
+A banshee never just waits. Over its base with nothing to shoot (only buildings, the workers dead, nobody there at all) it moves on
+to the next base after IDLE_PATIENCE, and when no base has anything for it, it rejoins the army for a while. A hurt one waits at a
+townhall - where the SCVs are - for its repair, and goes back to work if nobody comes (no SCVs, no gas for the repair)."""
 from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
@@ -31,6 +35,12 @@ STANDOFF_MARGIN = 0.5          # a banshee shoots from this much inside its weap
 TARGET_PATIENCE = 6.0          # seconds a banshee may go for one target without firing a single shot...
 WRITE_OFF_SECONDS = 25.0       # ...before that target, and whatever stands near it, is written off for this long
 WRITE_OFF_RADIUS = 8.0
+IDLE_PATIENCE = 6.0            # seconds a banshee may hover over its base with nothing to shoot before it moves on to another one
+ARRIVED_RADIUS = 10.0          # "over its base": this close to the spot it was sent to
+RECALL_SECONDS = 20.0          # with every base written off it rejoins the army for this long, then tries the bases again
+REPAIR_WAIT_RADIUS = 6.0       # "waiting for its repair": this close to the townhall it flew home to
+REPAIR_PATIENCE = 25.0         # seconds a hurt banshee waits there before it goes back to work unrepaired...
+RETREAT_COOLDOWN = 60.0        # ...and is not sent home again for this long
 MIN_CLOAKED_ENERGY = 3.0       # a cloaked banshee with more than this is only in danger where a detector sees it
 CLOAK_START_ENERGY = 25.0      # energy needed to switch the cloak on
 CLOAK_ON = AbilityId.BEHAVIOR_CLOAKON_BANSHEE
@@ -45,18 +55,25 @@ class BansheeHarass:
         self.retreating: Set[int] = set()         # banshees flying home to be repaired
         self._last_assignment: float = -1e9
         self._written_off: List[Tuple[Point2, float]] = []   # (position, until): defended or unreachable spots nobody goes for
+        self._dull_bases: List[Tuple[Point2, float]] = []    # (base, until): bases a banshee hovered over with nothing to shoot
         self._focus: Dict[int, Tuple[int, float]] = {}       # banshee tag -> (target tag, since when it has been going for it)
         self._last_fired: Dict[int, float] = {}
+        self._idle_since: Dict[int, float] = {}              # banshee tag -> since when it has hovered over its base with nothing to shoot
+        self._recalled_until: Dict[int, float] = {}          # banshee tag -> it is with the army (no base is worth a visit) until then
+        self._repair_wait_since: Dict[int, float] = {}       # banshee tag -> since when it has waited at home for its repair
+        self._no_retreat_until: Dict[int, float] = {}        # banshee tag -> it gave up waiting for a repair: not sent home before then
 
     # ------------------------------------------------------------------------------------------------------------
     def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext) -> None:
         alive = {u.tag for u in units}
-        for table in (self.roam, self._focus, self._last_fired):
+        for table in (self.roam, self._focus, self._last_fired, self._idle_since, self._recalled_until, self._repair_wait_since,
+                      self._no_retreat_until):
             for tag in [t for t in list(table) if t not in alive]:
                 del table[tag]
         self.retreating &= alive
         now = self.ai.time
         self._written_off = [(p, until) for p, until in self._written_off if until > now]
+        self._dull_bases = [(p, until) for p, until in self._dull_bases if until > now]
         ctx.prefetch_near(units)
         self._assign_bases(units, ctx)
         for unit in units:
@@ -77,12 +94,17 @@ class BansheeHarass:
 
         order = {loc: i for i, loc in enumerate(bases)}
         return sorted(
-            bases, key=lambda loc: (self._is_written_off(loc, WRITE_OFF_RADIUS + 4.0), not occupied(loc),
+            bases, key=lambda loc: (self._is_written_off(loc, WRITE_OFF_RADIUS + 4.0) or self._is_dull(loc), not occupied(loc),
                                     self._danger_at(loc, ctx), order[loc])
         )
 
     def _is_written_off(self, position: Point2, radius: float = WRITE_OFF_RADIUS) -> bool:
         return any(p.distance_to(position) <= radius for p, _ in self._written_off)
+
+    def _is_dull(self, base: Point2) -> bool:
+        """A base a banshee has just found nothing to shoot at (kept apart from `_written_off`, which also keeps banshees from shooting
+        at what stands near a spot: workers that show up there a moment later must not be ignored for that.)"""
+        return any(p.distance_to(base) <= 1.0 for p, _ in self._dull_bases)
 
     @staticmethod
     def _danger_at(position: Point2, ctx: ArmyContext) -> float:
@@ -107,7 +129,8 @@ class BansheeHarass:
         taken = {tag: loc for tag, loc in self.roam.items()}
 
         def worth_going(loc: Point2) -> bool:
-            return self._danger_at(loc, ctx) < BASE_TOO_DANGEROUS and not self._is_written_off(loc, WRITE_OFF_RADIUS + 4.0)
+            return (self._danger_at(loc, ctx) < BASE_TOO_DANGEROUS and not self._is_written_off(loc, WRITE_OFF_RADIUS + 4.0)
+                    and not self._is_dull(loc))
 
         for unit in units:
             current = self.roam.get(unit.tag)
@@ -123,13 +146,62 @@ class BansheeHarass:
     # ------------------------------------------------------------------------------------------------------------
     # per-banshee control
     # ------------------------------------------------------------------------------------------------------------
-    def _control_unit(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext) -> None:
+    def _repair_spot(self, unit: Unit, orders: GroupOrders) -> Point2:
+        """Where a hurt banshee waits for its repair: over the nearest townhall, which is where the SCVs are (they only repair units
+        near a base, see bot/macro.py). The army's hold point can be farther from any base than that."""
+        bases = self.ai.townhalls.not_flying
+        return bases.closest_to(unit).position if bases else orders.hold_point
+
+    def _update_retreat(self, unit: Unit, orders: GroupOrders, now: float) -> None:
+        """Hurt banshees go home, and come out again repaired - or unrepaired, when nobody repairs them (see REPAIR_PATIENCE)."""
+        tag = unit.tag
         health = unit.health_percentage
-        if unit.tag in self.retreating:
+        if tag in self.retreating:
             if health >= RESUME_ABOVE_HEALTH:
-                self.retreating.discard(unit.tag)
-        elif health < RETREAT_BELOW_HEALTH:
-            self.retreating.add(unit.tag)
+                self.retreating.discard(tag)
+                self._repair_wait_since.pop(tag, None)
+            elif unit.distance_to(self._repair_spot(unit, orders)) > REPAIR_WAIT_RADIUS:
+                self._repair_wait_since.pop(tag, None)                   # still on its way
+            elif now - self._repair_wait_since.setdefault(tag, now) > REPAIR_PATIENCE:
+                self.retreating.discard(tag)
+                self._repair_wait_since.pop(tag, None)
+                self._no_retreat_until[tag] = now + RETREAT_COOLDOWN
+        elif health < RETREAT_BELOW_HEALTH and now >= self._no_retreat_until.get(tag, 0.0):
+            self.retreating.add(tag)
+
+    def _destination(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext, now: float) -> Point2:
+        """Where a banshee with nothing to shoot goes: the base it was sent to - or, once it has hovered there for IDLE_PATIENCE with
+        nothing to do, the next one, and when no base is worth a visit the army, for a while."""
+        tag = unit.tag
+        if self._recalled_until.get(tag, 0.0) > now:
+            return self._army_point(orders)
+        destination = self.roam.get(tag)
+        if destination is None:
+            return orders.target
+        if unit.distance_to(destination) > ARRIVED_RADIUS:
+            self._idle_since.pop(tag, None)
+            return destination
+        if now - self._idle_since.setdefault(tag, now) < IDLE_PATIENCE:
+            return destination
+        # over its base for a while and nothing to shoot: buildings only, the workers gone, or nobody there at all
+        self._idle_since.pop(tag, None)
+        self._dull_bases.append((destination, now + WRITE_OFF_SECONDS))
+        self.roam.pop(tag, None)
+        self._assign_bases(Units([unit], self.ai), ctx)
+        pick = self.roam.get(tag)
+        if pick is None or self._is_dull(pick) or self._is_written_off(pick, WRITE_OFF_RADIUS + 4.0):
+            self.roam.pop(tag, None)
+            self._recalled_until[tag] = now + RECALL_SECONDS
+            return self._army_point(orders)
+        return pick
+
+    @staticmethod
+    def _army_point(orders: GroupOrders) -> Point2:
+        return orders.anchor if orders.anchor is not None else orders.hold_point
+
+    def _control_unit(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext) -> None:
+        now = self.ai.time
+        self._update_retreat(unit, orders, now)
 
         danger = self._in_danger(unit, ctx)
         if danger:
@@ -140,14 +212,14 @@ class BansheeHarass:
                 return
 
         if unit.tag in self.retreating:
-            path_move(self.ai, ctx, unit, orders.hold_point, grid=ctx.air_grid)
+            self._idle_since.pop(unit.tag, None)
+            path_move(self.ai, ctx, unit, self._repair_spot(unit, orders), grid=ctx.air_grid)
             return
 
         # nothing threatening and nothing to hide from: stop paying for the cloak
         if unit.is_cloaked and not danger and CLOAK_OFF in unit.abilities and not ctx.enemies_near(unit):
             unit(CLOAK_OFF)
 
-        now = self.ai.time
         if unit.weapon_cooldown > 0:
             self._last_fired[unit.tag] = now
         # never shoot buildings, only units - and only units that can be shot at: not the defended ones
@@ -158,6 +230,7 @@ class BansheeHarass:
         if unit.tag in self.retreating or not targets:
             self._focus.pop(unit.tag, None)
         if targets:
+            self._idle_since.pop(unit.tag, None)
             workers = [t for t in targets if t.type_id in ENEMY_WORKER_TYPES]
             pool = workers if workers else targets
             in_range = cy_in_attack_range(unit, pool)
@@ -173,10 +246,7 @@ class BansheeHarass:
             attack_unit(unit, target)
             return
 
-        destination = self.roam.get(unit.tag)
-        if destination is None:
-            destination = orders.target
-        path_move(self.ai, ctx, unit, destination, grid=ctx.air_grid)
+        path_move(self.ai, ctx, unit, self._destination(unit, orders, ctx, now), grid=ctx.air_grid)
 
     @staticmethod
     def _can_hit_safely(unit: Unit, target: Unit, ctx: ArmyContext) -> bool:

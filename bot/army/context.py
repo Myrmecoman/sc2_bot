@@ -12,6 +12,9 @@ from sc2.ids.upgrade_id import UpgradeId
 from bot.army.consts import ATTACK_TARGET_IGNORE, BANELING_KITE_MARGIN, BANELING_TYPES, LOCAL_FIGHT_RADIUS, NEAR_ENEMY_RADIUS
 from bot.army.local_fight import FightMap
 
+# what an enemy unit is to a shooter, see ArmyContext._kind
+_GROUND_TARGET, _AIR_TARGET, _BANELING = 1, 2, 4
+
 
 class ArmyContext:
     """Built at the start of each army update, after Ares' managers have run (so grids/memory are current)."""
@@ -42,6 +45,9 @@ class ArmyContext:
         self._near_visible: Dict[int, List[Unit]] = {}
         self._banelings: Dict[int, List[Unit]] = {}
         self._wide: Dict[Tuple[int, float], Units] = {}
+        self._kinds: Dict[int, Tuple[Unit, int]] = {}
+        self._baneling_present: Optional[bool] = None
+        self.tank_closest: Dict[int, Optional[float]] = {}      # tank tag -> distance to what it could shoot (units/tanks.py)
 
     # ------------------------------------------------------------------------------------------------------------
     # nearby enemies
@@ -83,23 +89,31 @@ class ArmyContext:
             self._wide[key] = cached
         return cached
 
+    def _kind(self, enemy: Unit) -> int:
+        """What an enemy unit is to a shooter (a _GROUND_TARGET / _AIR_TARGET / _BANELING mask), worked out once per step: every unit
+        of ours goes through everything near it, and each of these checks is a read of the unit's protobuf - a big army in front of
+        a big army made those reads the most expensive thing the army code did."""
+        entry = self._kinds.get(id(enemy))
+        if entry is None:
+            kind = 0
+            if not enemy.is_memory and not enemy.is_hallucination:
+                type_id = enemy.type_id
+                if type_id in BANELING_TYPES:
+                    kind |= _BANELING
+                if type_id not in ATTACK_TARGET_IGNORE:
+                    kind |= _AIR_TARGET if enemy.is_flying else _GROUND_TARGET
+            # the unit is kept in the entry so that its id cannot be handed to another object while the step is still running
+            entry = self._kinds[id(enemy)] = (enemy, kind)
+        return entry[1]
+
     def targets_near(self, unit: Unit) -> List[Unit]:
         """Enemies within reach of a decision that are visible right now and worth shooting at: no ghosts, no
         changelings/eggs/larva, nothing this unit cannot hit (a Marauder cannot shoot air, tanks neither, ...)."""
         cached = self._near_visible.get(unit.tag)
         if cached is not None:
             return cached
-        can_air, can_ground = unit.can_attack_air, unit.can_attack_ground
-        targets: List[Unit] = []
-        for e in self.enemies_near(unit):
-            if e.is_memory or e.type_id in ATTACK_TARGET_IGNORE or e.is_hallucination:
-                continue
-            if e.is_flying:
-                if not can_air:
-                    continue
-            elif not can_ground:
-                continue
-            targets.append(e)
+        wanted = (_AIR_TARGET if unit.can_attack_air else 0) | (_GROUND_TARGET if unit.can_attack_ground else 0)
+        targets: List[Unit] = [e for e in self.enemies_near(unit) if self._kind(e) & wanted]
         self._near_visible[unit.tag] = targets
         return targets
 
@@ -108,10 +122,11 @@ class ArmyContext:
         back away from (see units/common.kite_from_banelings)."""
         cached = self._banelings.get(unit.tag)
         if cached is None:
-            cached = [
-                e for e in self.enemies_near(unit)
-                if e.type_id in BANELING_TYPES and not e.is_memory and not e.is_hallucination
-                and e.distance_to(unit) <= LOCAL_FIGHT_RADIUS
+            if self._baneling_present is None:
+                # (remembered ghosts count here: this only decides whether to look closer, which filters them out again)
+                self._baneling_present = any(e.type_id in BANELING_TYPES for e in self.ai.enemy_units)
+            cached = [] if not self._baneling_present else [
+                e for e in self.enemies_near(unit) if self._kind(e) & _BANELING and e.distance_to(unit) <= LOCAL_FIGHT_RADIUS
             ]
             self._banelings[unit.tag] = cached
         return cached

@@ -3,6 +3,9 @@ pulling workers out of harm's way. (Army micro lives in bot/army/.)
 
 All of these look at enemies that are visible RIGHT NOW (`visible_enemy_units`), not the remembered ghosts Ares keeps
 in `enemy_units` - reacting to a unit that left vision half a minute ago would drag workers around for nothing."""
+import numpy as np
+from scipy.spatial.distance import cdist
+
 from sc2.bot_ai import BotAI
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.position import Point2
@@ -84,17 +87,20 @@ def flee_worker_threats(self: BotAI):
     if threats.amount == 0:
         return
 
-    for worker in self.workers:
-        if worker.is_repairing or worker.is_constructing_scv:
-            continue  # already committed to a specific, actively-managed task elsewhere
-        # build_order_critical_worker is deliberately NOT exempted here (only from being re-picked for a DIFFERENT
-        # task, e.g. by scout()) - early_build_order() runs earlier in the same step and keeps re-issuing its own
-        # move order every frame regardless, so this only overrides it while a real threat is within
-        # WORKER_FLEE_RANGE, and the build-order walk resumes on its own the instant the worker is safe again.
-        # Exempting it from fleeing too would leave a worker walking to a build site defenseless against anything
-        # that wanders close during the walk
-        closest_threat = threats.closest_to(worker)
-        if worker.distance_to(closest_threat) < WORKER_FLEE_RANGE:
+    # (build_order_critical_worker is deliberately NOT exempted here (only from being re-picked for a DIFFERENT
+    # task, e.g. by scout()) - early_build_order() runs earlier in the same step and keeps re-issuing its own
+    # move order every frame regardless, so this only overrides it while a real threat is within
+    # WORKER_FLEE_RANGE, and the build-order walk resumes on its own the instant the worker is safe again.
+    # Exempting it from fleeing too would leave a worker walking to a build site defenseless against anything
+    # that wanders close during the walk)
+    # workers already committed to a specific, actively-managed task elsewhere are left alone
+    workers = [w for w in self.workers if not (w.is_repairing or w.is_constructing_scv)]
+    if not workers:
+        return
+    # one distance table instead of a search through every threat for every worker (70 workers against a visible army is thousands of pairs)
+    gaps = cdist(np.array([w.position_tuple for w in workers]), np.array([t.position_tuple for t in threats])).min(axis=1)
+    for worker, gap in zip(workers, gaps):
+        if gap < WORKER_FLEE_RANGE:
             safe_spot: Point2 = self.townhalls.closest_to(worker).position
             if not is_already_moving_to(worker, safe_spot):
                 worker.move(safe_spot)

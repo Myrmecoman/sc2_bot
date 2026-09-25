@@ -259,6 +259,35 @@ def test_bio_ignores_remembered_and_hallucinated_banelings():
     check("context: banelings_near ignores memory units", ctx.banelings_near(m) == [])
 
 
+def test_context_targets_are_worked_out_per_shooter():
+    """ArmyContext classifies each enemy once per step (see ArmyContext._kind); what a unit is offered must still be exactly what it can
+    shoot: no ghosts, no ignored types (eggs, larvae, changelings...), nothing it cannot hit (a marauder cannot shoot air)."""
+    import gamefix
+    gamefix.STATS.setdefault(U.CHANGELING, (5, 0, 0, 3.15, [], [gamefix.LIGHT, gamefix.BIO], 0, 0, 0))      # (an ignored type the fixture lacks)
+    sc = mk()
+    marauder = sc.own(U.MARAUDER, (60, 60))
+    marine = sc.own(U.MARINE, (60, 61))
+    zergling = sc.enemy(U.ZERGLING, (63, 60))
+    muta = sc.enemy(U.MUTALISK, (63, 62))
+    sc.enemy(U.CHANGELING, (62, 60))
+    ghost = sc.enemy(U.ROACH, (64, 60))
+    ghost._ghost = True
+    ghost.game_loop = 1
+    bane = sc.enemy(U.BANELING, (65, 60))
+    ctx = begin(sc)
+    ctx.prefetch_near([marauder, marine])
+    tags = lambda units: {u.tag for u in units}
+    check("context: a marauder is offered ground units only - no air, no eggs, no ghosts",
+          tags(ctx.targets_near(marauder)) == {zergling.tag, bane.tag}, str(tags(ctx.targets_near(marauder))))
+    check("context: a marine is offered air units too", tags(ctx.targets_near(marine)) == {zergling.tag, muta.tag, bane.tag}, str(tags(ctx.targets_near(marine))))
+    check("context: the baneling is found (and only it) - however many times it is asked", tags(ctx.banelings_near(marine)) == {bane.tag} == tags(ctx.banelings_near(marine)))
+    sc2 = mk()
+    m = sc2.own(U.MARINE, (60, 60))
+    sc2.enemy(U.ZERGLING, (63, 60))
+    ctx = begin(sc2)
+    check("context: no banelings anywhere -> none near anyone", ctx.banelings_near(m) == [] and ctx.close_banelings(m) == [])
+
+
 def test_cyclone_always_kites_away_from_banelings():
     sc = mk()
     cy = sc.own(U.CYCLONE, (60, 60), cooldown=10.0)
@@ -798,6 +827,175 @@ def test_compat_point_truthiness():
         check("compat: Ares' PlacePredictiveAoE steps on to the next numpy path point", reached is True and abs(pos.x - 48.86) < 0.05, str((pos, reached)))
     except TypeError as e:
         check("compat: Ares' PlacePredictiveAoE steps on to the next numpy path point", False, str(e))
+
+
+# ------------------------------------------------------------------------------------------------------------------------------
+# the notes of 2026-09-26: banshees that idle, liberators that rarely siege, bio that splits before tanks, ravens that drop turrets forward
+# ------------------------------------------------------------------------------------------------------------------------------
+def _turret_spots(c):
+    return [t for a, t, q in c if a == A.BUILDAUTOTURRET_AUTOTURRET]
+
+
+def test_raven_turret_goes_in_front_of_the_raven():
+    import asyncio
+    from bot.ares_compat import refresh_ability_cache
+    from sc2.data import Race
+
+    def drop(raven_x, enemy_x):
+        sc = mk(enemy_race=Race.Zerg)
+        rv = sc.own(U.RAVEN, (raven_x, 60), energy=100)
+        sc.ai.ability_grants[rv.tag] = {A.BUILDAUTOTURRET_AUTOTURRET}
+        sc.enemy(U.ROACH, (enemy_x, 60))
+        asyncio.run(refresh_ability_cache(sc.ai, sc.ai.units))
+        ctx = begin(sc)
+        asyncio.run(sc.manager.ravens.control(sc.world.units([rv]), orders(sc), ctx))
+        return cmds(sc, rv)
+
+    c = drop(60, 63)                                     # an enemy 3 away: the turret goes 2 ahead of the raven, not on top of it
+    spots = _turret_spots(c)
+    check("raven: with an enemy close by the turret goes in front of the raven, not under it", spots and 61.4 <= spots[0].x <= 63, str(c))
+    c = drop(60, 68)                                     # 8 away: the spot 4 short of the roach is out of cast range: it flies up first
+    check("raven: with the enemy farther off it flies forward first, and drops nothing yet",
+          not _turret_spots(c) and any(a == A.MOVE_MOVE and 60.5 < t[0] <= 64 for a, t, q in c), str(c))
+    c = drop(62, 68)                                     # in reach of that spot now: the turret goes there, 4 short of the roach
+    spots = _turret_spots(c)
+    check("raven: within reach it drops the turret forward, towards the enemy", spots and 63 <= spots[0].x <= 65.5, str(c))
+
+
+def _hover_over_empty_base(sc, banshee, steps):
+    for _ in range(steps):
+        ctx = begin(sc)
+        sc.manager.banshees.control(sc.world.units([banshee]), orders(sc), ctx)
+    return cmds(sc, banshee)
+
+
+def test_banshee_moves_on_from_a_base_with_nothing_to_shoot():
+    sc = mk()
+    b = sc.own(U.BANSHEE, (180, 180))
+    sc.enemy(U.HATCHERY, (180, 180))                                      # a base - but buildings are never shot at, and nobody is home
+    sc.manager.banshees.roam[b.tag] = Point2((180, 180))
+    _hover_over_empty_base(sc, b, 8)                                      # 4 s: still patient
+    check("banshee: hovers over its base for a moment first", sc.manager.banshees.roam.get(b.tag) == Point2((180, 180)), str(sc.manager.banshees.roam))
+    _hover_over_empty_base(sc, b, 8)                                      # 8 s in all: past IDLE_PATIENCE
+    pick = sc.manager.banshees.roam.get(b.tag)
+    check("banshee: with nothing to shoot for IDLE_PATIENCE it goes to another base", pick is not None and pick.distance_to(Point2((180, 180))) > 20, str(pick))
+
+
+def test_banshee_rejoins_the_army_when_no_base_has_anything_for_it():
+    sc = mk()
+    b = sc.own(U.BANSHEE, (180, 180))
+    sc.enemy(U.HATCHERY, (180, 180))
+    sc.manager.banshees.roam[b.tag] = Point2((180, 180))
+    for base in ((150, 150), (120, 140)):                                 # the others were found empty a moment ago
+        sc.manager.banshees._dull_bases.append((Point2(base), 1e9))
+    c = _hover_over_empty_base(sc, b, 16)
+    check("banshee: with every base empty it heads for the army (the hold point) instead of hovering",
+          sc.manager.banshees._recalled_until.get(b.tag, 0) > sc.ai.time and any(a == A.MOVE_MOVE and abs(t[0] - 60) < 1 for a, t, q in c), str(c))
+
+
+def test_banshee_waiting_for_a_repair_gives_up_and_goes_back_to_work():
+    from bot.army.units.banshees import REPAIR_PATIENCE
+    sc = mk()
+    b = sc.own(U.BANSHEE, (22, 22), hp=40)                                # badly hurt, over the townhall at (20, 20) - and nobody repairs it
+    c = _hover_over_empty_base(sc, b, 4)
+    check("banshee: a badly hurt banshee waits over the townhall for its repair", b.tag in sc.manager.banshees.retreating, str(c))
+    c = _hover_over_empty_base(sc, b, int(REPAIR_PATIENCE / 0.5) + 4)
+    check("banshee: with nobody repairing it it gives up waiting and flies out again",
+          b.tag not in sc.manager.banshees.retreating and any(a == A.MOVE_MOVE and t[0] > 100 for a, t, q in c), str(c))
+    c = _hover_over_empty_base(sc, b, 6)
+    check("banshee: ...and is not sent straight back home", b.tag not in sc.manager.banshees.retreating, str(c))
+
+
+def test_banshee_hurt_flies_to_a_townhall_not_the_hold_point():
+    sc = mk()
+    b = sc.own(U.BANSHEE, (150, 160), hp=40)
+    ctx = begin(sc)
+    sc.manager.banshees.control(sc.world.units([b]), orders(sc), ctx)
+    c = cmds(sc, b)
+    check("banshee: a hurt one goes to the townhall (where the SCVs are), which is not where the army holds",
+          any(a == A.MOVE_MOVE and abs(t[0] - 20) < 1 and abs(t[1] - 20) < 1 for a, t, q in c), str(c))
+
+
+def test_liberator_sieges_without_the_ability_being_listed():
+    sc = mk()
+    lib = sc.own(U.LIBERATOR, (60, 60), role=UnitRole.ATTACKING)          # the game's list of usable abilities says nothing about the morph
+    sc.enemy(U.SIEGETANKSIEGED, (68, 60))
+    ctx = begin(sc)
+    sc.manager.liberators.control(sc.world.units([lib]), orders(sc), ctx)
+    check("liberator: orders Defender Mode over the tank whatever the list of abilities says", any(a == A.MORPH_LIBERATORAGMODE for a, t, q in cmds(sc, lib)), str(cmds(sc, lib)))
+
+
+def test_liberator_gives_up_on_a_siege_that_never_happens():
+    sc = mk()
+    lib = sc.own(U.LIBERATOR, (60, 60), role=UnitRole.ATTACKING)          # never turns into a Defender Mode liberator
+    sc.enemy(U.SIEGETANKSIEGED, (68, 60))
+    given = []
+    for _ in range(10):                                                   # 3.5 s apart, 35 s in all
+        sc.ai._fake_time += 3.0
+        ctx = begin(sc)
+        sc.manager.liberators.control(sc.world.units([lib]), orders(sc), ctx)
+        given.append(any(a == A.MORPH_LIBERATORAGMODE for a, t, q in cmds(sc, lib)))
+    check("liberator: a few orders (not one every step, not forever) when the morph never happens", 2 <= sum(given) <= 3, str(given))
+    check("liberator: ...then it leaves sieging alone for a while", sc.manager.liberators.no_siege_until.get(lib.tag, 0) > sc.ai.time, str(sc.manager.liberators.no_siege_until))
+    check("liberator: ...and does not hover over the spot doing nothing: it carries on as air support", not given[-1] and len(cmds(sc, lib)) > 0, str(cmds(sc, lib)))
+
+
+def test_liberator_comes_down_when_only_units_outside_the_zone_are_near():
+    sc = mk()
+    lib = sc.own(U.LIBERATOR, (60, 60), role=UnitRole.ATTACKING)
+    sc.ai.ability_grants[lib.tag] = {A.MORPH_LIBERATORAGMODE}
+    sc.enemy(U.SIEGETANKSIEGED, (68, 60))
+    ctx = begin(sc)
+    sc.manager.liberators.control(sc.world.units([lib]), orders(sc), ctx)      # zone centred on (64, 60)
+    ag = _liberator_in_defender_mode(sc, lib)
+    sc.ai._fake_time += 30.0                                              # long past the order-time lock
+    sc.ai._enemies.clear()
+    sc.enemy(U.MARINE, (58, 64))                                          # 4.5 from the liberator itself, 7.2 from the zone's centre
+    ctx = begin(sc)
+    sc.manager.liberators.control(sc.world.units([ag]), orders(sc), ctx)  # (first seen sieged now: its shooting window starts)
+    sc.ai._fake_time += 4.0
+    ctx = begin(sc)
+    sc.manager.liberators.control(sc.world.units([ag]), orders(sc), ctx)
+    check("liberator: nothing in its zone -> it comes down, however near the liberator itself the enemy is", _unsieges_lib(sc, ag), str(cmds(sc, ag)))
+
+
+def test_bio_spreads_out_on_the_way_in_to_sieged_tanks():
+    def points(tank_x, mode=Mode.ATTACK):
+        sc = mk()
+        marines = sc.own_many(U.MARINE, 12, (60, 60), spacing=0.5)          # a tight ball
+        if tank_x is not None:
+            sc.enemy(U.SIEGETANKSIEGED, (tank_x, 60))
+        ctx = begin(sc)
+        sc.manager.bio.control(sc.world.units(marines), orders(sc, mode=mode, target=(150, 150)), ctx)
+        return [t for m in marines for a, t, q in cmds(sc, m) if a == A.ATTACK and hasattr(t, "x")]
+
+    def spread(pts):
+        return max(p.distance_to(q) for p in pts for q in pts)
+
+    plain, split = points(None), points(80)                              # the tank is 20 away: outside the marines' 15 look-out
+    check("bio: marching towards a sieged tank the ordered points are spread further apart than on a plain march",
+          len(split) == 12 and spread(split) > spread(plain) + 1.0, f"{spread(plain):.1f} vs {spread(split):.1f}")
+    check("bio: (a plain march is not changed by it)", len(plain) == 12, str(len(plain)))
+    held = points(80, mode=Mode.HOLD)
+    check("bio: no splitting while holding position", not any(t.distance_to(Point2((80, 60))) < 3 for t in held), str(held[:3]))
+
+    # something already in weapon range: the fight logic, not the split
+    sc = mk()
+    m = sc.own(U.MARINE, (60, 60), cooldown=0.0)
+    z = sc.enemy(U.ZERGLING, (63, 60))
+    sc.enemy(U.SIEGETANKSIEGED, (74, 60))
+    ctx = begin(sc)
+    sc.manager.bio.control(sc.world.units([m]), orders(sc, mode=Mode.ATTACK), ctx)
+    check("bio: a target in weapon range is shot at, tank or no tank", any(a == A.ATTACK and getattr(t, "tag", None) == z.tag for a, t, q in cmds(sc, m)), str(cmds(sc, m)))
+    # banelings keep their rule: no walking on towards the tanks while they are about
+    sc = mk()
+    m = sc.own(U.MARINE, (60, 60), cooldown=10.0)
+    sc.enemy(U.BANELING, (64.5, 60))
+    sc.enemy(U.SIEGETANKSIEGED, (74, 60))
+    ctx = begin(sc)
+    sc.manager.bio.control(sc.world.units([m]), orders(sc, mode=Mode.ATTACK), ctx)
+    c = cmds(sc, m)
+    check("bio: banelings close by are still backed away from, tanks or no tanks", _backs_away(c), str(c))
 
 
 def main():

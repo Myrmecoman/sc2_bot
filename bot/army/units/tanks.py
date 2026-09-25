@@ -159,6 +159,8 @@ class TankController:
     def _closest_target_distance(cls, unit: Unit, ctx: ArmyContext) -> Optional[float]:
         """How far the nearest thing this tank could shoot is: centre to centre for units, edge to edge for buildings (which
         are big, see ENEMY_HOLD_RANGE). None when there is nothing."""
+        if unit.tag in ctx.tank_closest:            # asked up to three times per tank and step, and every answer is a scan of everything near it
+            return ctx.tank_closest[unit.tag]
         best: Optional[float] = None
         for e in cls._ground_enemies(unit, ctx):
             distance = unit.distance_to(e)
@@ -166,6 +168,7 @@ class TankController:
                 distance -= unit.radius + e.radius
             if best is None or distance < best:
                 best = distance
+        ctx.tank_closest[unit.tag] = best
         return best
 
     @staticmethod

@@ -73,13 +73,12 @@ class CycloneController:
             kite_from_banelings(self.ai, ctx, unit, close_banelings, orders)
             return
 
-        nearby = [e for e in ctx.enemies_near(unit) if not e.is_memory and e.distance_to(unit) <= LOCAL_FIGHT_RADIUS]
         advance = orders.advance_result(unit)          # the fight this unit is in, judged as an advance (see BioController)
         winning = (
             advance is not None
             and advance >= KITE_IN_RESULT
-            and not all_melee(nearby)
             and not banelings
+            and not all_melee([e for e in ctx.enemies_near(unit) if not e.is_memory and e.distance_to(unit) <= LOCAL_FIGHT_RADIUS])
         )
         # not worth backing off when the nearest threat outranges us and is not slower (kiting cannot create
         # distance), or when we are locally crushing the fight anyway - neither holds with banelings about

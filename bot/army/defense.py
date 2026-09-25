@@ -100,8 +100,13 @@ class BaseDefense:
             query_tree=UnitTreeQueryType.AllEnemy,
         )
         seen: Dict[int, Unit] = {}
+        visited: Set[int] = set()
         for units in near_lists:
             for e in units:
+                # an army standing near a base is within reach of dozens of its structures: each unit is looked at once, not once per structure
+                if id(e) in visited:
+                    continue
+                visited.add(id(e))
                 if e.is_memory or e.is_structure or e.is_hallucination or e.type_id in ENEMY_NON_ARMY_TYPES:
                     continue
                 seen[e.tag] = e

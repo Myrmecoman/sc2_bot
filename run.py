@@ -71,5 +71,3 @@ if __name__ == "__main__":
         [bot, enemy], realtime=False
         #[human, bot], realtime=True
         )
-
-# very often i see the a lot of workers go through all the map, then come back

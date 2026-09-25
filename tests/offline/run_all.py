@@ -26,6 +26,7 @@ CHECKS = [
     ("whole bot on the real Ares hub, 120 frames", "test_dynamic.py", {"FRAMES": "120"}, True),
     ("whole bot, scripted events + step timing", "test_dynamic2.py", {}, True),
     ("whole bot, reaper grenade on real Ares paths", "test_reaper_grenade.py", {}, True),
+    ("whole bot, SCVs repair only near home (no trailing the army)", "test_repair_leash.py", {}, True),
     ("no numpy-typed points leak into orders", "np_contagion.py", {}, True),
     ("random armies vs random enemies, all races (fuzz)", "fuzz_army.py", {}, True),
     ("combat simulator, unusual unit states", "sim_variants.py", {}, True),

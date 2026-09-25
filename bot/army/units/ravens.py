@@ -1,5 +1,9 @@
 """Ravens: Interference Matrix on the units that matter (tanks, thors, colossi, ...), Auto-Turrets when there is
-nothing to matrix and energy is piling up (or against Zerg), and staying alive in between."""
+nothing to matrix and energy is piling up (or against Zerg), and staying alive in between.
+
+An Auto-Turret goes FORWARD, in front of the Raven, towards the enemy: as damage, and as something for the enemy to shoot at instead
+of our army. Not under the Raven (where a turret only helps the enemy find it): about TURRET_STANDOFF from the nearest enemy, and the
+Raven flies up to drop it there - as far as TURRET_MAX_ADVANCE - when that spot is safe to drop it from."""
 from typing import Dict, List, Optional
 
 from sc2.data import Race
@@ -18,7 +22,11 @@ MATRIX = AbilityId.EFFECT_INTERFERENCEMATRIX
 TURRET = AbilityId.BUILDAUTOTURRET_AUTOTURRET
 MATRIX_FREE_AFTER = 10.0        # a matrixed enemy is left alone this long so two ravens do not both spend one on it
 ENERGY_TO_SPEND = 125           # this much energy and nothing worth matrixing -> spend it on turrets instead of hoarding
-TURRET_SEARCH_RADIUS = 3        # look this many cells around the closest enemy for a turret spot
+TURRET_STANDOFF = 4.0           # a turret stands this far from the enemy nearest to the Raven: in its own range (6), not on top of them
+TURRET_MIN_FORWARD = 2.0        # ...and always at least this far in front of the Raven that drops it (never under it)
+TURRET_MAX_ADVANCE = 6.0        # the Raven flies at most this far towards the enemy to drop one
+TURRET_SPOT_SEARCH = 2          # look this many cells around the ideal spot for one a turret can stand on
+TURRET_CAST_MARGIN = 0.25       # the Raven drops it from this much inside its cast range
 TURRET_TRIGGER_RANGE = 10.0     # only bother when the closest enemy is this near
 TURRET_PLACEMENT_CANDIDATES = 4 # ask the game about this many of the nearest candidate cells (each is an API query)
 
@@ -74,9 +82,9 @@ class RavenController:
                 # matrix only what is worth it; if nothing is, save the energy
                 return self._matrix(unit, enemies, matrix_types)
             # no matrix available, or energy is piling up with nothing to matrix: turrets
-            return await self._turret(unit, enemies)
+            return await self._turret(unit, enemies, ctx)
         # Zerg (or unknown): turrets
-        return await self._turret(unit, enemies)
+        return await self._turret(unit, enemies, ctx)
 
     def _matrix(self, unit: Unit, enemies: List[Unit], priority_types: List[UnitTypeId]) -> bool:
         for type_id in priority_types:
@@ -91,32 +99,48 @@ class RavenController:
                     return True
         return False
 
-    async def _turret(self, unit: Unit, enemies: List[Unit]) -> bool:
+    async def _turret(self, unit: Unit, enemies: List[Unit], ctx: ArmyContext) -> bool:
         if TURRET not in unit.abilities:
             return False
         closest = min(enemies, key=lambda e: unit.distance_to(e))
-        if unit.distance_to(closest) >= TURRET_TRIGGER_RANGE:
+        gap = unit.distance_to(closest)
+        if gap >= TURRET_TRIGGER_RANGE:
             return False
-        spot = await self._find_turret_spot(unit, closest)
+        spot = await self._find_turret_spot(unit, closest, gap)
         if spot is None:
             return False
-        # the placement search only knows terrain/vision rules - the spot must also be inside the Raven's own cast
-        # range, or the order is silently useless and the Raven keeps re-picking it forever
-        if unit.distance_to(spot) > unit.radius + self.turret_range:
+        # the placement search only knows terrain/vision rules - the spot must also be inside the Raven's own cast range when the
+        # order is given, or the order is silently useless and the Raven keeps re-picking it forever
+        reach = unit.radius + self.turret_range
+        if unit.distance_to(spot) <= reach:
+            unit(TURRET, spot)
+            return True
+        # farther forward than a turret can be dropped from here: fly up to where it can be - if that is a safe place to be
+        stand = spot.towards(unit.position, reach - TURRET_CAST_MARGIN)
+        if not ctx.mediator.is_position_safe(grid=ctx.air_grid, position=stand):
             return False
-        unit(TURRET, spot)
+        path_move(self.ai, ctx, unit, stand, grid=ctx.air_grid)
         return True
 
-    async def _find_turret_spot(self, unit: Unit, enemy: Unit) -> Optional[Point2]:
-        r = TURRET_SEARCH_RADIUS
+    async def _find_turret_spot(self, unit: Unit, enemy: Unit, gap: float) -> Optional[Point2]:
+        """A place for a turret in front of the Raven, towards `enemy` (which is `gap` away): TURRET_STANDOFF from it, but at least
+        TURRET_MIN_FORWARD and at most TURRET_MAX_ADVANCE ahead of the Raven - the nearest spot to that the game lets a turret stand on."""
+        forward = min(TURRET_MAX_ADVANCE, max(TURRET_MIN_FORWARD, gap - TURRET_STANDOFF))
+        ideal = unit.position.towards(enemy.position, forward)
+        r = TURRET_SPOT_SEARCH
         cells = []
-        for x in range(int(enemy.position.x) - r, int(enemy.position.x) + r + 1):
-            for y in range(int(enemy.position.y) - r, int(enemy.position.y) + r + 1):
+        for x in range(int(ideal.x) - r, int(ideal.x) + r + 1):
+            for y in range(int(ideal.y) - r, int(ideal.y) + r + 1):
                 pos = Point2((x, y))
-                # cheap static-grid filter first, so only a handful of candidates ever cost an API query
-                if self.ai.in_map_bounds(pos) and self.ai.in_placement_grid(pos):
+                # in front of the Raven (not under it) and nearer to the enemy than it is - and a cheap static-grid filter, so that
+                # only a handful of candidates ever cost an API query
+                if (
+                    unit.distance_to(pos) >= TURRET_MIN_FORWARD - 0.5
+                    and pos.distance_to(enemy.position) < gap
+                    and self.ai.in_map_bounds(pos) and self.ai.in_placement_grid(pos)
+                ):
                     cells.append(pos)
-        cells.sort(key=lambda p: unit.distance_to(p))
+        cells.sort(key=lambda p: p.distance_to(ideal))
         for pos in cells[:TURRET_PLACEMENT_CANDIDATES]:
             if await self.ai.can_place_single(UnitTypeId.AUTOTURRET, pos):
                 return pos

@@ -68,9 +68,20 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   and the engine finds the way), floating enemy buildings are not chased while ground ones exist, and an army that stops getting anywhere
   without fighting gives its target up for a while and goes for the next one (`progress.py`).
 * **Sieging**: tanks stay sieged while they can shoot anything, buildings included (measured edge to edge - a Hatchery can be 16 away centre
-  to centre and still be in range). Liberators hold Defender Mode for a shooting window after it first shows up and while an enemy is inside
-  the zone they were ordered to cover. Banshees skip targets they cannot shoot without flying into anti-air (unless they can cloak) and
-  write off a target they have not managed to fire at for a few seconds.
+  to centre and still be in range). Liberators are ordered into Defender Mode without waiting for the game to list the morph as usable (an
+  order that never takes effect is given up on after a few tries), hold it for a shooting window after it first shows up, and come down as
+  soon as nothing is inside the zone they were ordered to cover - whatever stands next to them.
+* **Banshees** skip targets they cannot shoot without flying into anti-air (unless they can cloak) and write off a target they have not
+  managed to fire at for a few seconds. They never just wait: over a base with nothing to shoot they move on to the next one, and with no
+  base worth a visit they rejoin the army for a while; a hurt one waits over a townhall (where the SCVs repair, only near a base) and goes
+  back to work if nobody comes.
+* **Bio against sieged tanks** spreads out on the way in (`TANK_SPLIT_*` in `units/bio.py`) until something is in weapon range, so a shell
+  hits a few marines instead of a dozen. **Ravens** drop Auto-Turrets in front of themselves, towards the enemy (damage and something to
+  shoot at), flying up to do it when the spot is safe - not under themselves.
+* **Speed**: a step with a maxed army in contact takes about 45 ms offline, and the combat simulator is only ~5% of that (a few calls per
+  step, cached); the rest is python-sc2/Ares bookkeeping and per-unit Python. What the army code does per unit is therefore worked out once
+  per step where it can be (enemy classification in `ArmyContext`, neighbour search in `Crowd`, the workers' flee check in one distance
+  table).
 * Every stage of a step is guarded: a bug in one controller costs that group one step, not the game, and an emergency a-move keeps units
   from idling.
 

@@ -131,11 +131,33 @@ async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId):
         print("Could not place tech building behind mineral lines")
 
 
+# An SCV with a repair order on a unit follows that unit for as long as it needs repairs, wherever it goes: with the army marching
+# to the enemy's base, every SCV repairing one of its tanks / medivacs / vikings went along across the whole map, and walked all the
+# way back (micro_worker sends idle workers home) once the repair was over. Repairs are a job for the home area:
+REPAIR_HOME_RADIUS = 25.0   # a damaged unit or building is only repaired while it is this close to one of our (landed) townhalls
+REPAIR_LEASH = 35.0         # only workers this close to one of them are sent to repair, and one that ends up farther is sent back to mine
+# (the leash is wider than the radius so a worker trailing a unit that walks out of the radius is not sent back and re-picked, over and over)
+
+
+def release_far_repairers(self : BotAI):
+    """Send SCVs that repair far from every landed townhall back to mining (the unit gets repaired again once it is back home)."""
+    bases: Units = self.townhalls.not_flying
+    if bases.empty or self.mineral_field.empty:
+        return
+    for worker in self.workers.filter(lambda w: w.is_repairing):
+        if bases.closest_distance_to(worker) > REPAIR_LEASH:
+            worker.gather(self.mineral_field.closest_to(bases.closest_to(worker)))
+
+
 def repair_buildings(self : BotAI):
 
     if self.worker_rushed and not self.army_advisor.is_wall_closed():
         return
-    
+
+    bases: Units = self.townhalls.not_flying
+    if bases.empty:
+        return
+
     # adding tag if needs to be repaired, else remove it
     for i in self.structures.ready:
         if i.health_percentage > 0.9:
@@ -167,7 +189,7 @@ def repair_buildings(self : BotAI):
         # a flying building (e.g. a CC lifted to evade a rush) is already out of danger - still
         # repairable, but doesn't need a full repair crew the way something actively under fire does
         max_repairers = 1 if i.is_flying else (4 if i.health_percentage < 0.5 else 2)
-        if total_repairing >= max_repairers:
+        if total_repairing >= max_repairers or bases.closest_distance_to(i) > REPAIR_HOME_RADIUS:
             continue
 
         sorted_workers : Units = self.workers.sorted(lambda x: x.distance_to(i))
@@ -177,7 +199,7 @@ def repair_buildings(self : BotAI):
             # the cap, since the tracking list only reflects the count again next frame
             if total_repairing >= max_repairers:
                 break
-            if wo.is_repairing or wo.is_constructing_scv:
+            if wo.is_repairing or wo.is_constructing_scv or bases.closest_distance_to(wo) > REPAIR_LEASH:
                 continue
             if wo.distance_to(i) < 30:
                 wo(AbilityId.EFFECT_REPAIR_SCV, i)
@@ -196,14 +218,19 @@ def repair_mechanical_units(self : BotAI):
     if self.worker_rushed and not self.army_advisor.is_wall_closed():
         return
 
+    bases: Units = self.townhalls.not_flying
+    if bases.empty:
+        return
+
     # is_mechanical is also true for SCVs/MULEs in the actual game data - excluding them explicitly
     # is required, not just a style choice, otherwise every worker that takes a scratch of damage
     # gets queued as a repair target and pulls other workers off mining to chase it down
     mech_units : Units = self.units.filter(lambda u: u.is_mechanical and u.type_id not in {UnitTypeId.SCV, UnitTypeId.MULE})
 
-    # only bother once meaningfully damaged, and only if it's actually safe to send a worker there
+    # only bother once meaningfully damaged, and only if it's actually safe to send a worker there - and only at home: a worker
+    # sent to a unit out on the map follows it (see REPAIR_LEASH)
     for i in mech_units:
-        if i.health_percentage > 0.7 or not self.is_unit_position_safe(i):
+        if i.health_percentage > 0.7 or not self.is_unit_position_safe(i) or bases.closest_distance_to(i) > REPAIR_HOME_RADIUS:
             if i.tag in self.worker_assigned_to_repair_mech.keys():
                 self.worker_assigned_to_repair_mech.pop(i.tag)
             continue
@@ -238,7 +265,7 @@ def repair_mechanical_units(self : BotAI):
             continue
 
         # only ever pull workers that are otherwise just mining, never ones already tasked elsewhere
-        candidates : Units = self.workers.filter(lambda w: w.is_gathering or w.is_idle)
+        candidates : Units = self.workers.filter(lambda w: (w.is_gathering or w.is_idle) and bases.closest_distance_to(w) <= REPAIR_LEASH)
         candidates = candidates.tags_not_in(already_repairing_structures)
         sorted_workers : Units = candidates.sorted(lambda x: x.distance_to(target))
         for wo in sorted_workers:
@@ -286,6 +313,7 @@ def resume_building_construction(self : BotAI):
 async def macro(self : BotAI):
 
     cancel_building(self)
+    release_far_repairers(self)
     repair_buildings(self)
     repair_mechanical_units(self)
     resume_building_construction(self)
