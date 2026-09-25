@@ -74,11 +74,13 @@ class BioController:
 
         # weapon on cooldown. Decide between backing off, pushing in, and holding
         nearby = [e for e in ctx.enemies_near(unit) if not e.is_memory and e.distance_to(unit) <= LOCAL_FIGHT_RADIUS]
-        # kite in only with "very very high" confidence in THIS fight - and never against melee-only enemies, where
-        # kiting away is free value rather than a trade-off (see all_melee) - and never with banelings about
+        # kite in only with "very very high" confidence in THIS fight - the one this unit is in, judged on the units that take part in it
+        # and as an advance into the enemy (see GroupOrders.advance_result) - and never against melee-only enemies, where kiting away
+        # is free value rather than a trade-off (see all_melee) - and never with banelings about
+        advance = orders.advance_result(unit)
         winning = (
-            orders.local_result is not None
-            and orders.local_result >= KITE_IN_RESULT
+            advance is not None
+            and advance >= KITE_IN_RESULT
             and not all_melee(nearby)
             and not banelings
         )

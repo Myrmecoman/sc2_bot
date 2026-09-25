@@ -43,11 +43,25 @@ tests/offline/               checks that need no StarCraft II, see the end of th
 | `SCOUTING` | a hidden-base sweep, protected from the rest of the army manager (`scouting.py`) |
 
 * **Push or hold** is decided by the combat simulator (`fight.py`) run on our whole army against everything we know of theirs
-  (`enemy_tracker.py`, which never forgets what it saw), plus the old "attack at full supply" rule. Thresholds are in `consts.py`.
-* **Fights** are assessed per squad; bio kites, stims, and pushes in only when the simulator is very confident - except against
-  banelings, which bio, cyclones and reapers always step back from (no push-in, no "futile to run", whatever the simulator says). Every
-  unit type has its own controller in `units/`; the numbers the previous controllers were tuned with (siege range, liberator zones,
-  kiting rules, ...) were kept.
+  (`enemy_tracker.py`, which never forgets what it saw), plus the old "attack at full supply" rule. Thresholds are in `consts.py`. Once a
+  push is on and the army is fighting, it is judged on the fight it is in (next bullet), not on the whole matchup; a push called off that
+  way waits out the retreat before the whole-army verdict may start it again.
+* **Fights** (`local_fight.py`). The simulator ignores where units stand - the same marines beat the same roaches whether they are 2 or
+  110 cells apart - so the units it is handed ARE the fight. A unit is in a fight when it could get a weapon on the other side within
+  4 seconds (in range now, or able to walk there; a sieged tank has to be in range already). Units still on their way and farther off, on
+  either side, are left out until they arrive; two skirmishes are two fights; enemy units that dropped out of sight in the last 12
+  seconds still count where they were last seen. Every unit is told the verdict of ITS OWN fight. Bio and cyclones push in ("kite in")
+  only once the fight is under way (each side can already shoot the other - walking up to sieged tanks or spines is not kiting in), on
+  a "very very high" verdict that also holds when they walk into a side that stands its ground, and only after it has held for 2
+  seconds. Never against melee-only enemies, and never against banelings, which bio, cyclones and reapers always step back from whatever
+  the simulator says (no push-in, no "futile to run").
+* **The simulator is set up for the situation** (`Stance` in `fight.py`; its settings are undocumented, each was probed). Holding a
+  position (`HOLD`, base defense) the enemy walks into us and the side with the longer reach gets the first volley; walking into a held
+  position (`ATTACK`, kiting in) they get it; a meeting, or a fight that is under way, is everything in contact from the start. Units that
+  cannot walk (sieged tanks, static defense) break the simulator's approach model - in it 20 marines beat 4 sieged tanks without losing one -
+  so such fights fall back to the plain model, and whatever commits units (starting a push, kiting in, sizing a detachment) needs the plain
+  model to agree too. Every unit type has its own controller in `units/`; the numbers the previous controllers were tuned with (siege
+  range, liberator zones, kiting rules, ...) were kept.
 * **Pre-positioning**: the hold point comes from the rally-point logic in `custom_utils.py`, the fight direction from the enemy's
   ground path to it, and before a push the tanks creep up to a stand-off point in front of static defense or sieged tanks (`staging`).
 * **Marching**: ground units never hop to a point ahead of them that lies behind terrain they cannot stand on (they go for the far target

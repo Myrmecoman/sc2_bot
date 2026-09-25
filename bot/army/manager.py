@@ -32,10 +32,13 @@ from bot.army.consts import (
     DANGEROUS_STRUCTURES,
     DEDICATED_TYPES,
     ENEMY_NON_ARMY_TYPES,
+    FIGHT_GHOST_MAX_AGE,
     GROUPED_FRACTION,
+    KITE_IN_CONFIRM_SECONDS,
+    KITE_IN_RESULT,
     LIBERATOR_TYPES,
-    LOCAL_FIGHT_RADIUS,
     LOCAL_RETREAT_RESULT,
+    MAX_FIGHTS_JUDGED,
     MEDIVAC_TYPES,
     NON_ARMY_TYPES,
     RAVEN_TYPES,
@@ -45,12 +48,14 @@ from bot.army.consts import (
     STAGING_TIMEOUT,
     START_ATTACK_RESULT,
     TANK_TYPES,
+    UNCONFIRMED_RESULT,
     VIKING_TYPES,
 )
 from bot.army.context import ArmyContext
 from bot.army.defense import BaseDefense
 from bot.army.enemy_tracker import EnemyTracker
-from bot.army.fight import FightEvaluator
+from bot.army.fight import FightEvaluator, Stance
+from bot.army.local_fight import Fight, find_fights
 from bot.army.orders import GroupOrders, Mode
 from bot.army.positioning import Positioning
 from bot.army.progress import ProgressWatch
@@ -109,6 +114,9 @@ class ArmyManager:
         self.banshees = BansheeHarass(ai, self.positioning)
         self.reapers = ReaperHarass(ai)
 
+        # unit tag -> since when its fight has been judged confident enough to walk into (see _fight_view)
+        self._confident_since: Dict[int, float] = {}
+
         # main army push state
         self.attacking: bool = False
         self.attack_started: float = 0.0
@@ -137,6 +145,7 @@ class ArmyManager:
     # ================================================================================================================
     def on_unit_destroyed(self, tag: int) -> None:
         self.tracker.remove(tag)
+        self._confident_since.pop(tag, None)
 
     async def update(self, iteration: int) -> None:
         """One army step. Every stage is guarded: an exception in one part is logged and costs only that part this
@@ -160,6 +169,9 @@ class ArmyManager:
         ) or ([], None)
         main_units: Units = role(role=UnitRole.ATTACKING)
         defenders: Units = role(role=UnitRole.BASE_DEFENDER)
+        self._guard("fights", self._find_fights, ctx)
+        for units, orders in defense_groups:
+            orders.local_result, orders.unit_results = self._guard("defense fights", self._fight_view, ctx, units, Stance.DEFENDING) or (None, {})
 
         planned = self._guard("orders", self._main_orders, ctx, main_units, defenders, escalate_to)
         if planned is None:
@@ -298,12 +310,13 @@ class ArmyManager:
         # ---- strategic decision: push or hold ------------------------------------------------------------------
         fighters = main_units | defenders
         self.global_result = self._global_result(fighters)
-        self._update_push_state(now, fighters, grouped, escalate_to)
+        self._update_push_state(now, fighters, grouped, escalate_to, self._push_result(ctx, fighters))
 
         defend_target = None
         if escalate_to is not None and (self.anchor is None or self.anchor.distance_to(escalate_to) <= RECALL_RADIUS):
-            # the fight is at home and too big for a detachment - the whole army answers it if it can win, else holds
-            local = self.fight.evaluate(fighters, self._enemy_units_near(ctx, escalate_to, 25.0), good_positioning=True)
+            # the fight is at home and too big for a detachment - the whole army answers it if it can win, else holds. The whole army is
+            # judged here on purpose (it is the one that would go), against the enemy at the threat, as us defending our own ground
+            local = self.fight.evaluate(fighters, self._enemy_units_near(ctx, escalate_to, 25.0), stance=Stance.DEFENDING)
             if local >= EngagementResult.TIE:
                 defend_target = escalate_to
 
@@ -326,11 +339,13 @@ class ArmyManager:
         if mode == Mode.DEFEND:
             self.attack_watch.reset()
 
-        fight_center = self._fight_center(ctx, main_units)
-        local_result = self._local_result(ctx, main_units, fight_center if fight_center is not None else anchor)
+        # the fight the army is in, as its mode sees it (holding: they walk into us; attacking: we walk into them; answering a threat: both move)
+        stance = {Mode.HOLD: Stance.DEFENDING, Mode.ATTACK: Stance.ATTACKING}.get(mode, Stance.MEETING)
+        local_result, unit_results = self._fight_view(ctx, main_units, stance)
         orders = GroupOrders(
             label="main", mode=mode, target=target, hold_point=hold, front=ctx.front, bio_position=ctx.bio_position,
-            anchor=anchor, local_result=local_result, retreating=(mode == Mode.HOLD and now < self.retreating_until),
+            anchor=anchor, local_result=local_result, unit_results=unit_results,
+            retreating=(mode == Mode.HOLD and now < self.retreating_until),
             staging=staging,
             # the crowd standing at the hold position needs room: ~1 cell per unit, doubled for the gaps
             hold_radius=max(3.5, 1.1 * math.sqrt(max(1, main_units.amount))),
@@ -388,7 +403,9 @@ class ArmyManager:
 
     def _global_result(self, fighters: Units) -> Optional[EngagementResult]:
         """Our whole army against every enemy army unit we know of (visible or not), plus the static defense standing
-        near where we would attack. None while we know nothing about their army."""
+        near where we would attack, judged as a march into a position they hold. That is the one place everybody is in the fight by
+        design (a push is the whole army against the whole enemy); starting one is a commitment, hence `cautious`. None while we
+        know nothing about their army."""
         known = self.tracker.known_army()
         if not known or not fighters:
             return None
@@ -397,9 +414,22 @@ class ArmyManager:
         if structures:
             target = self.positioning.attack_target()
             enemy.extend(s for s in structures.of_type(DANGEROUS_STRUCTURES) if s.position.distance_to(target) <= 20)
-        return self.fight.evaluate(fighters, enemy, good_positioning=True, cache_seconds=1.0)
+        return self.fight.evaluate(fighters, enemy, stance=Stance.ATTACKING, cautious=True, cache_seconds=1.0)
 
-    def _update_push_state(self, now: float, fighters: Units, grouped: bool, escalate_to: Optional[Point2]) -> None:
+    def _push_result(self, ctx: ArmyContext, fighters: Units) -> Optional[EngagementResult]:
+        """What a push in progress is judged by. While the army is fighting: that fight, on the units that can take part in it - not
+        the whole army against everything we know of theirs, most of which is still on its way, on both sides. Otherwise the global
+        result."""
+        fights = ctx.fights.fights_of(fighters)
+        if fights:
+            result = self._judge(fights[0], Stance.ATTACKING)
+            if result is not None:
+                return result
+        return self.global_result
+
+    def _update_push_state(
+        self, now: float, fighters: Units, grouped: bool, escalate_to: Optional[Point2], push_result: Optional[EngagementResult]
+    ) -> None:
         ai = self.ai
         maxed = self.positioning.is_maxed()
         army_supply = float(ai.supply_army)
@@ -409,7 +439,9 @@ class ArmyManager:
             start = False
             if maxed:
                 start = True
-            elif escalate_to is None and grouped and army_supply >= MIN_PUSH_SUPPLY and result is not None:
+            elif escalate_to is None and grouped and army_supply >= MIN_PUSH_SUPPLY and result is not None and now >= self.retreating_until:
+                # (a push called off because the fight it was in went badly is not restarted at once on the strength of the whole-army
+                # verdict, which it did not agree with: the army gets the retreat time to pull back and regroup first)
                 # trust the sim only if we have actually SEEN a meaningful part of their army (alive or dead)
                 intel_ok = self.tracker.total_seen_supply() >= max(INTEL_MIN_SUPPLY, INTEL_FRACTION * army_supply)
                 start = intel_ok and result >= START_ATTACK_RESULT
@@ -420,7 +452,9 @@ class ArmyManager:
                 self.losing_since = None
             return
 
-        # already pushing: stay committed unless the sim says we are clearly losing, or the push has melted away
+        # already pushing: stay committed unless the sim says we are clearly losing, or the push has melted away. While the army is
+        # fighting, "the sim" is asked about THAT fight (see _push_result), not about the whole matchup
+        result = push_result
         stop = False
         if result is not None and result < CONTINUE_ATTACK_RESULT:
             self.losing_since = self.losing_since if self.losing_since is not None else now
@@ -453,27 +487,59 @@ class ArmyManager:
         )[0]
         return Units([e for e in near if not e.is_memory and e.type_id not in ENEMY_NON_ARMY_TYPES], self.ai)
 
-    @staticmethod
-    def _fight_center(ctx: ArmyContext, units: Units) -> Optional[Point2]:
-        """Where the fighting actually is: the centroid of our units that have something to shoot at right now (the
-        squad's own centre can be a dozen cells behind its front line). None when nobody is in a fight."""
-        engaged = [u for u in units if ctx.targets_near(u)]
-        if not engaged:
-            return None
-        return Point2((sum(u.position.x for u in engaged) / len(engaged), sum(u.position.y for u in engaged) / len(engaged)))
+    def _fight_enemies(self) -> List[Unit]:
+        """Everything hostile that may be in a fight: what we see, what dropped out of sight a moment ago (Ares' ghosts, where they
+        were last seen: a fight against the front of an army is not a fight against only the part of it we happen to see), and the
+        static defenses we know of."""
+        ai = self.ai
+        enemies = [e for e in ai.enemy_units if not e.is_memory or e.age <= FIGHT_GHOST_MAX_AGE]
+        enemies.extend(ai.enemy_structures)
+        return enemies
 
-    def _local_result(self, ctx: ArmyContext, units: Units, center: Point2) -> Optional[EngagementResult]:
-        """The fight right around a group: its units within LOCAL_FIGHT_RADIUS of `center` against the enemy units
-        within that radius. None when there is nothing hostile near."""
-        if not units:
+    def _find_fights(self, ctx: ArmyContext) -> None:
+        """Sort out who is in which fight this step (local_fight.py): the units of every fighting role against the enemy units they
+        can get at, or that can get at them, within a few seconds. Everything else is not part of a fight yet."""
+        role = ctx.mediator.get_units_from_role
+        fighters = role(role=UnitRole.ATTACKING) | role(role=UnitRole.BASE_DEFENDER) | role(role=UnitRole.CONTROL_GROUP_ONE)
+        own = self.fight.clean_own(fighters)
+        enemy = self.fight.clean_enemy(self._fight_enemies(), any(u.is_flying for u in own), True)
+        ctx.fights = find_fights(own, enemy)
+
+    def _judge(self, fight: Fight, stance: Stance, cautious: bool = False) -> Optional[EngagementResult]:
+        """The simulator's verdict on one fight; None for the small ones past the per-step budget (MAX_FIGHTS_JUDGED)."""
+        if fight.rank >= MAX_FIGHTS_JUDGED:
             return None
-        enemies = self._enemy_units_near(ctx, center, LOCAL_FIGHT_RADIUS + 6.0)
-        if not enemies:
-            return None
-        ours = [u for u in units if u.position.distance_to(center) <= LOCAL_FIGHT_RADIUS + 6.0]
-        if not ours:
-            return None
-        return self.fight.evaluate(ours, enemies, good_positioning=False)
+        return self.fight.evaluate(fight.own, fight.enemy, stance=stance, engaged=fight.engaged, cautious=cautious)
+
+    def _fight_view(
+        self, ctx: ArmyContext, units: Units, stance: Stance
+    ) -> Tuple[Optional[EngagementResult], Dict[int, EngagementResult]]:
+        """What a group's controllers are told about its fights: (how the group's biggest fight goes, as its mode sees it; and per unit
+        of the group how the fight that unit is in looks as an advance - the "kite in" question). That question is only asked of a fight
+        that is under way: while it is still an approach, walking up to sieged tanks or spines under their fire is exactly what "kite
+        in" must not do, so nobody is confident yet. It is always answered cautiously, and never better than UNCONFIRMED_RESULT until
+        the verdict has held for KITE_IN_CONFIRM_SECONDS."""
+        fights = ctx.fights.fights_of(units)
+        group = self._judge(fights[0], stance) if fights else None
+        tags = units.tags
+        now = self.ai.time
+        per_unit: Dict[int, EngagementResult] = {}
+        for fight in fights:
+            if not fight.engaged:
+                continue
+            advance = self._judge(fight, Stance.ATTACKING, cautious=True)
+            if advance is None:
+                continue
+            for unit in fight.own:
+                if unit.tag in tags:
+                    per_unit[unit.tag] = advance
+        for tag in tags:
+            advance = per_unit.get(tag)
+            if advance is None or advance < KITE_IN_RESULT:
+                self._confident_since.pop(tag, None)
+            elif now - self._confident_since.setdefault(tag, now) < KITE_IN_CONFIRM_SECONDS:
+                per_unit[tag] = UNCONFIRMED_RESULT
+        return group, per_unit
 
     # ================================================================================================================
     # diversion
@@ -529,14 +595,15 @@ class ArmyManager:
             self.diversion_watch.reset()
             return None
 
-        local = self._local_result(ctx, squad, center)
+        local, unit_results = self._fight_view(ctx, squad, Stance.ATTACKING)
         if local is not None and local <= LOCAL_RETREAT_RESULT:
             anchor = main_orders.anchor if main_orders.anchor is not None else ctx.hold_point
             orders = GroupOrders(label="diversion", mode=Mode.HOLD, target=anchor, hold_point=anchor, front=ctx.front,
-                                 bio_position=anchor, anchor=anchor, local_result=local, retreating=True)
+                                 bio_position=anchor, anchor=anchor, local_result=local, unit_results=unit_results, retreating=True)
         else:
             orders = GroupOrders(label="diversion", mode=Mode.ATTACK, target=target, hold_point=ctx.hold_point,
-                                 front=ctx.front, bio_position=ctx.bio_position, anchor=center, local_result=local)
+                                 front=ctx.front, bio_position=ctx.bio_position, anchor=center, local_result=local,
+                                 unit_results=unit_results)
         return squad, orders
 
     # ================================================================================================================

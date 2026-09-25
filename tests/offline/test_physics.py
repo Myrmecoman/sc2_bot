@@ -14,11 +14,23 @@ from test_dynamic import build_game
 
 SCENARIO = os.environ.get("SCENARIO", "defend")
 FRAMES = int(os.environ.get("FRAMES", "400"))
+PERTURB = int(os.environ.get("PERTURB", "0"))          # seed: move every unit a little at the start, so many different fights can be compared
 
 
 def populate(game, physics, scenario):
     cx, cy = BASES["our_main"]
     ex, ey = BASES["enemy_main"]
+    if scenario == "vanguard":
+        # a maxed army on the march, strung out along the road to the enemy: 14 marines in front (just before the gap in the wall across
+        # the middle of the map), 26 more in a blob 14-20 cells behind them, and an enemy army waiting on the other side. The simulator
+        # counts every unit it is given as fighting from the first second, so a fight judged on "everybody within 20 cells" has all 40
+        # marines against the roaches while only the front 14 will be there for the next 4-5 seconds
+        for k in range(14):
+            physics.add(U.MARINE, (52 + (k % 7) * 0.7, 62 + (k // 7) * 0.7), 1)
+        for k in range(26):
+            physics.add(U.MARINE, (34 + (k % 9) * 0.7, 60 + (k // 9) * 0.7), 1)
+        for k in range(16):
+            physics.add(U.ROACH, (71 + (k % 8) * 0.8, 62 + (k // 8) * 0.8), 4)
     if scenario in ("defend", "kite", "big_defend", "air_defend", "baneling"):
         for k in range(30):
             physics.add(U.MARINE, (cx + 8 + (k % 10) * 0.7, cy + 10 + (k // 10) * 0.7), 1)
@@ -97,11 +109,16 @@ def main():
     loop = asyncio.new_event_loop()
     client, proto_gi = loop.run_until_complete(start_game(game, bot))
     physics = Physics(game)
+    if PERTURB:
+        import random
+        rng = random.Random(PERTURB)
+        add = physics.add
+        physics.add = lambda type_id, pos, alliance, **kw: add(type_id, (pos[0] + rng.uniform(-1.5, 1.5), pos[1] + rng.uniform(-1.5, 1.5)), alliance, **kw)
     populate(game, physics, SCENARIO)
     # workers stay static protos
     physics.adopt_existing()
     physics._regenerate()
-    supply = 198 if SCENARIO == "attack" else 60
+    supply = 198 if SCENARIO in ("attack", "vanguard") else 60
     role_of = lambda r: len(bot.mediator.get_unit_role_dict[r.name])
     t_last = 0
     for i in range(FRAMES):

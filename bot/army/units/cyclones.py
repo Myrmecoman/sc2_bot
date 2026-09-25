@@ -74,9 +74,10 @@ class CycloneController:
             return
 
         nearby = [e for e in ctx.enemies_near(unit) if not e.is_memory and e.distance_to(unit) <= LOCAL_FIGHT_RADIUS]
+        advance = orders.advance_result(unit)          # the fight this unit is in, judged as an advance (see BioController)
         winning = (
-            orders.local_result is not None
-            and orders.local_result >= KITE_IN_RESULT
+            advance is not None
+            and advance >= KITE_IN_RESULT
             and not all_melee(nearby)
             and not banelings
         )

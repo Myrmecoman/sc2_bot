@@ -97,7 +97,7 @@ def make_response_data():
         u.mineral_cost = mins
         u.vespene_cost = gas
         u.food_required = supply
-        u.movement_speed = speed
+        u.movement_speed = speed / 1.4       # the API lists "normal" game speed; STATS holds cells per "faster" second (a marine: 2.25 / 3.15)
         u.armor = armor
         u.build_time = 500
         for a in attrs:

@@ -34,7 +34,7 @@ def make_game_data():
         u.name = type_id.name
         u.available = True
         u.food_required = 0
-        u.movement_speed = 3.15
+        u.movement_speed = 2.25              # normal game speed, as in the real API (3.15 cells per "faster" second)
         u.build_time = 400
         data.units.append(u)
     # resource / structure special cases the bot code checks

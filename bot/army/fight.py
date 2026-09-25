@@ -1,11 +1,26 @@
-"""How likely is a fight to go our way?  A thin, defensive layer over Ares' `mediator.can_win_fight`.
+"""How likely is a fight to go our way?  A defensive layer over the Rust combat simulator (`sc2_helper`) that Ares runs.
 
-Ares hands the actual prediction to the Rust combat simulator (`sc2_helper`). This wrapper adds what a bot that
-calls it dozens of times per step needs: input filtering (workers, changelings, structures that make the sim
-misbehave), a short-lived result cache, a per-step call budget, and a plain power-ratio fallback so a simulator
-failure degrades a decision instead of crashing the step.
+What the wrapper adds: input filtering (workers, changelings, structures that make the sim misbehave), a short-lived result
+cache, a per-step call budget, a plain power-ratio fallback so a simulator failure degrades a decision instead of crashing the step -
+and the simulator's settings, chosen for the situation the fight is judged in (`Stance`).
+
+What the settings do (probed with the real simulator; none of it is in its documentation):
+
+* The simulator ignores where units stand. The same armies give the same answer 2 or 110 cells apart, in a ball or strung out.
+  Who takes part is decided by the caller (local_fight.py) - and every unit it is given fights from the first second.
+* `timing_adjust` gives the side that OUT-RANGES the other a free volley while the other walks up to it: marines against zealots,
+  sieged tanks against zerglings, spine crawlers against marines. Without it every unit is in contact from the start.
+* `defender_player` says who walks and who holds: 1 = our units hold their ground and the enemy walks into them, 2 = the enemy
+  holds and we walk in (it has no effect without `timing_adjust`). A side that holds never approaches: zerglings that "hold" against
+  our tanks are never reached by them, so the tanks win without a scratch.
+* A unit that cannot move (sieged tank, burrowed unit, static defense) never arrives when it is on the side that walks: with
+  `timing_adjust` and nobody holding - or the wrong side holding - 20 marines beat 4 sieged tanks without a loss, and 6 sieged tanks
+  do no damage at all to 16 zerglings. Such a fight must be judged without the approach model.
+* `good_positioning` ("units are decently split") changes almost nothing without `timing_adjust`.
 """
 import asyncio
+from dataclasses import dataclass
+from enum import Enum, auto
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from loguru import logger
@@ -30,6 +45,56 @@ _VICTORY = EngagementResult.VICTORY_EMPHATIC
 _LOSS = EngagementResult.LOSS_EMPHATIC
 
 
+class Stance(Enum):
+    """The situation a fight is judged in: who walks up to whom."""
+    ATTACKING = auto()    # we walk into a position they hold: their base, static defense, sieged tanks, an army standing its ground
+    DEFENDING = auto()    # we hold a position (the hold point, one of our bases) and they walk into us
+    MEETING = auto()      # neither, or a fight that is under way: everything is in contact from the start
+
+
+@dataclass(frozen=True)
+class SimSetup:
+    """The simulator's settings for one run (the options that change from fight to fight; see the module docstring)."""
+    timing_adjust: bool = False
+    defender_player: int = 0          # 0 = nobody holds, 1 = we hold, 2 = they hold
+    good_positioning: bool = False
+
+
+BASELINE = SimSetup()                 # everything in contact from the start: the neutral, always usable model
+
+
+def engagement_result(won: bool, health_left: float, own: Sequence[Unit], enemy: Sequence[Unit]) -> EngagementResult:
+    """The simulator's answer on Ares' EngagementResult scale. This is `CombatSimManager.can_win_fight`'s own conversion (it has no
+    function for it, and `can_win_fight` cannot say who holds position), thresholds included."""
+    own_health = sum(u.health for u in own) + 1e-16
+    enemy_health = sum(u.health + u.shield for u in enemy) + 1e-16
+    if won:
+        share = health_left / own_health
+        if share >= 0.9:
+            return EngagementResult.VICTORY_EMPHATIC
+        if share >= 0.75:
+            return EngagementResult.VICTORY_OVERWHELMING
+        if share >= 0.6:
+            return EngagementResult.VICTORY_DECISIVE
+        if share > 0.4:
+            return EngagementResult.VICTORY_CLOSE
+        if share > 0.2:
+            return EngagementResult.VICTORY_MARGINAL
+    else:
+        share = health_left / enemy_health
+        if share >= 0.9:
+            return EngagementResult.LOSS_EMPHATIC
+        if share >= 0.75:
+            return EngagementResult.LOSS_OVERWHELMING
+        if share > 0.6:
+            return EngagementResult.LOSS_DECISIVE
+        if share > 0.4:
+            return EngagementResult.LOSS_CLOSE
+        if share > 0.2:
+            return EngagementResult.LOSS_MARGINAL
+    return EngagementResult.TIE
+
+
 class FightEvaluator:
     def __init__(self, ai):
         self.ai = ai
@@ -49,8 +114,8 @@ class FightEvaluator:
             self._cache = {k: v for k, v in self._cache.items() if now - v[0] <= _CACHE_MAX_AGE}
 
     def _configure_simulator(self) -> None:
-        """Set the simulator options Ares' can_win_fight does NOT set itself (it only sets timing, positioning and
-        workers per call). The simulator object is shared, so this needs doing once."""
+        """Set the simulator options that do not change from fight to fight (timing, positioning, who holds and workers are set
+        per run, see `_simulate`). The simulator object is shared, so this needs doing once."""
         if self._configured:
             return
         self._configured = True
@@ -93,18 +158,47 @@ class FightEvaluator:
     # ------------------------------------------------------------------------------------------------------------
     # evaluation
     # ------------------------------------------------------------------------------------------------------------
+    @staticmethod
+    def plan(
+        stance: Stance, engaged: bool, cautious: bool, own: Sequence[Unit], enemy: Sequence[Unit]
+    ) -> List[Tuple[SimSetup, Sequence[Unit]]]:
+        """The simulator runs a fight is judged by: (settings, our units in it). The worst of them is the answer.
+
+        A fight that is under way (`engaged`: each side already has a weapon on the other) has no approach left to model, and neither
+        has a MEETING - everything is in contact, the BASELINE. Otherwise the approach is modelled as the stance says, unless the units
+        that would have to walk cannot (see the module docstring), in which case the BASELINE is all that can be trusted. `cautious`
+        (decisions that commit units forward: starting a push, kiting in) never trusts the stance's model alone: the baseline has to
+        agree, so the answer is never more optimistic than "everything in contact from the start"."""
+        baseline = (BASELINE, own)
+        if engaged or stance is Stance.MEETING:
+            return [baseline]
+        if stance is Stance.ATTACKING:
+            # they hold, we walk in: our sieged tanks and other units that cannot walk are left out of that run - with them it
+            # would be the enemy that walks, and it does not
+            mobile = [u for u in own if u.movement_speed > 0]
+            if not mobile:
+                return [baseline]
+            model = (SimSetup(timing_adjust=True, defender_player=2, good_positioning=False), mobile)
+        else:
+            # we hold, they walk in: enemy units that cannot walk (sieged tanks, static defense) would never arrive
+            if any(u.movement_speed <= 0 for u in enemy):
+                return [baseline]
+            model = (SimSetup(timing_adjust=True, defender_player=1, good_positioning=True), own)
+        return [baseline, model] if cautious else [model]
+
     def evaluate(
         self,
         own: Iterable[Unit],
         enemy: Iterable[Unit],
         *,
-        timing_adjust: bool = False,
-        good_positioning: bool = False,
+        stance: Stance = Stance.MEETING,
+        engaged: bool = False,
+        cautious: bool = False,
         workers_do_no_damage: bool = True,
         cache_seconds: float = 0.5,
     ) -> EngagementResult:
-        """Predicted result of `own` fighting `enemy`. Empty enemy -> emphatic victory, empty own -> emphatic loss.
-        Never raises."""
+        """Predicted result of `own` fighting `enemy` in the given situation (see `plan`). Empty enemy -> emphatic victory, empty
+        own -> emphatic loss. Never raises."""
         own_list = self.clean_own(own)
         own_has_air = any(u.is_flying for u in own_list)
         enemy_list = self.clean_enemy(enemy, own_has_air, workers_do_no_damage)
@@ -112,11 +206,16 @@ class FightEvaluator:
             return _VICTORY
         if not own_list:
             return _LOSS
+        runs = self.plan(stance, engaged, cautious, own_list, enemy_list)
+        return min(self._simulate(mine, enemy_list, setup, workers_do_no_damage, cache_seconds) for setup, mine in runs)
 
+    def _simulate(
+        self, own: Sequence[Unit], enemy: Sequence[Unit], setup: SimSetup, workers_do_no_damage: bool, cache_seconds: float
+    ) -> EngagementResult:
         key = (
-            tuple(sorted(u.tag for u in own_list)),
-            tuple(sorted(u.tag for u in enemy_list)),
-            timing_adjust, good_positioning, workers_do_no_damage,
+            tuple(sorted(u.tag for u in own)),
+            tuple(sorted(u.tag for u in enemy)),
+            setup, workers_do_no_damage,
         )
         now = self.ai.time
         cached = self._cache.get(key)
@@ -127,24 +226,26 @@ class FightEvaluator:
             # over budget: a slightly stale answer beats a new expensive one, and beats nothing
             if cached is not None:
                 return cached[1]
-            return self._fallback(own_list, enemy_list)
+            return self._fallback(own, enemy)
 
         self._configure_simulator()
         try:
             self.sim_calls_this_step += 1
             self.total_sim_calls += 1
-            result = self.ai.mediator.can_win_fight(
-                own_units=Units(own_list, self.ai),
-                enemy_units=Units(enemy_list, self.ai),
-                timing_adjust=timing_adjust,
-                good_positioning=good_positioning,
-                workers_do_no_damage=workers_do_no_damage,
+            # Ares' can_win_fight sets timing, positioning and workers the same way but cannot pass `defender_player`
+            sim = self.ai.manager_hub.combat_sim_manager.combat_sim
+            sim.enable_timing_adjustment(setup.timing_adjust)
+            sim.assume_reasonable_positioning(setup.good_positioning)
+            sim.workers_do_no_damage(workers_do_no_damage)
+            won, health_left = sim.predict_engage(
+                Units(list(own), self.ai), Units(list(enemy), self.ai), optimistic=False, defender_player=setup.defender_player
             )
+            result = engagement_result(won, health_left, own, enemy)
         except BaseException as e:  # noqa: BLE001 - the Rust side can panic with a BaseException subclass
             if isinstance(e, (KeyboardInterrupt, SystemExit, asyncio.CancelledError)):
                 raise
             logger.warning(f"[fight] combat simulator failed ({e!r}); using power-ratio fallback")
-            return self._fallback(own_list, enemy_list)
+            return self._fallback(own, enemy)
         self._cache[key] = (now, result)
         return result
 

@@ -10,6 +10,7 @@ from sc2.units import Units
 from sc2.ids.upgrade_id import UpgradeId
 
 from bot.army.consts import ATTACK_TARGET_IGNORE, BANELING_KITE_MARGIN, BANELING_TYPES, LOCAL_FIGHT_RADIUS, NEAR_ENEMY_RADIUS
+from bot.army.local_fight import FightMap
 
 
 class ArmyContext:
@@ -33,6 +34,9 @@ class ArmyContext:
 
         self.stim_researched: bool = ai.already_pending_upgrade(UpgradeId.STIMPACK) == 1
         self.cloak_researched: bool = ai.already_pending_upgrade(UpgradeId.BANSHEECLOAK) == 1
+
+        # who is in which fight this step (local_fight.py); the army manager fills it once the roles are sorted out
+        self.fights: FightMap = FightMap()
 
         self._near: Dict[int, Units] = {}
         self._near_visible: Dict[int, List[Unit]] = {}

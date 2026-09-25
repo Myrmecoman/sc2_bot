@@ -67,6 +67,11 @@ CONTINUE_ATTACK_RESULT = EngagementResult.LOSS_MARGINAL
 DETACHMENT_RESULT = EngagementResult.VICTORY_DECISIVE
 # a fight right around a squad is lopsided enough to push in instead of kiting away ("very very high" confidence)
 KITE_IN_RESULT = EngagementResult.VICTORY_OVERWHELMING
+# ... and that verdict has to HOLD this long before units are allowed to act on it: the verdict at the first sight of a fight is the
+# least reliable one (units still arriving, on both sides), and it flickers as they move; until it has held, a unit's fight is judged
+# no better than UNCONFIRMED_RESULT
+KITE_IN_CONFIRM_SECONDS = 2.0
+UNCONFIRMED_RESULT = EngagementResult.VICTORY_DECISIVE
 # a local fight where the sim says we get crushed - disengage instead of trading (unless cornered / futile to run)
 LOCAL_RETREAT_RESULT = EngagementResult.LOSS_CLOSE
 
@@ -79,6 +84,14 @@ BANELING_KITE_MARGIN = 1.0      # a unit backs away from banelings once one is i
 BANELING_RETREAT_DISTANCE = 6.0 # ... towards a point this far from them, on the side away from their centre
 LOCAL_FIGHT_RADIUS = 14.0       # radius (around a squad) used for the local fight assessment - user-tuned value
 SQUAD_RADIUS = 9.0              # Ares squad clustering radius for the main army (units farther apart split off)
+
+# ---- fights: who is in one (local_fight.py) ---------------------------------------------------------------------------
+# The simulator has no notion of distance - every unit it is given fights from the first second, however far away it stands - so
+# what it is given IS the fight. A unit is part of a fight when it could have a weapon on the other side within FIGHT_CONTACT_SECONDS;
+# what is still on its way and farther off than that (on either side) is left out, and is judged when it gets there.
+FIGHT_CONTACT_SECONDS = 4.0
+FIGHT_GHOST_MAX_AGE = 12.0      # an enemy unit that dropped out of sight this recently still counts, where it was last seen
+MAX_FIGHTS_JUDGED = 6           # the biggest few fights get a simulation each step; a skirmish of one or two units does not need one
 THREAT_CLUSTER_RADIUS = 9.0     # enemy units this close to each other form one "threat"
 BASE_THREAT_RADIUS = 30.0       # an enemy this close to one of our structures is a threat to that base
 GROUPED_FRACTION = 0.75         # fraction of the ground army that must be in the main squad to START a push

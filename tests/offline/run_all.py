@@ -18,6 +18,7 @@ HERE = Path(__file__).resolve().parent
 CHECKS = [
     ("api cross-check (Ares calls)", "api_check.py", {}, True),
     ("ladder zip: Linux builds, glibc, cython_extensions path", "ladder_check.py", {}, True),
+    ("fights: who is in one, simulator settings, decisions", "test_fights.py", {}, True),
     ("army scenarios, stand-in Ares managers", "test_scenarios.py", {"REAL": "0"}, True),
     ("army scenarios, real Ares managers", "test_scenarios.py", {"REAL": "1"}, True),
     ("unit controllers, stand-in Ares managers", "test_controllers.py", {"REAL": "0"}, True),
@@ -37,6 +38,7 @@ CHECKS = [
     ("physics: air raid at home", "test_physics.py", {"SCENARIO": "air_defend", "FRAMES": "400"}, False),
     ("physics: full-supply attack with tank staging", "test_physics.py", {"SCENARIO": "attack", "FRAMES": "900"}, False),
     ("physics: every army unit type at once, defend then attack", "test_physics.py", {"SCENARIO": "zoo", "FRAMES": "800"}, False),
+    ("physics: an army strung out on the march meets a waiting enemy", "test_physics.py", {"SCENARIO": "vanguard", "FRAMES": "500"}, False),
 ]
 
 

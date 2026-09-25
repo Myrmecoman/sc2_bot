@@ -9,7 +9,7 @@ would take most of the army anyway - the fight is escalated: the whole army defe
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
-from ares.consts import EngagementResult, UnitRole, UnitTreeQueryType
+from ares.consts import UnitRole, UnitTreeQueryType
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.position import Point2
 from sc2.unit import Unit
@@ -22,7 +22,7 @@ from bot.army.consts import (
     THREAT_CLUSTER_RADIUS,
 )
 from bot.army.context import ArmyContext
-from bot.army.fight import FightEvaluator
+from bot.army.fight import FightEvaluator, Stance
 from bot.army.orders import GroupOrders, Mode
 
 # units that may be split off to defend: mobile damage dealers. Tanks and Liberators defend by being pre-positioned,
@@ -49,7 +49,6 @@ class DefenseTask:
     defender_tags: Set[int] = field(default_factory=set)
     last_threat_time: float = 0.0
     escalated: bool = False
-    local_result: Optional[EngagementResult] = None
 
 
 def can_hit(unit: Unit, enemy: Unit) -> bool:
@@ -164,9 +163,10 @@ class BaseDefense:
                     escalate_to = threat.center
                 continue
 
+            # sending units at a threat is a commitment, and the detachment walks up to the raiders (they do not walk into it): judged
+            # with everything in contact from the start, no defender's volley counted on (see FightEvaluator.plan)
             subset, result = self.fight.smallest_winning_subset(
-                ordered, threat.units, target=DETACHMENT_RESULT, min_size=min(MIN_DETACHMENT, eligible_total),
-                good_positioning=True,
+                ordered, threat.units, target=DETACHMENT_RESULT, min_size=min(MIN_DETACHMENT, eligible_total), stance=Stance.MEETING,
             )
             if subset is None or len(subset) > ESCALATE_FRACTION * len(mobile_pool + list(defender_units)):
                 task.escalated = True
@@ -185,12 +185,11 @@ class BaseDefense:
             claimed.update(u.tag for u in chosen)
 
             if chosen:
-                task.local_result = self.fight.evaluate(chosen, threat.units, good_positioning=True)
                 units = Units(chosen, self.ai)
+                # how their fights go is filled in by the army manager, from the fights it found (ArmyManager._fight_view)
                 groups.append((units, GroupOrders(
                     label="defense", mode=Mode.DEFEND, target=threat.center, hold_point=ctx.hold_point,
                     front=ctx.front, bio_position=ctx.bio_position, anchor=threat.center,
-                    local_result=task.local_result,
                 )))
 
         # release the defenders of threats that are gone
