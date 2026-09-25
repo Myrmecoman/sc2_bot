@@ -1,0 +1,19 @@
+# Python 3.12 (Ares supports 3.11 and 3.12; this bot is developed and tested on 3.12).
+#
+#   python -m pip install -r requirements.txt
+#   python -m pip install --no-deps "cython-extensions-sc2>=0.18,<0.19"
+#
+# cython-extensions-sc2 (Ares' compiled helpers) is installed separately and WITHOUT its dependencies on purpose: it declares
+# burnysc2 (a second python-sc2 that would overwrite an older `sc2` package in site-packages) and jupyterlab (~90 packages),
+# and neither is needed - python-sc2 is vendored in ./sc2. Ares 3.13.x is built against its 0.18 series.
+numpy
+scipy
+loguru
+aiohttp
+propcache
+PyYAML
+mpyq
+portpicker
+s2clientprotocol
+# the generated code of s2clientprotocol does not load with protobuf 4 or newer
+protobuf==3.20.3

@@ -122,11 +122,12 @@ def produce(self : BotAI):
                 elif fac.has_reactor:
                     if self.can_afford(UnitTypeId.CYCLONE) and self.units(UnitTypeId.CYCLONE).amount < self.army_advisor.max_cyclones:
                         fac.build(UnitTypeId.CYCLONE)
-                        if self.can_afford(UnitTypeId.CYCLONE) and self.units(UnitTypeId.CYCLONE).amount < self.army_advisor.max_cyclones:
+                        # the first one isn't counted in units() yet, so + 1 - otherwise the pair overshoots the cap by one
+                        if self.can_afford(UnitTypeId.CYCLONE) and self.units(UnitTypeId.CYCLONE).amount + 1 < self.army_advisor.max_cyclones:
                             fac.build(UnitTypeId.CYCLONE)
                     elif self.can_afford(UnitTypeId.HELLION) and self.units(UnitTypeId.HELLION).amount < self.army_advisor.max_hellions:
                         fac.build(UnitTypeId.HELLION)
-                        if self.can_afford(UnitTypeId.HELLION) and self.units(UnitTypeId.HELLION).amount < self.army_advisor.max_hellions:
+                        if self.can_afford(UnitTypeId.HELLION) and self.units(UnitTypeId.HELLION).amount + 1 < self.army_advisor.max_hellions:
                             fac.build(UnitTypeId.HELLION)
                 elif self.can_afford(UnitTypeId.CYCLONE) and self.units(UnitTypeId.CYCLONE).amount < self.army_advisor.max_cyclones:
                     fac.build(UnitTypeId.CYCLONE)

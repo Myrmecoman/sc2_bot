@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import platform
 import re
@@ -18,7 +20,7 @@ BASEDIR = {
     "WineLinux": "~/.wine/drive_c/Program Files (x86)/StarCraft II",
 }
 
-USERPATH = {
+USERPATH: dict[str, str | None] = {
     "Windows": "Documents\\StarCraft II\\ExecuteInfo.txt",
     "WSL1": "Documents/StarCraft II/ExecuteInfo.txt",
     "WSL2": "Documents/StarCraft II/ExecuteInfo.txt",
@@ -36,7 +38,7 @@ BINPATH = {
     "WineLinux": "SC2_x64.exe",
 }
 
-CWD = {
+CWD: dict[str, str | None] = {
     "Windows": "Support64",
     "WSL1": "Support64",
     "WSL2": "Support64",
@@ -53,7 +55,7 @@ def platform_detect():
     return pf
 
 
-PF = platform_detect()
+PF: str = platform_detect()
 
 
 def get_home():
@@ -66,28 +68,29 @@ def get_home():
 def get_user_sc2_install():
     """Attempts to find a user's SC2 install if their OS has ExecuteInfo.txt"""
     if USERPATH[PF]:
-        einfo = str(get_home() / Path(USERPATH[PF]))
-        if os.path.isfile(einfo):
-            with open(einfo) as f:
+        einfo = str(get_home() / Path(USERPATH[PF]))  # pyrefly: ignore
+        if Path(einfo).is_file():
+            with Path(einfo).open() as f:
                 content = f.read()
             if content:
-                base = re.search(r" = (.*)Versions", content).group(1)
+                base = re.search(r" = (.*)Versions", content).group(1)  # pyrefly: ignore
                 if PF in {"WSL1", "WSL2"}:
                     base = str(wsl.win_path_to_wsl_path(base))
 
-                if os.path.exists(base):
+                if Path(base).exists():
                     return base
     return None
 
 
-def get_env():
+def get_env() -> None:
     # TODO: Linux env conf from: https://github.com/deepmind/pysc2/blob/master/pysc2/run_configs/platforms.py
     return None
 
 
 def get_runner_args(cwd):
-    if "WINE" in os.environ:
-        runner_file = Path(os.environ.get("WINE"))
+    wine_path = os.environ.get("WINE")
+    if wine_path is not None:
+        runner_file = Path(wine_path)
         runner_file = runner_file if runner_file.is_file() else runner_file / "wine"
         """
         TODO Is converting linux path really necessary?
@@ -122,35 +125,32 @@ def latest_executeble(versions_dir, base_build=None):
 
 
 class _MetaPaths(type):
-    """"Lazily loads paths to allow importing the library even if SC2 isn't installed."""
+    """ "Lazily loads paths to allow importing the library even if SC2 isn't installed."""
 
-    # pylint: disable=C0203
-    def __setup(self):
+    def __setup(cls):
         if PF not in BASEDIR:
             logger.critical(f"Unsupported platform '{PF}'")
             sys.exit(1)
 
         try:
             base = os.environ.get("SC2PATH") or get_user_sc2_install() or BASEDIR[PF]
-            self.BASE = Path(base).expanduser()
-            self.EXECUTABLE = latest_executeble(self.BASE / "Versions")
-            self.CWD = self.BASE / CWD[PF] if CWD[PF] else None
+            cls.BASE = Path(base).expanduser()  # pyrefly: ignore
+            cls.EXECUTABLE = latest_executeble(cls.BASE / "Versions")
+            cls.CWD = cls.BASE / CWD[PF] if CWD[PF] else None  # pyrefly: ignore
 
-            self.REPLAYS = self.BASE / "Replays"
+            cls.REPLAYS = cls.BASE / "Replays"  # pyrefly: ignore
 
-            if (self.BASE / "maps").exists():
-                self.MAPS = self.BASE / "maps"
+            if (cls.BASE / "maps").exists():
+                cls.MAPS = cls.BASE / "maps"  # pyrefly: ignore
             else:
-                self.MAPS = self.BASE / "Maps"
+                cls.MAPS = cls.BASE / "Maps"  # pyrefly: ignore
         except FileNotFoundError as e:
             logger.critical(f"SC2 installation not found: File '{e.filename}' does not exist.")
             sys.exit(1)
 
-    # pylint: disable=C0203
-    def __getattr__(self, attr):
-        # pylint: disable=E1120
-        self.__setup()
-        return getattr(self, attr)
+    def __getattr__(cls, attr):
+        cls.__setup()
+        return getattr(cls, attr)
 
 
 class Paths(metaclass=_MetaPaths):

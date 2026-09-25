@@ -30,7 +30,7 @@ async def build_gas(self : BotAI) -> bool:
 
 async def build_cc(self : BotAI, build_worker: Unit = None) -> bool:
     location: Point2 = await get_safest_expansion(self)
-    if location:
+    if location is not None:
         # prefer the worker the caller already has committed/walking there (e.g. the scripted
         # build order's critical_worker) over reselecting - select_build_worker only considers
         # gathering/idle workers, which would always exclude one that's already mid-move
@@ -62,9 +62,9 @@ async def smart_build(self : BotAI, type : UnitTypeId):
     prod_structures : Units = self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT})
 
     if prod_structures.amount == 0 and self.main_base_ramp.barracks_in_middle:
-        worker: Unit = self.workers.closest_to(self.main_base_ramp.barracks_in_middle) # pretty unsafe but works and should not pose any issue
-        if worker is None:
+        if self.workers.amount == 0: # closest_to raises on an empty collection
             return False
+        worker: Unit = self.workers.closest_to(self.main_base_ramp.barracks_in_middle) # pretty unsafe but works and should not pose any issue
         pos = self.main_base_ramp.barracks_correct_placement
         if self.enemy_race == Race.Zerg or self.enemy_race == Race.Protoss:
             pos = self.main_base_ramp.barracks_in_middle
@@ -203,8 +203,7 @@ def repair_mechanical_units(self : BotAI):
 
     # only bother once meaningfully damaged, and only if it's actually safe to send a worker there
     for i in mech_units:
-        grid = self.pathing.air_grid if i.is_flying else self.pathing.ground_grid
-        if i.health_percentage > 0.7 or not self.pathing.is_position_safe(grid, i.position):
+        if i.health_percentage > 0.7 or not self.is_unit_position_safe(i):
             if i.tag in self.worker_assigned_to_repair_mech.keys():
                 self.worker_assigned_to_repair_mech.pop(i.tag)
             continue
@@ -262,7 +261,7 @@ def cancel_building(self : BotAI):
 def resume_building_construction(self : BotAI):
     # checking if it is actually safe to resume construction
     for i in self.structures_without_construction_SCVs:
-        if (self.enemy_units.amount != 0 and self.enemy_units.closest_distance_to(i) < 8) or (not self.army_advisor.is_wall_closed() and (self.worker_rushed or self.army_advisor.zergling_rushed)):
+        if (self.visible_enemy_units.amount != 0 and self.visible_enemy_units.closest_distance_to(i) < 8) or (not self.army_advisor.is_wall_closed() and (self.worker_rushed or self.army_advisor.zergling_rushed)):
             return
     
     # update dictionary if building or worker died

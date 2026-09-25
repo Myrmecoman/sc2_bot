@@ -1,38 +1,51 @@
+from __future__ import annotations
+
 import platform
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from aiohttp import ClientWebSocketResponse
 from loguru import logger
-from s2clientprotocol import sc2api_pb2 as sc_pb
 
+from s2clientprotocol import sc2api_pb2 as sc_pb
 from sc2.player import Computer
 from sc2.protocol import Protocol
 
+if TYPE_CHECKING:
+    from sc2.sc2process import SC2Process
+
 
 class Controller(Protocol):
-
-    def __init__(self, ws, process):
+    def __init__(self, ws: ClientWebSocketResponse, process: SC2Process) -> None:
         super().__init__(ws)
         self._process = process
 
     @property
-    def running(self):
-        # pylint: disable=W0212
+    def running(self) -> bool:
         return self._process._process is not None
 
     async def create_game(self, game_map, players, realtime: bool, random_seed=None, disable_fog=None):
         req = sc_pb.RequestCreateGame(
-            local_map=sc_pb.LocalMap(map_path=str(game_map.relative_path)), realtime=realtime, disable_fog=disable_fog
+            local_map=sc_pb.LocalMap(map_path=str(game_map.relative_path)),
+            realtime=realtime,
+            # pyrefly: ignore
+            disable_fog=disable_fog,
         )
         if random_seed is not None:
             req.random_seed = random_seed
 
         for player in players:
+            # pyrefly: ignore
             p = req.player_setup.add()
             p.type = player.type.value
             if isinstance(player, Computer):
+                # pyrefly: ignore[bad-assignment]
                 p.race = player.race.value
+                # pyrefly: ignore[bad-assignment]
                 p.difficulty = player.difficulty.value
-                p.ai_build = player.ai_build.value
+                if player.ai_build is not None:
+                    # pyrefly: ignore[bad-assignment]
+                    p.ai_build = player.ai_build.value
 
         logger.info("Creating new game")
         logger.info(f"Map:     {game_map.name}")
@@ -46,13 +59,13 @@ class Controller(Protocol):
         return result
 
     async def request_save_map(self, download_path: str):
-        """ Not working on linux. """
+        """Not working on linux."""
         req = sc_pb.RequestSaveMap(map_path=download_path)
         result = await self._execute(save_map=req)
         return result
 
     async def request_replay_info(self, replay_path: str):
-        """ Not working on linux. """
+        """Not working on linux."""
         req = sc_pb.RequestReplayInfo(replay_path=replay_path, download_data=False)
         result = await self._execute(replay_info=req)
         return result

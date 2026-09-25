@@ -44,7 +44,7 @@ async def scout(self : BotAI) -> None:
         self.scout_worker_tag = None
         return
 
-    danger : Units = self.enemy_units.filter(lambda u: u.type_id not in {UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE} and u.can_attack_ground)
+    danger : Units = self.visible_enemy_units.filter(lambda u: u.type_id not in {UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE} and u.can_attack_ground)
     if danger.amount > 0 and danger.closest_distance_to(worker) < SCOUT_DANGER_RANGE:
         self.scout_worker_tag = None # abandon the run, let it path home and rejoin mining on its own
         worker.move(self.start_location)

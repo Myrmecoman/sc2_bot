@@ -1,3 +1,6 @@
+import math
+from typing import Callable, Optional
+
 from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
@@ -24,11 +27,43 @@ def is_already_attacking_target(unit: Unit, target) -> bool:
     return is_already_attacking(unit, target)
 
 
-def spread_out_point(unit: Unit, friendlies: Units, towards: Point2, radius: float = 1.25, nudge: float = 1.5) -> Point2:
+def plain_point(point) -> Point2:
+    """The same position as a Point2 of plain Python floats. Ares hands back numpy-typed coordinates (path points are
+    int32 grid cells, safe spots int64) and `Point2.__bool__` yields a numpy bool for those, which Python rejects with a
+    TypeError - so a point that came out of Ares is normalised before it is stored, and no point is ever tested for
+    truth (`a or b`): compare with None instead."""
+    return Point2((float(point[0]), float(point[1])))
+
+
+def segment_walkable(start: Point2, end: Point2, walkable: Callable[[Point2], bool], step: float = 0.75) -> bool:
+    """Is the straight line from `start` to `end` free of cells a ground unit cannot stand on? (`walkable` is
+    `ai.in_pathing_grid`.) Sampled every `step`, and at the end itself."""
+    length = start.distance_to(end)
+    samples = max(1, int(math.ceil(length / step)))
+    for i in range(1, samples + 1):
+        t = i / samples
+        if not walkable(Point2((start.x + (end.x - start.x) * t, start.y + (end.y - start.y) * t))):
+            return False
+    return True
+
+
+def spread_out_point(
+    unit: Unit,
+    friendlies: Units,
+    towards: Point2,
+    radius: float = 1.25,
+    nudge: float = 1.5,
+    walkable: Optional[Callable[[Point2], bool]] = None,
+) -> Point2:
     """Nudge a movement/attack point away from tightly clumped nearby friendlies while still
     heading roughly towards the objective - reduces vulnerability to AOE (splash, storm, banelings,
     a friendly siege tank's own blast). Only meant for use away from active point-blank combat, so
-    it never interferes with actual targeting/firing."""
+    it never interferes with actual targeting/firing.
+
+    The nudged point is a few cells ahead of the unit in a STRAIGHT line towards `towards`, whereas the way there is
+    rarely straight: with a wall, a cliff or a dead end in that line the unit would be sent to a spot on the far side of it
+    - and pressed against the obstacle, never getting anywhere. So when `walkable` is given and the line to the nudged point
+    is not all standable, the unit is sent to `towards` itself and the engine finds the real way."""
     nearby: Units = friendlies.tags_not_in({unit.tag}).closer_than(radius, unit)
     if nearby.amount == 0 or unit.position.distance_to(towards) < radius:
         return towards
@@ -39,4 +74,7 @@ def spread_out_point(unit: Unit, friendlies: Units, towards: Point2, radius: flo
     if unit.position.distance_to(centroid) < 0.1:
         return towards
     away_point: Point2 = unit.position.towards(centroid, -nudge)
-    return away_point.towards(towards, 3)
+    hop: Point2 = away_point.towards(towards, 3)
+    if walkable is not None and not segment_walkable(unit.position, hop, walkable):
+        return towards
+    return hop

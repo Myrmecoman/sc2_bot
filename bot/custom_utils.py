@@ -100,16 +100,17 @@ def handle_add_ons(self : BotAI):
 
 
 def handle_depot_status(self : BotAI):
-    if self.enemy_units.not_flying.exclude_type({UnitTypeId.REAPER, UnitTypeId.COLOSSUS}).amount == 0: # exclude reapers and colossus since they can jump cliffs anyway
+    visible_ground_enemies : Units = self.visible_enemy_units.not_flying.exclude_type({UnitTypeId.REAPER, UnitTypeId.COLOSSUS}) # exclude reapers and colossus since they can jump cliffs anyway
+    if visible_ground_enemies.amount == 0:
         for depo in self.structures(UnitTypeId.SUPPLYDEPOT).ready:
             depo(AbilityId.MORPH_SUPPLYDEPOT_LOWER)
     else:
         for depo in self.structures(UnitTypeId.SUPPLYDEPOT).ready:
-            enemy_closest = self.enemy_units.not_flying.exclude_type({UnitTypeId.REAPER, UnitTypeId.COLOSSUS}).closest_distance_to(depo)
+            enemy_closest = visible_ground_enemies.closest_distance_to(depo)
             if enemy_closest >= 12:
                 depo(AbilityId.MORPH_SUPPLYDEPOT_LOWER)
         for depo in self.structures(UnitTypeId.SUPPLYDEPOTLOWERED).ready:
-            enemy_closest = self.enemy_units.not_flying.exclude_type({UnitTypeId.REAPER, UnitTypeId.COLOSSUS}).closest_distance_to(depo)
+            enemy_closest = visible_ground_enemies.closest_distance_to(depo)
             if enemy_closest < 12:
                 # a unit parked exactly on the depot's own tile blocks the raise from completing
                 # at all - clear it out of the way first so the wall can actually reseal in time,
@@ -260,10 +261,10 @@ async def handle_command_centers(self : BotAI):
         for cc in self.townhalls(UnitTypeId.COMMANDCENTER).ready:
             if not cc.is_using_ability(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND):
                 cc(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND)
-            break
+                break   # one upgrade per step: can_afford was only checked once. A CC that is already morphing is skipped, not a reason to stop - the next one gets its turn
     # lift base if too much damaged and in danger
     for cc in self.townhalls.ready:
-        if (cc.type_id == UnitTypeId.COMMANDCENTER or cc.type_id == UnitTypeId.ORBITALCOMMAND) and cc.health < 600 and (self.enemy_units.amount > 0 and self.enemy_units.closest_distance_to(cc) < 8):
+        if (cc.type_id == UnitTypeId.COMMANDCENTER or cc.type_id == UnitTypeId.ORBITALCOMMAND) and cc.health < 600 and (self.visible_enemy_units.amount > 0 and self.visible_enemy_units.closest_distance_to(cc) < 8):
             if cc.is_using_ability(AbilityId.UPGRADETOORBITAL_ORBITALCOMMAND):
                 cc(AbilityId.CANCEL_MORPHORBITAL)
             if cc.is_using_ability(AbilityId.COMMANDCENTERTRAIN_SCV):
@@ -272,7 +273,7 @@ async def handle_command_centers(self : BotAI):
             cc(AbilityId.LIFT)
             continue
         if cc.type_id == UnitTypeId.COMMANDCENTERFLYING or cc.type_id == UnitTypeId.ORBITALCOMMANDFLYING:
-            if cc.health < 600 or (self.enemy_units.amount > 0 and self.enemy_units.closest_distance_to(cc) < 8):
+            if cc.health < 600 or (self.visible_enemy_units.amount > 0 and self.visible_enemy_units.closest_distance_to(cc) < 8):
                 cc.move(self.start_location.towards(self.game_info.map_center, 6))
             else:
                 expo_pos = self.lifted_cc_pos[cc.tag]
@@ -293,7 +294,7 @@ def build_worker(self : BotAI):
 
 async def get_safest_expansion(self : BotAI):
     location: Point2 = await self.get_next_expansion()
-    if location is not None and (self.enemy_units.amount == 0 or self.enemy_units.closest_distance_to(location) > 12) and (self.enemy_structures.amount == 0 or self.enemy_structures.closest_distance_to(location) > 12):
+    if location is not None and (self.visible_enemy_units.amount == 0 or self.visible_enemy_units.closest_distance_to(location) > 12) and (self.enemy_structures.amount == 0 or self.enemy_structures.closest_distance_to(location) > 12):
         return location
     
     already_taken_positions = [pos.position for pos in self.townhalls.not_flying]

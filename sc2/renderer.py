@@ -1,28 +1,37 @@
+from __future__ import annotations
+
+
 import datetime
+from typing import TYPE_CHECKING
 
 from s2clientprotocol import score_pb2 as score_pb
-
+from s2clientprotocol.sc2api_pb2 import ResponseObservation
 from sc2.position import Point2
+
+if TYPE_CHECKING:
+    from sc2.client import Client
+    from pyglet.image import ImageData
+    from pyglet.text import Label
+    from pyglet.window import Window
 
 
 class Renderer:
-
-    def __init__(self, client, map_size, minimap_size):
+    def __init__(self, client: Client, map_size: tuple[float, float], minimap_size: tuple[float, float]) -> None:
         self._client = client
 
-        self._window = None
+        self._window: Window = None  # pyrefly: ignore
         self._map_size = map_size
-        self._map_image = None
+        self._map_image: ImageData = None  # pyrefly: ignore
         self._minimap_size = minimap_size
-        self._minimap_image = None
+        self._minimap_image: ImageData = None  # pyrefly: ignore
         self._mouse_x, self._mouse_y = None, None
-        self._text_supply = None
-        self._text_vespene = None
-        self._text_minerals = None
-        self._text_score = None
-        self._text_time = None
+        self._text_supply: Label = None  # pyrefly: ignore
+        self._text_vespene: Label = None  # pyrefly: ignore
+        self._text_minerals: Label = None  # pyrefly: ignore
+        self._text_score: Label = None  # pyrefly: ignore
+        self._text_time: Label = None  # pyrefly: ignore
 
-    async def render(self, observation):
+    async def render(self, observation: ResponseObservation) -> None:
         render_data = observation.observation.render_data
 
         map_size = render_data.map.size
@@ -37,14 +46,16 @@ class Renderer:
         minimap_pitch = -minimap_width * 3
 
         if not self._window:
-            # pylint: disable=C0415
             from pyglet.image import ImageData
             from pyglet.text import Label
             from pyglet.window import Window
 
             self._window = Window(width=map_width, height=map_height)
+            # pyrefly: ignore
             self._window.on_mouse_press = self._on_mouse_press
+            # pyrefly: ignore
             self._window.on_mouse_release = self._on_mouse_release
+            # pyrefly: ignore
             self._window.on_mouse_drag = self._on_mouse_drag
             self._map_image = ImageData(map_width, map_height, "RGB", map_data, map_pitch)
             self._minimap_image = ImageData(minimap_width, minimap_height, "RGB", minimap_data, minimap_pitch)
@@ -107,7 +118,7 @@ class Renderer:
                 self._text_vespene.text = str(observation.observation.player_common.vespene)
                 self._text_minerals.text = str(observation.observation.player_common.minerals)
             if observation.observation.HasField("score"):
-                # pylint: disable=W0212
+                # pyrefly: ignore
                 self._text_score.text = f"{score_pb._SCORE_SCORETYPE.values_by_number[observation.observation.score.score_type].name} score: {observation.observation.score.score}"
 
         await self._update_window()
@@ -116,7 +127,7 @@ class Renderer:
             await self._client.move_camera_spatial(Point2((self._mouse_x, self._minimap_size[0] - self._mouse_y)))
             self._mouse_x, self._mouse_y = None, None
 
-    async def _update_window(self):
+    async def _update_window(self) -> None:
         self._window.switch_to()
         self._window.dispatch_events()
 
@@ -132,21 +143,21 @@ class Renderer:
 
         self._window.flip()
 
-    def _on_mouse_press(self, x, y, button, _modifiers):
+    def _on_mouse_press(self, x, y, button, _modifiers) -> None:
         if button != 1:  # 1: mouse.LEFT
             return
         if x > self._minimap_size[0] or y > self._minimap_size[1]:
             return
         self._mouse_x, self._mouse_y = x, y
 
-    def _on_mouse_release(self, x, y, button, _modifiers):
+    def _on_mouse_release(self, x, y, button, _modifiers) -> None:
         if button != 1:  # 1: mouse.LEFT
             return
         if x > self._minimap_size[0] or y > self._minimap_size[1]:
             return
         self._mouse_x, self._mouse_y = x, y
 
-    def _on_mouse_drag(self, x, y, _dx, _dy, buttons, _modifiers):
+    def _on_mouse_drag(self, x, y, _dx, _dy, buttons, _modifiers) -> None:
         if not buttons & 1:  # 1: mouse.LEFT
             return
         if x > self._minimap_size[0] or y > self._minimap_size[1]:

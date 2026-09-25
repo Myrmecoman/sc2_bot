@@ -69,7 +69,7 @@ async def early_build_order(self : BotAI):
     # move scv to depot position
     if self.build_order[0] == UnitTypeId.SUPPLYDEPOT and self.minerals > 25 and self.time > 1:
         location: Point2 = next(iter(depot_placement_positions))
-        if location:
+        if location is not None:
             if MOVE_TO_DEPOT == -1 or self.workers.find_by_tag(MOVE_TO_DEPOT) is None:
                 worker: Unit = self.select_build_worker(location) # select the nearest worker to that location
                 if worker is None:
@@ -92,7 +92,7 @@ async def early_build_order(self : BotAI):
         location = self.main_base_ramp.barracks_correct_placement
         if self.enemy_race == Race.Zerg or self.enemy_race == Race.Protoss:
             location = self.main_base_ramp.barracks_in_middle
-        if location:
+        if location is not None:
             # keep the same committed worker across frames (like MOVE_TO_DEPOT above) instead of
             # re-picking "closest worker" every frame - otherwise a worker that's merely closer to
             # the spot this frame steals the critical-worker tag from one still walking there,
@@ -123,7 +123,7 @@ async def early_build_order(self : BotAI):
     # move SCV to next expansion
     if self.build_order[0] == UnitTypeId.COMMANDCENTER and self.minerals > 250: # go to the next cc place when we are near able to build it
         location: Point2 = await self.get_next_expansion()
-        if location:
+        if location is not None:
             # same reasoning as the barracks step above - keep the same committed worker instead
             # of re-picking one every frame
             worker: Unit = self.workers.find_by_tag(self.build_order_critical_worker)

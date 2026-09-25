@@ -1,15 +1,19 @@
-# pylint: disable=R0904
+from __future__ import annotations
+
+from s2clientprotocol import score_pb2
+
+
 class ScoreDetails:
     """Accessable in self.state.score during step function
     For more information, see https://github.com/Blizzard/s2client-proto/blob/master/s2clientprotocol/score.proto
     """
 
-    def __init__(self, proto):
+    def __init__(self, proto: score_pb2.Score) -> None:
         self._data = proto
         self._proto = proto.score_details
 
     @property
-    def summary(self):
+    def summary(self) -> list[list[float]]:
         """
         TODO this is super ugly, how can we improve this summary?
         Print summary to file with:
@@ -101,6 +105,7 @@ class ScoreDetails:
             "current_apm",
             "current_effective_apm",
         ]
+        # pyrefly: ignore
         return [[value, getattr(self, value)] for value in values]
 
     @property

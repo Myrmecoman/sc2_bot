@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import cached_property
 from itertools import chain
-from typing import List, Optional, Set, Union
+from s2clientprotocol.raw_pb2 import Effect, Unit
 
 from loguru import logger
 
+from s2clientprotocol import raw_pb2, sc2api_pb2
 from sc2.constants import IS_ENEMY, IS_MINE, FakeEffectID, FakeEffectRadii
 from sc2.data import Alliance, DisplayType
 from sc2.ids.ability_id import AbilityId
@@ -25,8 +26,7 @@ except ImportError:
 
 
 class Blip:
-
-    def __init__(self, proto):
+    def __init__(self, proto: raw_pb2.Unit) -> None:
         """
         :param proto:
         """
@@ -46,7 +46,7 @@ class Blip:
         return self._proto.display_type == DisplayType.Visible.value
 
     @property
-    def alliance(self) -> Alliance:
+    def alliance(self) -> int:
         return self._proto.alliance
 
     @property
@@ -83,49 +83,48 @@ class Common:
         "larva_count",
     ]
 
-    def __init__(self, proto):
+    def __init__(self, proto: sc2api_pb2.PlayerCommon) -> None:
         self._proto = proto
 
-    def __getattr__(self, attr):
+    def __getattr__(self, attr) -> int:
         assert attr in self.ATTRIBUTES, f"'{attr}' is not a valid attribute"
         return int(getattr(self._proto, attr))
 
 
 class EffectData:
-
-    def __init__(self, proto, fake=False):
+    def __init__(self, proto: raw_pb2.Effect | raw_pb2.Unit, fake: bool = False) -> None:
         """
         :param proto:
         :param fake:
         """
-        self._proto = proto
+        self._proto: Effect | Unit = proto
         self.fake = fake
 
     @property
-    def id(self) -> Union[EffectId, str]:
-        if self.fake:
+    def id(self) -> EffectId | str:
+        if isinstance(self._proto, raw_pb2.Unit):
             # Returns the string from constants.py, e.g. "KD8CHARGE"
             return FakeEffectID[self._proto.unit_type]
         return EffectId(self._proto.effect_id)
 
     @property
-    def positions(self) -> Set[Point2]:
-        if self.fake:
+    def positions(self) -> set[Point2]:
+        if isinstance(self._proto, raw_pb2.Unit):
             return {Point2.from_proto(self._proto.pos)}
         return {Point2.from_proto(p) for p in self._proto.pos}
 
     @property
     def alliance(self) -> Alliance:
-        return self._proto.alliance
+        return Alliance(self._proto.alliance)
 
     @property
     def is_mine(self) -> bool:
-        """ Checks if the effect is caused by me. """
+        """Checks if the effect is caused by me."""
         return self._proto.alliance == IS_MINE
 
     @property
     def is_enemy(self) -> bool:
-        """ Checks if the effect is hostile. """
+        """Checks if the effect is hostile."""
         return self._proto.alliance == IS_ENEMY
 
     @property
@@ -134,7 +133,7 @@ class EffectData:
 
     @property
     def radius(self) -> float:
-        if self.fake:
+        if isinstance(self._proto, Unit):
             return FakeEffectRadii[self._proto.unit_type]
         return self._proto.radius
 
@@ -150,6 +149,7 @@ class ChatMessage:
 
 @dataclass
 class AbilityLookupTemplateClass:
+    ability_id: int
 
     @property
     def exact_id(self) -> AbilityId:
@@ -166,18 +166,16 @@ class AbilityLookupTemplateClass:
 @dataclass
 class ActionRawUnitCommand(AbilityLookupTemplateClass):
     game_loop: int
-    ability_id: int
-    unit_tags: List[int]
+    unit_tags: list[int]
     queue_command: bool
-    target_world_space_pos: Optional[Point2]
-    target_unit_tag: Optional[int] = None
+    target_world_space_pos: Point2 | None
+    target_unit_tag: int | None = None
 
 
 @dataclass
 class ActionRawToggleAutocast(AbilityLookupTemplateClass):
     game_loop: int
-    ability_id: int
-    unit_tags: List[int]
+    unit_tags: list[int]
 
 
 @dataclass
@@ -187,17 +185,20 @@ class ActionRawCameraMove:
 
 @dataclass
 class ActionError(AbilityLookupTemplateClass):
-    ability_id: int
     unit_tag: int
     # See here for the codes of 'result': https://github.com/Blizzard/s2client-proto/blob/01ab351e21c786648e4c6693d4aad023a176d45c/s2clientprotocol/error.proto#L6
     result: int
 
 
 class GameState:
-
-    def __init__(self, response_observation, previous_observation=None):
+    def __init__(
+        self,
+        response_observation: sc2api_pb2.ResponseObservation,
+        previous_observation: sc2api_pb2.ResponseObservation | None = None,
+    ) -> None:
         """
         :param response_observation:
+        :param previous_observation:
         """
         # Only filled in realtime=True in case the bot skips frames
         self.previous_observation = previous_observation
@@ -210,14 +211,14 @@ class GameState:
         self.common: Common = Common(self.observation.player_common)
 
         # Area covered by Pylons and Warpprisms
-        self.psionic_matrix: PsionicMatrix = PsionicMatrix.from_proto(self.observation_raw.player.power_sources)
+        self.psionic_matrix: PsionicMatrix = PsionicMatrix.from_proto(list(self.observation_raw.player.power_sources))
         # 22.4 per second on faster game speed
         self.game_loop: int = self.observation.game_loop
 
         # https://github.com/Blizzard/s2client-proto/blob/33f0ecf615aa06ca845ffe4739ef3133f37265a9/s2clientprotocol/score.proto#L31
         self.score: ScoreDetails = ScoreDetails(self.observation.score)
         self.abilities = self.observation.abilities  # abilities of selected units
-        self.upgrades: Set[UpgradeId] = {UpgradeId(upgrade) for upgrade in self.observation_raw.player.upgrade_ids}
+        self.upgrades: set[UpgradeId] = {UpgradeId(upgrade) for upgrade in self.observation_raw.player.upgrade_ids}
 
         # self.visibility[point]: 0=Hidden, 1=Fogged, 2=Visible
         self.visibility: PixelMap = PixelMap(self.observation_raw.map_state.visibility)
@@ -225,7 +226,7 @@ class GameState:
         self.creep: PixelMap = PixelMap(self.observation_raw.map_state.creep, in_bits=True)
 
         # Effects like ravager bile shot, lurker attack, everything in effect_id.py
-        self.effects: Set[EffectData] = {EffectData(effect) for effect in self.observation_raw.effects}
+        self.effects: set[EffectData] = {EffectData(effect) for effect in self.observation_raw.effects}
         """ Usage:
         for effect in self.state.effects:
             if effect.id == EffectId.RAVAGERCORROSIVEBILECP:
@@ -234,15 +235,15 @@ class GameState:
         """
 
     @cached_property
-    def dead_units(self) -> Set[int]:
-        """ A set of unit tags that died this frame """
+    def dead_units(self) -> set[int]:
+        """A set of unit tags that died this frame"""
         _dead_units = set(self.observation_raw.event.dead_units)
         if self.previous_observation:
             return _dead_units | set(self.previous_observation.observation.raw_data.event.dead_units)
         return _dead_units
 
     @cached_property
-    def chat(self) -> List[ChatMessage]:
+    def chat(self) -> list[ChatMessage]:
         """List of chat messages sent this frame (by either player)."""
         previous_frame_chat = self.previous_observation.chat if self.previous_observation else []
         return [
@@ -251,16 +252,16 @@ class GameState:
         ]
 
     @cached_property
-    def alerts(self) -> List[int]:
+    def alerts(self) -> list[int]:
         """
         Game alerts, see https://github.com/Blizzard/s2client-proto/blob/01ab351e21c786648e4c6693d4aad023a176d45c/s2clientprotocol/sc2api.proto#L683-L706
         """
-        if self.previous_observation:
+        if self.previous_observation is not None:
             return list(chain(self.previous_observation.observation.alerts, self.observation.alerts))
-        return self.observation.alerts
+        return list(self.observation.alerts)
 
     @cached_property
-    def actions(self) -> List[Union[ActionRawUnitCommand, ActionRawToggleAutocast, ActionRawCameraMove]]:
+    def actions(self) -> list[ActionRawUnitCommand | ActionRawToggleAutocast | ActionRawCameraMove]:
         """
         List of successful actions since last frame.
         See https://github.com/Blizzard/s2client-proto/blob/01ab351e21c786648e4c6693d4aad023a176d45c/s2clientprotocol/sc2api.proto#L630-L637
@@ -268,7 +269,7 @@ class GameState:
         Each action is converted into Python dataclasses: ActionRawUnitCommand, ActionRawToggleAutocast, ActionRawCameraMove
         """
         previous_frame_actions = self.previous_observation.actions if self.previous_observation else []
-        actions = []
+        actions: list[ActionRawUnitCommand | ActionRawToggleAutocast | ActionRawCameraMove] = []
         for action in chain(previous_frame_actions, self.response_observation.actions):
             action_raw = action.action_raw
             game_loop = action.game_loop
@@ -279,23 +280,23 @@ class GameState:
                     # Actions that have a point as target
                     actions.append(
                         ActionRawUnitCommand(
-                            game_loop,
-                            raw_unit_command.ability_id,
-                            raw_unit_command.unit_tags,
-                            raw_unit_command.queue_command,
-                            Point2.from_proto(raw_unit_command.target_world_space_pos),
+                            ability_id=raw_unit_command.ability_id,
+                            game_loop=game_loop,
+                            unit_tags=list(raw_unit_command.unit_tags),
+                            queue_command=raw_unit_command.queue_command,
+                            target_world_space_pos=Point2.from_proto(raw_unit_command.target_world_space_pos),
                         )
                     )
                 else:
                     # Actions that have a unit as target
                     actions.append(
                         ActionRawUnitCommand(
-                            game_loop,
-                            raw_unit_command.ability_id,
-                            raw_unit_command.unit_tags,
-                            raw_unit_command.queue_command,
-                            None,
-                            raw_unit_command.target_unit_tag,
+                            ability_id=raw_unit_command.ability_id,
+                            game_loop=game_loop,
+                            unit_tags=list(raw_unit_command.unit_tags),
+                            queue_command=raw_unit_command.queue_command,
+                            target_world_space_pos=None,
+                            target_unit_tag=raw_unit_command.target_unit_tag,
                         )
                     )
             elif action_raw.HasField("toggle_autocast"):
@@ -303,9 +304,9 @@ class GameState:
                 raw_toggle_autocast_action = action_raw.toggle_autocast
                 actions.append(
                     ActionRawToggleAutocast(
-                        game_loop,
-                        raw_toggle_autocast_action.ability_id,
-                        raw_toggle_autocast_action.unit_tags,
+                        ability_id=raw_toggle_autocast_action.ability_id,
+                        game_loop=game_loop,
+                        unit_tags=list(raw_toggle_autocast_action.unit_tags),
                     )
                 )
             else:
@@ -314,29 +315,31 @@ class GameState:
         return actions
 
     @cached_property
-    def actions_unit_commands(self) -> List[ActionRawUnitCommand]:
+    def actions_unit_commands(self) -> list[ActionRawUnitCommand]:
         """
         List of successful unit actions since last frame.
         See https://github.com/Blizzard/s2client-proto/blob/01ab351e21c786648e4c6693d4aad023a176d45c/s2clientprotocol/raw.proto#L185-L193
         """
+
         return list(filter(lambda action: isinstance(action, ActionRawUnitCommand), self.actions))
 
     @cached_property
-    def actions_toggle_autocast(self) -> List[ActionRawToggleAutocast]:
+    def actions_toggle_autocast(self) -> list[ActionRawToggleAutocast]:
         """
         List of successful autocast toggle actions since last frame.
         See https://github.com/Blizzard/s2client-proto/blob/01ab351e21c786648e4c6693d4aad023a176d45c/s2clientprotocol/raw.proto#L199-L202
         """
+
         return list(filter(lambda action: isinstance(action, ActionRawToggleAutocast), self.actions))
 
     @cached_property
-    def action_errors(self) -> List[ActionError]:
+    def action_errors(self) -> list[ActionError]:
         """
         List of erroneous actions since last frame.
         See https://github.com/Blizzard/s2client-proto/blob/01ab351e21c786648e4c6693d4aad023a176d45c/s2clientprotocol/sc2api.proto#L648-L652
         """
         previous_frame_errors = self.previous_observation.action_errors if self.previous_observation else []
         return [
-            ActionError(error.ability_id, error.unit_tag, error.result)
+            ActionError(ability_id=error.ability_id, unit_tag=error.unit_tag, result=error.result)
             for error in chain(self.response_observation.action_errors, previous_frame_errors)
         ]

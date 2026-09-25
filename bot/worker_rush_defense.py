@@ -13,7 +13,7 @@ def wall_as_fast_as_possible(self: BotAI):
         return
 
     dist = 10000
-    for e in self.enemy_units:
+    for e in self.visible_enemy_units:
         new_dist = self.structures.closest_distance_to(e)
         if new_dist < dist:
             dist = new_dist
@@ -40,7 +40,7 @@ def wall_as_fast_as_possible(self: BotAI):
 
 
 def are_we_worker_rushed(self : BotAI):
-    enemies: Units = self.enemy_units.of_type({UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE})
+    enemies: Units = self.visible_enemy_units.of_type({UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE})
     if enemies.empty:
         return 0, None, 0
     
