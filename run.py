@@ -1,6 +1,13 @@
 # pylint: disable=E0401
+import os
 import sys
 import random
+
+# The ladder's Python image has no cython-extensions-sc2 (Ares needs it) and does not read requirements.txt, so its Linux build
+# is shipped in vendor_linux/. It goes to the END of sys.path, and only on Linux: a pip-installed copy (a dev machine, or an image
+# that gets one later) is used in preference, and Windows keeps failing with a plain "No module named 'cython_extensions'".
+if sys.platform.startswith("linux"):
+    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor_linux"))
 
 from __init__ import run_ladder_game
 
@@ -64,3 +71,8 @@ if __name__ == "__main__":
         [bot, enemy], realtime=False
         #[human, bot], realtime=True
         )
+
+
+# we sometimes take terrible fights, and sometime even with confidence by kitting forward !
+# Make sure we adapt the parameters of the fight simulation to the condition (defending vs attacking, etc...)
+# and if fighting, consider the fight with the local units, not including those in their way but still too far to contribute yet

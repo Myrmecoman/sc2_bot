@@ -24,6 +24,8 @@ bot/
 ares/                        Ares (ares-sc2 3.13.1), vendored
 sc2/                         python-sc2 (mainline BurnySc2), vendored
 map_analyzer/  sc2_helper/   compiled helpers Ares needs: map analysis (C) and the combat simulator (Rust)
+vendor_linux/                the Linux build of cython-extensions-sc2 for the ladder, which has no pip package for it (see Setup)
+arena-submission.py          zips the bot for the AI Arena ladder (see Setup)
 training_bots/               bots to test against
 tests/offline/               checks that need no StarCraft II, see the end of this file
 ```
@@ -76,8 +78,18 @@ offline checks below.
 * The compiled helpers are per platform and Python version. Linux/macOS builds for 3.10-3.12 (`sc2_helper` also 3.13) are in git. The
   Windows `.pyd` builds are **not**: `.gitignore` has `*.py[cod]`, which also matches `.pyd`, so they only exist on the machine that
   built them. `map_analyzer/cext/mapanalyzerext.cp312-win_amd64.pyd` and `sc2_helper/sc2_helper.cp312-win_amd64.pyd` must be there.
-* Local game: `python run.py`. Ladder: `run.py --LadderServer`, see `ladderbots.json`. `cython-extensions-sc2` is a compiled pip
-  package that is not vendored in this repository; see the Ares documentation on how to ship it to a ladder that does not install it for you.
+* Local game: `python run.py`. Ladder: `run.py --LadderServer`, see `ladderbots.json`.
+* **The ladder** (AI Arena: Python 3.12 on Debian, x86_64) does not read `requirements.txt` and has none of Ares' compiled helpers, so
+  the zip has to carry them: Linux builds of `sc2_helper` and `map_analyzer/cext` are in their folders, and the Linux build of
+  `cython-extensions-sc2` is in `vendor_linux/cython_extensions/` (`run.py` adds `vendor_linux/` to the END of `sys.path`, on Linux only,
+  so a pip-installed copy still wins; provenance and update steps in `vendor_linux/README.md`). The package is GPL-3.0; its `LICENSE` is
+  in the folder.
+* **Uploading to the ladder**: `python arena-submission.py` builds `dist/SmoothBrainBot.zip` (git-ignored, about 8 MB; the ladder takes at
+  most 50 MB) with `run.py` at its root and only what the ladder runs: `bot/`, `ares/`, `sc2/`, `map_analyzer/`, `sc2_helper/`,
+  `vendor_linux/`, `run.py`, `__init__.py`, `ladderbots.json` and the `LICENSE`. Tests, training bots, `.git`, caches and every compiled file that
+  is not a Linux binary (Windows `.pyd`, macOS `.so`) stay out. It runs `tests/offline/ladder_check.py` first and refuses to build if that
+  fails (`--skip-check` overrides), and it is made from the working tree - the summary says which commit it started from and whether the
+  zipped files have uncommitted changes. `--list` shows what would go in without building.
 
 ## python-sc2 and Ares
 
@@ -102,6 +114,7 @@ obviously wrong decisions, not a substitute for playing games.
 python tests/offline/run_all.py            # everything, a couple of minutes
 python tests/offline/run_all.py --quick    # skip the long physics scenarios
 python tests/offline/bridge_status.py      # which parts of bot/ares_compat.py this sc2/ makes redundant
+python tests/offline/ladder_check.py       # will the zip load on the AI Arena ladder (Linux builds, glibc, vendor_linux)
 ```
 
 # TODO

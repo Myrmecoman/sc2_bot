@@ -6,6 +6,9 @@
 # cython-extensions-sc2 (Ares' compiled helpers) is installed separately and WITHOUT its dependencies on purpose: it declares
 # burnysc2 (a second python-sc2 that would overwrite an older `sc2` package in site-packages) and jupyterlab (~90 packages),
 # and neither is needed - python-sc2 is vendored in ./sc2. Ares 3.13.x is built against its 0.18 series.
+#
+# This file is for dev machines only: the AI Arena ladder does not read it. Its Linux build of cython-extensions-sc2 is shipped
+# in ./vendor_linux (see the README).
 numpy
 scipy
 loguru

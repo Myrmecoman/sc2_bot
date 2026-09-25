@@ -17,6 +17,7 @@ HERE = Path(__file__).resolve().parent
 # (label, script, extra environment, part of --quick?)
 CHECKS = [
     ("api cross-check (Ares calls)", "api_check.py", {}, True),
+    ("ladder zip: Linux builds, glibc, cython_extensions path", "ladder_check.py", {}, True),
     ("army scenarios, stand-in Ares managers", "test_scenarios.py", {"REAL": "0"}, True),
     ("army scenarios, real Ares managers", "test_scenarios.py", {"REAL": "1"}, True),
     ("unit controllers, stand-in Ares managers", "test_controllers.py", {"REAL": "0"}, True),
