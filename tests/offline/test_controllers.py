@@ -998,6 +998,145 @@ def test_bio_spreads_out_on_the_way_in_to_sieged_tanks():
     check("bio: banelings close by are still backed away from, tanks or no tanks", _backs_away(c), str(c))
 
 
+# ------------------------------------------------------------------------------------------------------------------------------
+# a locked-on cyclone kites: the lock keeps firing up to 15 range, while the target stays in view
+# ------------------------------------------------------------------------------------------------------------------------------
+def _locked_cyclone(buffs=(BuffId.LOCKON,), extra_enemy=None):
+    """a Cyclone at (60, 60) that has just cast Lock On at a marine 6 away (in cast range): returns (scene, cyclone, marine) after the cast"""
+    from bot.ares_compat import refresh_ability_cache
+    sc = mk()
+    cy = sc.own(U.CYCLONE, (60, 60))
+    sc.ai.ability_grants[cy.tag] = {A.LOCKON_LOCKON, A.LOCKONAIR_LOCKONAIR}
+    marine = sc.enemy(U.MARINE, (66, 60), buffs=list(buffs))
+    if extra_enemy is not None:
+        sc.enemy(*extra_enemy)
+    asyncio.run(refresh_ability_cache(sc.ai, sc.ai.units))
+    ctx = begin(sc)
+    sc.manager.cyclones.control(sc.world.units([cy]), orders(sc), ctx)
+    return sc, cy, marine
+
+
+def _move(sc, unit, x, own=False, **kw):
+    """the same unit (same tag) a moment later, at x"""
+    (sc.ai._own if own else sc.ai._enemies).remove(unit)
+    return (sc.own if own else sc.enemy)(unit.type_id, (x, 60), tag=unit.tag, **kw)
+
+
+def _next_step(sc, cy, **order_kw):
+    from bot.ares_compat import refresh_ability_cache
+    asyncio.run(refresh_ability_cache(sc.ai, sc.ai.units))
+    ctx = begin(sc)
+    sc.manager.cyclones.control(sc.world.units([cy]), orders(sc, **order_kw), ctx)
+    return cmds(sc, cy)
+
+
+def _fire_on(sc, x_from=55, x_to=66):
+    """enemy fire over the cells x_from..x_to (around the cyclone at x = 60)"""
+    sc.ai.mediator.ground[x_from:x_to, 50:70] = 60.0
+
+
+def test_locked_cyclone_records_the_lock_and_does_not_recast():
+    sc, cy, marine = _locked_cyclone(extra_enemy=(U.MARINE, (65, 61)))
+    check("cyclone: the lock is recorded (which unit, when)", sc.manager.cyclones.locks.get(cy.tag, (None,))[0] == marine.tag, str(sc.manager.cyclones.locks))
+    c = _next_step(sc, cy)
+    check("cyclone: safe with the target well inside 15, it stays put and does not spend a second lock (which would end the first)",
+          len(c) == 0, str(c))
+
+
+def test_locked_cyclone_steps_out_of_fire_but_keeps_the_lock():
+    sc, cy, marine = _locked_cyclone()
+    marine = _move(sc, marine, 69.0, buffs=[BuffId.LOCKON])              # the target is 9 away: room to go 5 further back...
+    _fire_on(sc)                                                          # ...and the cyclone stands in fire (cells 55-65)
+    c = _next_step(sc, cy)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("cyclone: locked and in fire, it retreats", len(moves) == 1 and moves[0][0] < 60, str(c))
+    # the safe cells start 6 back (x = 54): that would be 15 from the target - the retreat stops where the lock still holds (13.5 + radii)
+    check("cyclone: ...but only as far as the target stays inside the lock's range (not all the way to the safe spot)", moves and 54.3 < moves[0][0] < 55.3, str(moves))
+
+
+def test_locked_cyclone_at_the_edge_of_the_lock_leaves_it_rather_than_die():
+    sc, cy, marine = _locked_cyclone()
+    marine = _move(sc, marine, 74.0, buffs=[BuffId.LOCKON])              # 13.25 from the target: no room to back away and keep it
+    _fire_on(sc)
+    c = _next_step(sc, cy)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("cyclone: in fire with no way out that keeps the lock, the cyclone still comes first (all the way to the safe spot)", moves and moves[0][0] < 55, str(c))
+
+
+def test_locked_cyclone_follows_a_target_that_walks_away():
+    sc, cy, marine = _locked_cyclone()
+    marine = _move(sc, marine, 75.5, buffs=[BuffId.LOCKON])              # 14.75 from the cyclone's edge: the lock ends at 15
+    c = _next_step(sc, cy)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("cyclone: safe, with the target about to leave the lock's range, it steps after it", moves and 62.5 < moves[0][0] < 64, str(c))
+    sc, cy, marine = _locked_cyclone()
+    marine = _move(sc, marine, 80.0, buffs=[BuffId.LOCKON])              # out of range: the lock is over
+    c = _next_step(sc, cy)
+    check("cyclone: ...and one that has left it is not chased (the lock is forgotten)", cy.tag not in sc.manager.cyclones.locks, str(sc.manager.cyclones.locks))
+
+
+def test_locked_cyclone_lock_ends_when_the_target_leaves_view():
+    sc, cy, marine = _locked_cyclone(extra_enemy=(U.ZERGLING, (64, 60)))
+    locked = next(e for e in sc.ai._enemies if e.tag == sc.manager.cyclones.locks[cy.tag][0])       # (the zergling: the lowest hit points)
+    sc.ai._enemies.remove(locked)
+    ghost = sc.enemy(locked.type_id, (locked.position.x, locked.position.y), tag=locked.tag)
+    ghost._ghost = True
+    ghost.game_loop = 1                                                   # only a memory of it now
+    c = _next_step(sc, cy)
+    check("cyclone: the target gone from view, the lock on it is forgotten", sc.manager.cyclones.locks.get(cy.tag, (None,))[0] != locked.tag, str(sc.manager.cyclones.locks))
+    check("cyclone: ...and the cyclone carries on with the normal logic (a fresh lock on the marine, which it can see)",
+          any(a == A.LOCKON_LOCKON and getattr(t, "tag", None) == marine.tag for a, t, q in c), str(c))
+
+
+def test_locked_cyclone_cast_that_never_took_is_tried_again():
+    sc, cy, marine = _locked_cyclone(buffs=())                            # no buff on the target, and the ability is still on offer
+    sc.ai._fake_time += 1.2                                               # (begin adds 0.5: the next step is 1.7 s after the cast)
+    c = _next_step(sc, cy)
+    check("cyclone: no sign of a lock 1.5 s after the cast -> it never took: the lock is dropped and cast again",
+          any(a == A.LOCKON_LOCKON and getattr(t, "tag", None) == marine.tag for a, t, q in c), str(c))
+    sc, cy, marine = _locked_cyclone()                                    # with the buff on the target
+    sc.ai._fake_time += 1.2
+    c = _next_step(sc, cy)
+    check("cyclone: ...but a target that carries the lock keeps its lock", cy.tag in sc.manager.cyclones.locks and not c, str((c, sc.manager.cyclones.locks)))
+
+
+def test_locked_cyclone_retreating_group_keeps_the_lock_while_it_goes_home():
+    sc, cy, marine = _locked_cyclone()
+    # the group retreats to the hold point at (60, 60); the cyclone has meanwhile been drawn out to (75, 60), its target to (84, 60)
+    cy = _move(sc, cy, 75.0, own=True)
+    sc.ai.ability_grants[cy.tag] = {A.LOCKON_LOCKON, A.LOCKONAIR_LOCKONAIR}
+    marine = _move(sc, marine, 84.0, buffs=[BuffId.LOCKON])
+    sc.ai.mediator.ground[70:80, 50:70] = 60.0                            # in fire
+    c = _next_step(sc, cy, mode=Mode.HOLD, retreating=True)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("cyclone: a retreating group's locked cyclone heads for the hold point, as far as the lock allows (not the whole way)", moves and 69 < moves[0][0] < 71, str(c))
+
+
+def test_locked_cyclone_is_left_alone_while_the_cast_is_on_it():
+    sc, cy, marine = _locked_cyclone()
+    _fire_on(sc)
+    cy = _move(sc, cy, 60.0, own=True, orders=[(A.LOCKON_LOCKON, marine.tag)])     # the game still shows the cast as its order
+    sc.ai.ability_grants[cy.tag] = {A.LOCKON_LOCKON, A.LOCKONAIR_LOCKONAIR}
+    c = _next_step(sc, cy)
+    check("cyclone: while the cast is still its order, nothing is ordered (a move could cancel it), fire or no fire", len(c) == 0, str(c))
+
+
+def test_farthest_within():
+    from bot.army.units.cyclones import farthest_within
+    centre = Point2((69, 60))
+    p = farthest_within(Point2((60, 60)), Point2((62, 60)), centre, 14.25)
+    check("geometry: a step that stays inside the circle is taken whole", p is not None and abs(p.x - 62) < 0.01, str(p))
+    p = farthest_within(Point2((60, 60)), Point2((54, 60)), centre, 14.25)
+    check("geometry: one that would leave it is cut where it crosses the circle", p is not None and abs(p.x - 54.75) < 0.01, str(p))
+    p = farthest_within(Point2((55, 60)), Point2((50, 60)), centre, 14.25)
+    check("geometry: no useful step when the way out starts at once", p is None, str(p))
+    p = farthest_within(Point2((50, 60)), Point2((56, 60)), centre, 14.25)
+    check("geometry: already outside: a move that brings it back in is fine", p is not None and abs(p.x - 56) < 0.01, str(p))
+    p = farthest_within(Point2((50, 60)), Point2((45, 60)), centre, 14.25)
+    check("geometry: ...one that takes it farther out is not", p is None, str(p))
+    check("geometry: no move at all is no step", farthest_within(Point2((60, 60)), Point2((60, 60)), centre, 14.25) is None)
+
+
 def main():
     tests = [v for k, v in globals().items() if k.startswith("test_")]
     only = sys.argv[1:]

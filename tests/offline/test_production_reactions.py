@@ -3,6 +3,7 @@ building limits: never more than 6 Barracks, 2 Factories and 2 Starports - and m
 
   raven      a Dark Shrine scouted: the Starport makes a Raven first (not a Banshee)
   tank       a Roach Warren scouted: Marines are skipped while the Factory that stands ready lacks the money for a Siege Tank
+  skytoss    a Stargate scouted: the Factory stops at 2 tanks and makes Cyclones
   turrets    a Dark Shrine scouted: an Engineering Bay, then a missile turret in the mineral line
   starport   ... and the Starport is built now, not once a second base is up
   caps       6 Barracks / 2 Factories / 2 Starports at most, the bank builds one more at a time while it piles up"""
@@ -103,6 +104,20 @@ def main():
     check("tank: with plenty of money everything is bought", A.FACTORYTRAIN_SIEGETANK in done, str(sorted(a.name for a in done)))
     done = play(factory(True), minerals=120, gas=50)
     check("tank: no gas for a tank -> nothing is held back for it (Marines carry on)", A.BARRACKSTRAIN_MARINE in done, str(sorted(a.name for a in done)))
+
+    # ---- skytoss: the Factory stops at 2 tanks and makes Cyclones instead
+    def two_tanks(stargate):
+        def setup(game, cx, cy):
+            with_addon(game, U.FACTORY, U.FACTORYTECHLAB, (cx + 14, cy - 6))
+            for k in range(2):
+                game.add(U.SIEGETANK, (cx + 8 + 2 * k, cy + 8), 1)
+            if stargate:
+                game.add(U.STARGATE, BASES["enemy_main"], 4)
+        return setup
+    done = play(two_tanks(False), race=common_pb2.Protoss, minerals=600, gas=400, frames=1)
+    check("skytoss (control): no Stargate, two tanks out -> the Factory makes a third", A.FACTORYTRAIN_SIEGETANK in done, str(sorted(a.name for a in done)))
+    done = play(two_tanks(True), race=common_pb2.Protoss, minerals=600, gas=400, frames=1)
+    check("skytoss: a Stargate scouted, two tanks out -> no third tank, a Cyclone instead", A.FACTORYTRAIN_SIEGETANK not in done and A.TRAIN_CYCLONE in done, str(sorted(a.name for a in done)))
 
     # ---- a Dark Shrine: turrets, and the Starport now
     def base(shrine, ebay=False, factory_ready=True):

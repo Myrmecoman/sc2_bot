@@ -101,6 +101,21 @@ def test_air_and_the_marine_share():
     check("fusion core: Vikings first, Cyclones", advice.prioritize_vikings and advice.max_cyclones == 4 and advice.max_vikings == 10, str(vars(advice)))
 
 
+def test_skytoss_caps_the_tanks():
+    advice, fired = run(Race.Protoss, structures=[U.STARGATE], max_tanks=10)
+    check("skytoss: a Stargate scouted -> no more than 2 Siege Tanks (they cannot shoot up)", advice.max_tanks == 2 and "skytoss" in fired, str((advice.max_tanks, fired)))
+    advice, _ = run(Race.Protoss, units={U.VOIDRAY: 1}, max_tanks=6)
+    check("skytoss: so does a Void Ray seen without the Stargate", advice.max_tanks == 2, str(advice.max_tanks))
+    advice, _ = run(Race.Protoss, structures=[U.STARGATE], max_tanks=1)
+    check("skytoss: it is a ceiling - fewer tanks than that stay as they are", advice.max_tanks == 1, str(advice.max_tanks))
+    advice, _ = run(Race.Protoss, structures=[U.STARGATE, U.ROBOTICSBAY], units={U.COLOSSUS: 4}, max_tanks=10)
+    check("skytoss: ...and whatever else the enemy has, nothing raises it again (it is the last rule)", advice.max_tanks == 2, str(advice.max_tanks))
+    advice, _ = run(Race.Protoss, structures=[U.GATEWAY], max_tanks=6)
+    check("skytoss: no air, no cap", advice.max_tanks == 6, str(advice.max_tanks))
+    advice, _ = run(Race.Zerg, structures=[U.SPIRE], max_tanks=8)
+    check("skytoss: (mutalisks are not skytoss: another answer, no cap)", advice.max_tanks == 8, str(advice.max_tanks))
+
+
 # ---------------------------------------------------------------------------------------------------------------- the advisor
 def make_advisor(race):
     sc = Scene(enemy_race=race)
@@ -122,6 +137,18 @@ def test_advisor_reacts_and_lets_go():
     advisor.provide_advices()
     check("advisor: the shrine gone, the reaction goes with it (nothing sticks)",
           not advisor.raven_first and advisor.turrets_per_base == 0 and not advisor.starport_now and advisor.priority_units == [], str(advisor.active_reactions))
+
+
+def test_advisor_skytoss_tank_ceiling():
+    sc, advisor = make_advisor(Race.Protoss)
+    advisor.provide_advices()
+    check("advisor: no skytoss, the usual 6 tanks", advisor.max_tanks == 6, str(advisor.max_tanks))
+    gate = sc.enemy(U.STARGATE, (150, 150))
+    advisor.provide_advices()
+    check("advisor: a Stargate scouted -> 2 tanks at most, and the anti-air answer is on (6 cyclones)", advisor.max_tanks == 2 and advisor.max_cyclones == 6, str((advisor.max_tanks, advisor.max_cyclones)))
+    sc.ai._enemies.remove(gate)
+    advisor.provide_advices()
+    check("advisor: the Stargate gone, the ceiling goes with it", advisor.max_tanks == 6, str(advisor.max_tanks))
 
 
 def test_advisor_random_opponent_gets_its_races_numbers_once_seen():

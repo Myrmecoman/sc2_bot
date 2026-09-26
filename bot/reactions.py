@@ -11,7 +11,8 @@ macro read:
     turrets_per_base missile turrets in every mineral line (macro.py, `build_turrets`)
     starport_now     the Starport is built at once, not once a second base is up (macro.py)
 
-Caps only ever go UP (`raise_to`), so two rules never undo each other; the marine share goes down for armored armies (more Marauders)
+Caps only ever go UP (`raise_to`), so two rules never undo each other - the one exception is the last rule, which puts a ceiling on the
+tanks against skytoss; the marine share goes down for armored armies (more Marauders)
 and up against air (Marines shoot up) - where both apply, the later rule in the table wins, and air is listed after the ground armies. The
 advisor resets its knobs to their usual values before every run, so a rule never sticks after its trigger is gone. A rule that is wrong
 costs a few units of the wrong kind - never the whole build - and every rule that fires is logged once ("[react] ...") so a game shows
@@ -23,6 +24,8 @@ from typing import Callable, Dict, Iterable, List, Mapping, Optional
 
 from sc2.data import Race
 from sc2.ids.unit_typeid import UnitTypeId as U
+
+from bot.pathing.consts import SKYTOSS_TYPES
 
 # the knobs the advisor keeps, and the values they start each step from (see ArmyCompositionAdvisor.provide_advices)
 KNOBS = (
@@ -54,7 +57,7 @@ def raise_to(advice, **floors) -> None:
 
 
 def lower_to(advice, **ceilings) -> None:
-    """Never above these (the marine share only ever goes down)."""
+    """Never above these (the marine share goes down for armored armies; the tanks are capped against skytoss)."""
     for name, value in ceilings.items():
         setattr(advice, name, min(getattr(advice, name), value))
 
@@ -157,6 +160,12 @@ REACTIONS: List[Reaction] = [
         "battlecruisers", Race.Terran, lambda s: s.structure(U.FUSIONCORE) > 0 or s.unit(U.BATTLECRUISER) >= 2,
         lambda a: (raise_to(a, max_cyclones=4, max_vikings=10), setattr(a, "prioritize_vikings", True)),
         "Battlecruisers: Vikings first, Cyclones",
+    ),
+    # ---- last: a ceiling, so that nothing above can raise it again ----
+    Reaction(
+        "skytoss", Race.Protoss, lambda s: s.structure(U.STARGATE) > 0 or s.unit(*SKYTOSS_TYPES) > 0,
+        lambda a: lower_to(a, max_tanks=2),
+        "Siege Tanks cannot shoot up: no more than 2 against skytoss (the Factory makes Cyclones instead)",
     ),
 ]
 

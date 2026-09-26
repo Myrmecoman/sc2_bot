@@ -42,8 +42,9 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   Siege Tanks, and **money is held back for the tank** - cheap units bought all the time (Marines, 50 minerals, from several Barracks) never
   let the bank reach 150, so while a Factory stands ready and only the money is missing, production spends only what is left over
   (`priority_reserve` in `production.py`; nothing is held back when the gas or the supply is missing, or enough tanks are out). More rules
-  for Lurkers, mines, Banshees, Mutalisks, Brood Lords, Colossi, Banelings, Ultralisks, Hydralisks, Battlecruisers - add one by adding a
-  `Reaction(...)` to the table; `tests/offline/test_reactions.py` shows how a rule is tested.
+  for Lurkers, mines, Banshees, Mutalisks, Brood Lords, Colossi, Banelings, Ultralisks, Hydralisks, Battlecruisers - and against skytoss (a
+  Stargate or an air unit seen) no more than 2 Siege Tanks, since they cannot shoot up (the Factory makes Cyclones instead). Add a rule by
+  adding a `Reaction(...)` to the table; `tests/offline/test_reactions.py` shows how a rule is tested.
 * **Production buildings**: what the number of bases calls for, never more than 6 Barracks, 2 Factories and 2 Starports, and while the bank
   keeps piling up late in the game (1000+ minerals, 100+ supply used; the gas buildings also need 350+ gas) one more at a time up to
   those limits (`production_targets` in `macro.py`).
@@ -89,6 +90,10 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   to centre and still be in range). Liberators are ordered into Defender Mode without waiting for the game to list the morph as usable (an
   order that never takes effect is given up on after a few tries), hold it for a shooting window after it first shows up, and come down as
   soon as nothing is inside the zone they were ordered to cover - whatever stands next to them.
+* **Cyclones** kite while a Lock On runs: it keeps firing at the unit up to 15 range for as long as the unit stays in view, so the Cyclone
+  steps out of enemy fire - never so far that the target leaves that range - and follows a target that is walking away; it does not spend
+  a second lock while one is running. A lock that ended (the target died or left view, got out of range, the cast never took) hands the
+  Cyclone back to the normal logic.
 * **Banshees** skip targets they cannot shoot without flying into anti-air (unless they can cloak) and write off a target they have not
   managed to fire at for a few seconds. They never just wait: over a base with nothing to shoot they move on to the next one, and with no
   base worth a visit they rejoin the army for a while; a hurt one waits over a townhall (where the SCVs repair, only near a base) and goes
