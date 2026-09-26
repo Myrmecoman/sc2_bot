@@ -38,6 +38,11 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   SCVs that are mining or idle are sent, never the scout or the scripted build order's builder. A flying unit is only repaired where an
   SCV can stand under it: over the middle of a townhall (a 5x5 block, checked on Ares' clean ground grid) the SCV stops at the edge, out
   of repair range.
+* **The worker-rush defense** (`worker_rush_defense.py`) pulls workers (the rushers' number + 1) only against enemy workers within 10 of
+  a structure of ours that stands at home - within 30 of one of our townhalls - and sends them to the closest of those. A structure of
+  ours anywhere else (a Raven's Auto-Turret next to the enemy's mineral line) does not count: it used to, and 14 enemy drones around one
+  pulled 15 SCVs across the map to attack the enemy's base. As a safety net, a worker that is attacking more than 45 from every townhall
+  is sent back to mining. The army's base defense (`army/defense.py`) does not take an Auto-Turret for a base either.
 * **Workers dodge Oracles** (`worker_micro.py`): a worker within 7.5 of an Oracle moves straight away from it (from all of them, the nearer
   counting for more) - to walkable ground within 22 of a townhall, 6 at a time, so it is never inside the Pulsar Beam's range (5 is what
   they keep out of) - instead of running to the townhall like from any other threat, which is where the Oracle follows them to. A worker

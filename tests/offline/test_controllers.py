@@ -1396,6 +1396,19 @@ def test_reaper_still_goes_for_units_first():
           not _shoots_at_ground(c), str(c))
 
 
+def test_base_defense_ignores_a_forward_auto_turret():
+    sc = mk()
+    sc.own(U.AUTOTURRET, (170, 170))                                      # a Raven's, dropped next to the enemy's army at THEIR base
+    sc.enemy_many(U.ROACH, 8, (176, 176))
+    threats = sc.manager.defense.find_threats(begin(sc))
+    check("defense: enemies around an Auto-Turret at the enemy's base are not a threat to our bases", threats == [], str([(len(t.units), t.center) for t in threats]))
+    sc = mk()
+    sc.own(U.BARRACKS, (28, 24))
+    sc.enemy_many(U.ROACH, 8, (34, 26))
+    threats = sc.manager.defense.find_threats(begin(sc))
+    check("defense: (control) the same units around a building at home are", len(threats) == 1 and len(threats[0].units) == 8, str(len(threats)))
+
+
 def main():
     tests = [v for k, v in globals().items() if k.startswith("test_")]
     only = sys.argv[1:]
