@@ -134,7 +134,13 @@ tests/offline/               checks that need no StarCraft II, see the end of th
 * **Cyclones** kite while a Lock On runs: it keeps firing at the unit up to 15 range for as long as the unit stays in view, so the Cyclone
   steps out of enemy fire - never so far that the target leaves that range - and follows a target that is walking away; it does not spend
   a second lock while one is running. A lock that ended (the target died or left view, got out of range, the cast never took) hands the
-  Cyclone back to the normal logic.
+  Cyclone back to the normal logic. **It keeps the target in view while it backs out**: the lock ends when the target is out of view, so
+  a way out that leads down a ramp or behind a cliff (from a lower level the high ground cannot be seen: `terrain_view` in
+  `pathing/order_utils.py`, heights from `game_info.terrain_height`, tolerance 8; a flying target is never hidden) or beyond the Cyclone's
+  own sight (11, while the lock goes on to 15) is only taken when another unit of ours watches the target (inside its own sight range, and
+  not behind a cliff unless it flies). Otherwise the Cyclone takes the nearest other safe spot 3 / 5 / 7 away (12 directions) that is inside
+  its sight, sees the target and is no nearer to it than it is now. With no such spot (and for a retreating army, which goes home) the
+  plain way out stays: the Cyclone comes first, the lock is given up.
 * **Cyclones raid Protoss** (`units/cyclone_raid.py`): against Protoss a Cyclone does not wait for the army - as long as the army is not
   pushing and nothing threatens home (the manager gives them the `HARASSING` role, and back to `ATTACKING` when a push starts or the base
   defense may need them) it goes out to hurt the enemy: lock on, step back out of reach (the lock keeps working up to 15), again. It

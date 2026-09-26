@@ -92,6 +92,29 @@ def open_ground_near(grid: np.ndarray, point: Point2, max_distance: float, limit
     return [Point2((float(cx[i]), float(cy[i]))) for i in near]
 
 
+def terrain_view(heights: np.ndarray, a, b, tolerance: float = 8.0, step: float = 1.0) -> bool:
+    """Can a unit at `a` see a GROUND unit at `b` past the terrain between them? Not from a lower level to a higher one (a cliff or a ramp is in
+    the way: the Cyclone that backs down a ramp loses the target on the high ground), and not past a rise that is higher than both of them.
+    `heights` is game_info.terrain_height.data_numpy ([y, x]); `tolerance` is how much higher than the viewer a cell may be and still count as
+    its level (a level is about 16 apart). Says nothing of the sight RANGE: that is the caller's."""
+    ax, ay, bx, by = float(a[0]), float(a[1]), float(b[0]), float(b[1])
+    rows, cols = heights.shape
+
+    def height(x: float, y: float) -> float:
+        return float(heights[min(max(int(y), 0), rows - 1), min(max(int(x), 0), cols - 1)])
+
+    from_height, to_height = height(ax, ay), height(bx, by)
+    if from_height + tolerance < to_height:
+        return False
+    ceiling = max(from_height, to_height) + tolerance
+    length = math.hypot(bx - ax, by - ay)
+    for i in range(1, int(length // step)):
+        t = i * step / length
+        if height(ax + (bx - ax) * t, ay + (by - ay) * t) > ceiling:
+            return False
+    return True
+
+
 class Crowd:
     """The positions of a group of units as one array, to ask "who stands close to me" of every unit at once. Searching the whole
     group unit by unit (`Units.closer_than`) reads every unit's position for every unit - for a 80-strong bio army a few

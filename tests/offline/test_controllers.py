@@ -1675,6 +1675,99 @@ def test_hurt_cyclone_waits_for_the_repair_and_gives_up_when_nobody_comes():
     check("cyclone: while the repair goes on it keeps waiting", cy.tag in sc.manager.cyclones.repair.retreating and cy.tag not in sc.manager.cyclones.repair.no_retreat_until, str(sc.manager.cyclones.repair.no_retreat_until))
 
 
+# ------------------------------------------------------------------------------------------------------------------------------
+# a locked-on cyclone backs out of fire where it keeps the target in view (the lock ends when the target is out of view): not down a ramp
+# ------------------------------------------------------------------------------------------------------------------------------
+def _plateau_lock(fire_y_to=65, target_type=U.MARINE, plateau=True):
+    """a Cyclone on a plateau (everything from x = 58 is a level higher than the low ground to the west) that has locked on to a target 5 east of
+    it, standing in fire: the nearest safe ground is DOWN the plateau's edge to the west (5 away, 10 from the target - inside the Cyclone's
+    sight, but from the low ground the target on the plateau cannot be seen); the other safe ground is to the north (5.5 away, 7 from the target)"""
+    sc, cy, marine = _locked_cyclone()
+    if plateau:
+        sc.ai.game_info.terrain_height.data_numpy[:, 58:] = 48
+    sc.ai._enemies.remove(marine)
+    target = sc.enemy(target_type, (65.0, 60), tag=marine.tag, buffs=[BuffId.LOCKON])
+    sc.ai.mediator.ground[56:66, 50:fire_y_to] = 60.0
+    return sc, cy, target
+
+
+def _way_out(sc, cy, **order_kw):
+    c = _next_step(sc, cy, **order_kw)
+    return [t for a, t, q in c if a == A.MOVE_MOVE], c
+
+
+def test_locked_cyclone_backs_out_where_it_keeps_the_target_in_view():
+    sc, cy, target = _plateau_lock()
+    moves, c = _way_out(sc, cy)
+    check("cyclone: in fire with a lock on, it does not back down off the plateau (from below the target cannot be seen): it goes along the top, to the safe ground in the north",
+          len(moves) == 1 and abs(moves[0][0] - 60) < 0.6 and abs(moves[0][1] - 65) < 0.6, str(c))
+    sc, cy, target = _plateau_lock(target_type=U.VOIDRAY)
+    moves, c = _way_out(sc, cy)
+    check("cyclone: (a flying target is seen over any cliff) it backs out the plain way, to the nearest safe ground", len(moves) == 1 and 54.5 < moves[0][0] < 55.6, str(c))
+    sc, cy, target = _plateau_lock(plateau=False)
+    moves, c = _way_out(sc, cy)
+    check("cyclone: (control) on flat ground the way out is the plain one", len(moves) == 1 and 54.5 < moves[0][0] < 55.6, str(c))
+    sc, cy, target = _plateau_lock(fire_y_to=80)                             # no safe ground up there within reach
+    moves, c = _way_out(sc, cy)
+    check("cyclone: with no way out that keeps the target in view it still backs out (the Cyclone comes first)", len(moves) == 1 and 54.5 < moves[0][0] < 55.6, str(c))
+    sc, cy, target = _plateau_lock()
+    moves, c = _way_out(sc, cy, mode=Mode.HOLD, retreating=True)
+    check("cyclone: a retreating group's Cyclone goes home (it stands on the hold point here), not to a spot that keeps the view",
+          len(moves) == 1 and abs(moves[0][0] - 60) < 1 and abs(moves[0][1] - 60) < 1, str(c))
+
+
+def test_locked_cyclone_out_of_its_own_sight_is_fine_when_something_else_sees_the_target():
+    # the lock ends when the target is out of view - whoever sees it: a marine on the plateau sees it, so the plain way out (down the ramp) keeps the lock
+    sc, cy, target = _plateau_lock()
+    sc.own(U.MARINE, (62.0, 62.0))
+    moves, c = _way_out(sc, cy)
+    check("cyclone: a unit of ours on the plateau watches the target: the Cyclone backs out the plain way", len(moves) == 1 and 54.5 < moves[0][0] < 55.6, str(c))
+    sc, cy, target = _plateau_lock()
+    sc.own(U.MARINE, (57.0, 62.0))                                            # ...one on the low ground, within its sight range of the target, does not: the cliff is in the way
+    moves, c = _way_out(sc, cy)
+    check("cyclone: a unit of ours below the plateau does not: it keeps its own view", len(moves) == 1 and abs(moves[0][0] - 60) < 0.6 and abs(moves[0][1] - 65) < 0.6, str(c))
+    sc, cy, target = _plateau_lock()
+    sc.own(U.VIKINGFIGHTER, (57.0, 62.0))                                     # a flyer sees over the cliff
+    moves, c = _way_out(sc, cy)
+    check("cyclone: a flyer of ours below the plateau does watch it", len(moves) == 1 and 54.5 < moves[0][0] < 55.6, str(c))
+    sc, cy, target = _plateau_lock()
+    sc.own(U.MARINE, (75.0, 60.0))                                            # on the plateau, but 10 from the target: beyond a Marine's sight (9)
+    moves, c = _way_out(sc, cy)
+    check("cyclone: a unit of ours too far from the target to see it does not count", len(moves) == 1 and abs(moves[0][0] - 60) < 0.6 and abs(moves[0][1] - 65) < 0.6, str(c))
+
+
+def test_locked_cyclone_prefers_spots_within_its_own_sight():
+    sc, cy, marine = _locked_cyclone()
+    marine = _move(sc, marine, 68.0, buffs=[BuffId.LOCKON])                  # 8 away
+    grid = sc.ai.mediator.ground
+    grid[40:80, 40:80] = 60.0
+    grid[57, 60] = 1.0                                                        # safe: 3 to the west, 11 from the target - past the Cyclone's sight (11)
+    grid[60, 65] = 1.0                                                        # safe: 5 to the north, 9.4 from the target - inside it
+    grid[63, 60] = 1.0                                                        # safe: 3 to the east, 5 from the target - the way out would be a step towards it (and it is looked at first)
+    ctx = begin(sc)
+    spot = sc.manager.cyclones._spot_with_view(sc.world.units([cy])[0], marine, ctx, ctx.ground_grid)
+    check("cyclone: of the spots that keep the view it takes one within its own sight, however far it is (the nearer one would be out of it) - and never one nearer the target",
+          spot is not None and abs(spot.x - 60.0) < 0.2 and abs(spot.y - 65.0) < 0.2, str(spot))
+
+
+def test_terrain_view():
+    from bot.pathing.order_utils import terrain_view
+    p = Point2
+    flat = np.zeros((100, 100), dtype=np.uint8)
+    check("view: flat ground: seen", terrain_view(flat, p((10, 10)), p((20, 10))))
+    high = flat.copy()
+    high[:, 50:] = 48
+    check("view: from the low ground up onto the high ground: not seen", not terrain_view(high, p((40, 10)), p((60, 10))))
+    check("view: from the high ground down onto the low ground: seen", terrain_view(high, p((60, 10)), p((40, 10))))
+    ramp = flat.copy()
+    ramp[:, 50:] = 6
+    check("view: a small rise (the same level, a ramp's foot): seen", terrain_view(ramp, p((40, 10)), p((60, 10))))
+    hill = flat.copy()
+    hill[:, 45:47] = 40
+    check("view: behind a rise higher than both: not seen", not terrain_view(hill, p((40, 10)), p((60, 10))))
+    check("view: (a point off the map is clamped, nothing raises)", terrain_view(flat, p((-5, -5)), p((150, 150))))
+
+
 def test_raid_geometry():
     from bot.army.units.cyclone_raid import clip_before, segment_hits_circle
     p = Point2

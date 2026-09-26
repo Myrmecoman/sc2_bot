@@ -5,7 +5,7 @@ in front of it. So while a lock runs it KITES: it steps out of whatever enemy fi
 leaves the lock's range (that would end it), and it follows a target that is walking away for the same reason. A lock that ended (the
 target died, left view, got out of range, or the cast never took) hands the Cyclone back to the normal logic below."""
 import math
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from cython_extensions import cy_attack_ready, cy_closest_to, cy_in_attack_range
 
@@ -31,7 +31,7 @@ from bot.army.units.common import (
     stutter_forward,
 )
 from bot.army.units.repair_retreat import RepairRetreat
-from bot.pathing.order_utils import plain_point
+from bot.pathing.order_utils import plain_point, segment_walkable, terrain_view
 
 LOCK_ON_TIMEOUT = 15.0   # forget a lock-on after this long - the target is presumably dead or gone
 LOCK_ON_ABILITIES = {AbilityId.LOCKON_LOCKON, AbilityId.LOCKONAIR_LOCKONAIR}
@@ -41,6 +41,15 @@ LOCK_ON_STEP = 4.0            # the longest step it takes to follow a target tha
 LOCK_ON_MIN_STEP = 1.0        # a retreat that only gains less than this is not one that keeps the lock
 LOCK_ON_CAST_SECONDS = 0.3    # nothing is ordered this soon after the cast: a move order could cancel it before it is through
 LOCK_ON_CONFIRM_SECONDS = 1.5 # a cast has to show by then (the order, the buff on the target, or the ability on cooldown) or it never took
+# The lock ends when the target is out of view - whoever sees it. A Cyclone that backs out of fire keeps it in view when it can, unless something
+# else of ours watches it anyway: the way out must not lead down a ramp or behind a cliff (from a lower level the target cannot be seen), and it
+# must stay inside the Cyclone's own sight (11 - the lock goes on to 15).
+VIEW_RINGS = (3.0, 5.0, 7.0)    # how far from where it stands the other ways out are looked for...
+VIEW_DIRECTIONS = 12            # ...in this many directions
+CYCLONE_SIGHT = 11.0            # (when the game data does not say)
+OTHER_SIGHT = 9.0               # ...nor for the other units of ours
+SIGHT_MARGIN = 0.5
+CLOSER_TOLERANCE = 0.5          # a way out is never a step towards the target (through the fire) - not by more than this
 
 
 class CycloneController:
@@ -49,6 +58,7 @@ class CycloneController:
         self.lock_ons: Dict[int, float] = {}   # enemy tag -> time we locked on, so one target is not re-locked every frame
         self.locks: Dict[int, Tuple[int, float]] = {}   # cyclone tag -> (enemy tag, time) of the lock it has running
         self.lockon_range: float = ai.game_data.abilities[AbilityId.LOCKON_LOCKON.value]._proto.cast_range
+        self._watchers: Dict[int, Set[int]] = {}      # enemy tag -> the units of ours that can see it (this step)
         # a hurt Cyclone goes home to be repaired, like a Banshee (units/repair_retreat.py): to the army's hold point, where the SCVs come
         self.repair = RepairRetreat(ai, lambda unit, orders, ctx: orders.hold_point)
 
@@ -61,6 +71,7 @@ class CycloneController:
         for tag in [t for t in self.locks if t not in alive]:
             del self.locks[tag]
         self.repair.forget(alive)
+        self._watchers = {}
         ctx.prefetch_near(units)
 
     def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext) -> None:
@@ -218,12 +229,57 @@ class CycloneController:
         else:
             want = plain_point(ctx.mediator.find_closest_safe_spot(from_pos=unit.position, grid=grid, radius=11))
         step = farthest_within(unit.position, want, target.position, hold + unit.radius + target.radius)
+        if step is not None and not orders.retreating and not self._keeps_view(unit, step, target):
+            # the plain way out loses the target (down a ramp, behind a cliff, out of sight): another that is safe and keeps it in view, if any
+            step = self._spot_with_view(unit, target, ctx, grid) or step
         if step is not None:
             move_to(unit, step)
         elif orders.retreating:
             path_move(self.ai, ctx, unit, orders.hold_point)
         else:
             kite_away(self.ai, ctx, unit)                       # no way out that keeps the lock: the Cyclone comes first
+
+    def _sees(self, spot: Point2, target: Unit) -> bool:
+        """Would a unit at `spot` see the target past the terrain? (Flying units are seen over every cliff.)"""
+        return target.is_flying or terrain_view(self.ai.game_info.terrain_height.data_numpy, spot, target.position)
+
+    @staticmethod
+    def _sight(unit: Unit) -> float:
+        return (unit.sight_range or CYCLONE_SIGHT) - SIGHT_MARGIN
+
+    def _keeps_view(self, unit: Unit, spot: Point2, target: Unit) -> bool:
+        """Will the target still be in view when the Cyclone stands at `spot`? Yes when it is inside its own sight and not hidden by the terrain,
+        or when something else of ours can see it (a lock ends when the target is out of view, whoever sees it)."""
+        if spot.distance_to(target.position) <= self._sight(unit) and self._sees(spot, target):
+            return True
+        watchers = self._watchers.get(target.tag)
+        if watchers is None:
+            watchers = self._watchers[target.tag] = {
+                other.tag for other in self.ai.all_own_units
+                if other.distance_to(target) <= (other.sight_range or OTHER_SIGHT) and (other.is_flying or self._sees(other.position, target))
+            }
+        return bool(watchers - {unit.tag})
+
+    def _spot_with_view(self, unit: Unit, target: Unit, ctx: ArmyContext, grid) -> Optional[Point2]:
+        """The nearest spot a Cyclone in fire can back out to - safe, inside the lock's range, on the ground it can walk, and not nearer to the
+        target than it is - from which it sees the target itself: inside its sight (11, the lock goes on to 15) and not hidden by the terrain.
+        None when there is no such spot (then it backs out the plain way and gives the lock up)."""
+        ai = self.ai
+        limit = LOCK_ON_HOLD_RANGE - LOCK_ON_MARGIN + unit.radius + target.radius
+        here = unit.position.distance_to(target.position)
+        for reach in VIEW_RINGS:
+            for k in range(VIEW_DIRECTIONS):
+                angle = 2.0 * math.pi * k / VIEW_DIRECTIONS
+                spot = Point2((unit.position.x + reach * math.cos(angle), unit.position.y + reach * math.sin(angle)))
+                gap = spot.distance_to(target.position)
+                if gap > min(limit, self._sight(unit)) or gap < here - CLOSER_TOLERANCE or not (ai.in_map_bounds(spot) and ai.in_pathing_grid(spot)):
+                    continue
+                if not ctx.mediator.is_position_safe(grid=grid, position=spot) or not self._sees(spot, target):
+                    continue
+                if not segment_walkable(unit.position, spot, ai.in_pathing_grid):
+                    continue
+                return spot                                            # (the rings come nearest first)
+        return None
 
     def _no_fight(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext) -> None:
         point = follow_point(orders, walkable=self.ai.in_pathing_grid)

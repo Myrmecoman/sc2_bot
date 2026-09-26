@@ -311,7 +311,8 @@ class Scene:
         self.ai = FakeAI(self.world)
         ai = self.ai
         ai.setup(self.world, [], [], time=time)
-        ai.game_info = SimpleNamespace(map_center=Point2((100.0, 100.0)))
+        # (flat terrain: a test raises a plateau with `sc.ai.game_info.terrain_height.data_numpy[y0:y1, x0:x1] = 32`; heights are [y, x])
+        ai.game_info = SimpleNamespace(map_center=Point2((100.0, 100.0)), terrain_height=SimpleNamespace(data_numpy=np.zeros((200, 200), dtype=np.uint8)))
         ai.map_corners = [Point2((190, 190)), Point2((190, 10)), Point2((10, 10)), Point2((10, 190))]
         ai.expansion_locations_list = [Point2((20, 20)), Point2((50, 50)), Point2((80, 60)), Point2((120, 140)),
                                        Point2((150, 150)), Point2((180, 180))]
