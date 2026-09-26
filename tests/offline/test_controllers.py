@@ -1,6 +1,7 @@
 """Per-controller behavior tests: each builds a small scene and drives ONE controller directly."""
 import _bootstrap  # noqa: F401  (repo root on sys.path - keep this first)
 import os, sys, traceback, asyncio
+import numpy as np
 REAL = os.environ.get("REAL") == "1"
 from ares.consts import UnitRole, EngagementResult as ER
 from sc2.ids.ability_id import AbilityId as A
@@ -1204,6 +1205,195 @@ def test_bio_melee_kiting_leaves_out_what_it_cannot_help():
     check("bio: nor a building", not any(a == A.MOVE_MOVE and t[0] < 60 for a, t, q in c), str(c))
     c, _ = _vs_melee([(U.ZEALOT, 80.5)], at=(75, 60), mode=Mode.HOLD, retreating=True)
     check("bio: a retreating group's marine goes home (the hold point at x = 60) instead of picking its own way", any(a == A.MOVE_MOVE and abs(t[0] - 60) < 1 for a, t, q in c), str(c))
+
+
+# ------------------------------------------------------------------------------------------------------------------------------
+# banshees wait for their repair on open ground (the SCVs cannot walk through a townhall)
+# ------------------------------------------------------------------------------------------------------------------------------
+def _footprint(sc, centre=(20, 20), size=5):
+    """a building's footprint on the clean ground grid, as Ares' grid has it: np.inf, nobody can stand there"""
+    x, y = int(centre[0] - size / 2), int(centre[1] - size / 2)
+    sc.ai.mediator.ground[x:x + size, y:y + size] = np.inf
+
+
+def _first_move(c):
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    return Point2((float(moves[0][0]), float(moves[0][1]))) if moves else None
+
+
+def _hurt_banshee_spot(sc, hp=40):
+    b = sc.own(U.BANSHEE, (150, 160), hp=hp)
+    ctx = begin(sc)
+    sc.manager.banshees.control(sc.world.units([b]), orders(sc), ctx)
+    return b, _first_move(cmds(sc, b))
+
+
+def test_banshee_repair_spot_is_open_ground_not_the_townhall():
+    from bot.pathing.order_utils import reachable_from_ground
+    sc = mk()
+    _footprint(sc)
+    b, spot = _hurt_banshee_spot(sc)
+    check("banshee: a hurt one flies to open ground close to the townhall, room for an SCV to stand under it",
+          spot is not None and reachable_from_ground(sc.ai.mediator.ground, spot) and 3 <= spot.distance_to(Point2((20, 20))) <= 9, str(spot))
+    check("banshee: ...not over the townhall's footprint (a 5x5 block the SCVs cannot walk through)",
+          spot is not None and not (17 <= spot.x < 22 and 17 <= spot.y < 22), str(spot))
+
+
+def test_banshee_repair_spot_is_in_the_mineral_lane():
+    sc = mk()
+    _footprint(sc)
+    for y in (16.0, 18.5, 21.5, 24.0):                       # a mineral line on the east side, 7 from the townhall (fields are 2x1 and not walkable)
+        sc.mineral((27.0, y))
+        sc.ai.mediator.ground[26:28, int(y)] = np.inf
+    b, spot = _hurt_banshee_spot(sc)
+    check("banshee: with a mineral line it waits in the lane between it and the townhall, where the SCVs are",
+          spot is not None and 22.5 < spot.x < 25.5 and abs(spot.y - 20) < 2.5, str(spot))
+
+
+def test_banshee_repair_spot_skips_what_the_scvs_cannot_walk_to():
+    sc = mk()
+    _footprint(sc)
+    _, plain = _hurt_banshee_spot(sc)
+    sc = mk()
+    _footprint(sc)
+    real = sc.ai.mediator.find_raw_path
+    # the nearest spots: no way there at all (north), a way round of 60 (east) - the SCVs cannot use either
+    sc.ai.mediator.find_raw_path = lambda start, target, grid, sensitivity=5: (
+        [] if target[1] > 22 else [Point2((60, 20)), Point2(target)] if target[0] > 22 else real(start, target, grid, sensitivity))
+    _, spot = _hurt_banshee_spot(sc)
+    check("banshee: (control) the same base with a free way to every spot: the nearest spot is north or east, on the townhall's edge",
+          plain is not None and (plain.y > 22 or plain.x > 22), str(plain))
+    check("banshee: a spot the SCVs have no path to, or only a long way round, is skipped: it waits at the next one",
+          spot is not None and (spot.x < 17 or spot.y < 17) and spot.distance_to(Point2((20, 20))) < 6, str(spot))
+
+
+def test_banshee_keeps_waiting_while_it_is_being_repaired():
+    from bot.army.units.banshees import REPAIR_PATIENCE
+    sc = mk()
+    _footprint(sc)
+    b, spot = _hurt_banshee_spot(sc, hp=40)
+    steps = int(REPAIR_PATIENCE / 0.5) + 12                   # longer than the patience: 30 s
+    for i in range(steps):
+        (sc.ai._own).remove(b)
+        b = sc.own(U.BANSHEE, (spot.x, spot.y), tag=b.tag, hp=40 + i)        # an SCV repairs it: 1 hit point per look
+        ctx = begin(sc)
+        sc.manager.banshees.control(sc.world.units([b]), orders(sc), ctx)
+    check("banshee: while the repair goes on it keeps waiting, however long that takes",
+          b.tag in sc.manager.banshees.retreating and b.tag not in sc.manager.banshees._no_retreat_until, str(sc.manager.banshees._no_retreat_until))
+    for _ in range(int(REPAIR_PATIENCE / 0.5) + 4):                            # the repair stops
+        ctx = begin(sc)
+        sc.manager.banshees.control(sc.world.units([b]), orders(sc), ctx)
+    check("banshee: ...and once it stops, it gives up after the patience as before",
+          b.tag not in sc.manager.banshees.retreating and b.tag in sc.manager.banshees._no_retreat_until, str(sc.manager.banshees.retreating))
+
+
+def test_open_ground_helpers():
+    from bot.pathing.order_utils import ground_free, open_ground_near, path_length, reachable_from_ground
+    grid = np.ones((40, 40), dtype=np.float32)
+    grid[10:15, 10:15] = np.inf                                                # a building
+    check("ground: a cell in the footprint is not free, one beside it is", not ground_free(grid, 12.5, 12.5) and ground_free(grid, 15.5, 12.5))
+    check("ground: a flyer over the middle of a building cannot be reached, one over its edge can",
+          not reachable_from_ground(grid, (12.5, 12.5), 0.75) and reachable_from_ground(grid, (14.8, 12.5), 0.75))
+    spots = open_ground_near(grid, Point2((12.5, 12.5)), 6.0)
+    gaps = [p.distance_to(Point2((12.5, 12.5))) for p in spots]
+    check("ground: open cells come nearest first, none inside the footprint, none within a cell of it (room for an SCV beside the flyer)",
+          spots and gaps == sorted(gaps) and abs(gaps[0] - 4.0) < 1e-6 and not any(9 <= p.x < 16 and 9 <= p.y < 16 for p in spots), str(spots[:3]))
+    check("ground: at most `limit` of them", len(open_ground_near(grid, Point2((12.5, 12.5)), 6.0, limit=3)) == 3)
+    check("ground: none where everything is blocked, and no fuss at the edge of the map",
+          open_ground_near(np.full((40, 40), np.inf, dtype=np.float32), Point2((20, 20)), 5.0) == [] and len(open_ground_near(grid, Point2((1, 1)), 5.0)) > 0)
+    check("path: its length from the start, none without a path",
+          abs(path_length((0, 0), [(3, 4), (3, 10)]) - 11.0) < 1e-9 and path_length((0, 0), []) is None and path_length((0, 0), None) is None)
+
+
+# ------------------------------------------------------------------------------------------------------------------------------
+# reapers never shoot buildings: with no unit in sight they tour the enemy's mineral lines instead of standing next to buildings
+# ------------------------------------------------------------------------------------------------------------------------------
+def _shoots_at_ground(c):
+    """an attack order at a spot (attack-move: shoots whatever is in range, buildings included)"""
+    return any(a in (A.ATTACK, A.ATTACK_ATTACK, A.SCAN_MOVE) and not hasattr(t, "tag") for a, t, q in c)
+
+
+def _enemy_base_with_minerals(sc, at=(180, 180)):
+    """a hatchery and, east of it, a mineral line of four fields (the two farthest apart are 12 apart)"""
+    sc.enemy(U.HATCHERY, at)
+    for dy in (-7.0, -2.5, 2.5, 7.0):
+        sc.mineral((at[0] + 6.0, at[1] + dy))
+
+
+def _reaper_step(sc, r):
+    ctx = begin(sc)
+    sc.manager.reapers.control(sc.world.units([r]), orders(sc), ctx)
+    return cmds(sc, r)
+
+
+def test_reaper_is_never_attack_moved_at_buildings():
+    sc = mk()
+    r = sc.own(U.REAPER, (177, 179))                                      # right beside the enemy's main, and nothing but buildings in sight
+    sc.enemy(U.HATCHERY, (180, 180))
+    sc.enemy(U.BARRACKS, (176, 182))                                      # (the building nearest to us: 3 from the reaper - the old code attack-moved onto it)
+    c = _reaper_step(sc, r)
+    check("reaper: with only buildings around it is never attack-moved (that shoots them)", c and not _shoots_at_ground(c), str(c))
+    check("reaper: ...it keeps moving instead", any(a == A.MOVE_MOVE for a, t, q in c), str(c))
+
+
+def test_reaper_tours_the_mineral_lines():
+    sc = mk()
+    _enemy_base_with_minerals(sc)
+    r = sc.own(U.REAPER, (150, 150))
+    first = _first_move(_reaper_step(sc, r))
+    # the two ends of the line are at y 173 and 187, in the lane 2 towards the hatchery: (185.2, ~174.6) and (185.2, ~185.4)
+    check("reaper: it heads for one end of the enemy's mineral line", first is not None and first.x > 183 and (abs(first.y - 174.6) < 2 or abs(first.y - 185.4) < 2), str(first))
+    ends = []
+    for _ in range(3):
+        sc.ai._own.remove(r)
+        r = sc.own(U.REAPER, (first.x, first.y), tag=r.tag)                # it has got there
+        nxt = _first_move(_reaper_step(sc, r))
+        ends.append(nxt)
+        first = nxt
+    check("reaper: getting there it does not stop: it goes to the other end, and back",
+          all(e is not None for e in ends) and abs(ends[0].y - ends[1].y) > 8 and abs(ends[0].y - ends[2].y) < 1.0, str(ends))
+
+
+def test_reaper_tour_leaves_out_a_defended_mineral_line_end():
+    sc = mk()
+    _enemy_base_with_minerals(sc)
+    sc.enemy(U.SPINECRAWLER, (186, 172))                                   # a spine crawler covers the southern end (it reaches 7 + 3)
+    r = sc.own(U.REAPER, (150, 150))
+    first = _first_move(_reaper_step(sc, r))
+    check("reaper: it goes for the end that is not defended", first is not None and first.y > 180, str(first))
+    sc.ai._own.remove(r)
+    r = sc.own(U.REAPER, (first.x, first.y), tag=r.tag)
+    nxt = _first_move(_reaper_step(sc, r))
+    check("reaper: ...and, with one stop left, it does not stand there among the buildings but goes back towards home and returns",
+          nxt is not None and nxt.distance_to(first) > 3, str((first, nxt)))
+
+
+def test_reaper_tour_does_not_take_workers_for_defenders():
+    sc = mk()
+    _enemy_base_with_minerals(sc)
+    for dy in (-6.0, -3.0, 0.0, 3.0, 6.0):                                 # a mineral line full of workers: Ares' grid calls that danger, the tour must not
+        sc.enemy(U.DRONE, (185.0, 180.0 + dy))
+    check("reaper: workers are not defenders of their own mineral line", sc.manager.reapers._defenders() == [], str(sc.manager.reapers._defenders()))
+    sc.enemy(U.MARINE, (186, 172))
+    sc.enemy(U.BUNKER, (170, 190))
+    reach = {(round(p.x), round(p.y)): r for p, r in sc.manager.reapers._defenders()}
+    check("reaper: a marine (5 + 3 + its radius) and a bunker (7 + 3 + its radius) are", set(reach) == {(186, 172), (170, 190)} and 8.3 < reach[(186, 172)] < 8.5 and 10.3 < reach[(170, 190)] < 10.5, str(reach))
+
+
+def test_reaper_still_goes_for_units_first():
+    sc = mk()
+    _enemy_base_with_minerals(sc)
+    r = sc.own(U.REAPER, (176, 176), cooldown=0.0)
+    drone = sc.enemy(U.DRONE, (179, 176))
+    c = _reaper_step(sc, r)
+    check("reaper: a worker in reach is shot, not the hatchery", any(a == A.ATTACK and getattr(t, "tag", None) == drone.tag for a, t, q in c), str(c))
+    sc = mk()
+    _enemy_base_with_minerals(sc)
+    r = sc.own(U.REAPER, (176, 176), cooldown=10.0)
+    drone = sc.enemy(U.DRONE, (179, 176))
+    c = _reaper_step(sc, r)
+    check("reaper: with its weapon on cooldown it does not attack-move onto the spot: it stays on its target",
+          not _shoots_at_ground(c), str(c))
 
 
 def main():

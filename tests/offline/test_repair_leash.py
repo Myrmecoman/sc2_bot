@@ -4,6 +4,7 @@
   * never a walk longer than 70 to get to a repair - the ground path, not the straight line - and an SCV that has walked that far
     on one job goes back to mining
   * only near home: what is repaired stands within 25 of a landed townhall, and SCVs more than 35 from one are called back
+  * a flying unit only where an SCV can stand under it - not over the middle of a townhall
 
 Every layout runs once with the rules and once with the limits switched off (the "control" run must show the old behavior - it proves
 the layout really is one where the bot sends an SCV / leaves one alone, so a quiet run with the rules on is the rules' doing and not an
@@ -14,7 +15,8 @@ unrelated reason).
   trailing   an SCV that is repairing a tank that has since walked far away is sent back to mine
   crew       a badly damaged building gets exactly 4 SCVs, not more - and 6 already on it are cut to 4
   wall       a tank 12 cells from an SCV but on the other side of a wall (a 90-cell walk round it) gets nobody; on this side it does
-  budget     an SCV that has walked 70 on one repair job is sent back to mine"""
+  budget     an SCV that has walked 70 on one repair job is sent back to mine
+  flyer      a hurt banshee hovering over the middle of the townhall gets nobody; one over open ground beside the base does"""
 import _bootstrap  # noqa: F401  (repo root on sys.path - keep this first)
 import asyncio, math
 from loguru import logger
@@ -29,6 +31,7 @@ from bot.bot import SmoothBrainBot
 
 RESULTS = []
 DAMAGED = 70            # of a siege tank's 175 hit points: 40%, under the 70% repair threshold
+DAMAGED_BANSHEE = 50    # of a banshee's 140: 36%
 
 
 def check(name, cond, detail=""):
@@ -44,10 +47,11 @@ def repair_order(worker_proto, target_tag):
 
 def run(layout, rules=True, frames=8):
     """returns (SCVs sent to repair the target, SCVs sent to mine that were on a job, the target's tag, the job's SCVs)"""
-    saved = repair.HOME_RADIUS, repair.LEASH, repair.MAX_TRAVEL, repair.MAX_REPAIRERS
+    saved = repair.HOME_RADIUS, repair.LEASH, repair.MAX_TRAVEL, repair.MAX_REPAIRERS, repair.reachable_from_ground
     if not rules:
         repair.HOME_RADIUS = repair.LEASH = repair.MAX_TRAVEL = math.inf          # = the bot as it was
         repair.MAX_REPAIRERS = 999
+        repair.reachable_from_ground = lambda *args, **kwargs: True
     try:
         errors = []
         logger.remove()
@@ -79,6 +83,8 @@ def run(layout, rules=True, frames=8):
                     worker = game.add(U.SCV, (cx + 9 + k * 0.5, cy - 4), 1)
                     repair_order(worker, tank.tag)
                     job_workers.append(worker)
+        elif layout in ("flyer_over_base", "flyer_beside_base"):
+            tank = game.add(U.BANSHEE, (cx, cy) if layout == "flyer_over_base" else (cx + 5.5, cy), 1, hp=DAMAGED_BANSHEE)   # over the townhall / beside it
         elif layout in ("wall", "wall_same_side"):
             game.add(U.COMMANDCENTER, (54.5, 12.5), 1)                               # a base right by the wall (x 62-65), ...
             tank = game.add(U.SIEGETANK, (70 if layout == "wall" else 50, 12), 1, hp=DAMAGED)   # ...the tank over it (or on this side)
@@ -103,7 +109,7 @@ def run(layout, rules=True, frames=8):
         assert not errors, errors[:1]
         return repairs, called_off, tank.tag, job_tags
     finally:
-        repair.HOME_RADIUS, repair.LEASH, repair.MAX_TRAVEL, repair.MAX_REPAIRERS = saved
+        repair.HOME_RADIUS, repair.LEASH, repair.MAX_TRAVEL, repair.MAX_REPAIRERS, repair.reachable_from_ground = saved
 
 
 def main():
@@ -135,6 +141,13 @@ def main():
     check("wall: a tank behind a wall is 90 cells away on foot: nobody is sent", not repairs, str(repairs))
     repairs, _, _, _ = run("wall_same_side")
     check("wall: a tank on this side of it, a short walk away, gets an SCV", len(repairs) == 1, str(repairs))
+
+    repairs, _, _, _ = run("flyer_over_base", rules=False)
+    check("flyer (control, guard off): the old code sends an SCV to a banshee over the middle of the townhall", len(repairs) == 1, str(repairs))
+    repairs, _, _, _ = run("flyer_over_base")
+    check("flyer: nobody is sent to a banshee hovering over the middle of the townhall (the SCV would stop at its edge, out of repair range)", not repairs, str(repairs))
+    repairs, _, _, _ = run("flyer_beside_base")
+    check("flyer: a banshee over open ground beside the base gets an SCV", len(repairs) == 1, str(repairs))
 
     _, called_off, _, jobs = run("budget")
     check("budget: an SCV that has walked more than 70 on one repair job is sent back to mine", called_off == jobs, str(called_off))

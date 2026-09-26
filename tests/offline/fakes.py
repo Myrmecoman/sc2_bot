@@ -229,6 +229,7 @@ class FakeAI(BotAI):
         self._fake_time = time
         self._own = list(own)
         self._enemies = list(enemies)
+        self._minerals = []
         self.units_list = self._own
         self.start = Point2(start)
         self.enemy_start = Point2(enemy_start)
@@ -269,6 +270,10 @@ class FakeAI(BotAI):
     @property
     def all_own_units(self):
         return Units(list(self._own), self)
+
+    @property
+    def mineral_field(self):
+        return Units(list(self._minerals), self)
 
     @property
     def enemy_units(self):
@@ -342,6 +347,11 @@ class Scene:
     def enemy(self, type_id, pos, **kw):
         u = self.world.unit(type_id, pos, alliance=4, **kw)
         self.ai._enemies.append(u)
+        return u
+
+    def mineral(self, pos):
+        u = self.world.unit(_U.MINERALFIELD, pos, alliance=3)
+        self.ai._minerals.append(u)
         return u
 
     def own_many(self, type_id, n, origin, spacing=0.6, **kw):

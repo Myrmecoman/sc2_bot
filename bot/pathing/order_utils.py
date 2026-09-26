@@ -1,5 +1,5 @@
 import math
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 import numpy as np
 
@@ -47,6 +47,49 @@ def segment_walkable(start: Point2, end: Point2, walkable: Callable[[Point2], bo
         if not walkable(Point2((start.x + (end.x - start.x) * t, start.y + (end.y - start.y) * t))):
             return False
     return True
+
+
+def path_length(start, path) -> Optional[float]:
+    """How long the walk from `start` along `path` (the points Ares' `find_raw_path` returns) is; None when there is no path."""
+    if path is None or len(path) == 0:
+        return None
+    length, x, y = 0.0, float(start[0]), float(start[1])
+    for point in path:
+        px, py = float(point[0]), float(point[1])
+        length += math.hypot(px - x, py - y)
+        x, y = px, py
+    return length
+
+
+def ground_free(grid: np.ndarray, x: float, y: float) -> bool:
+    """Can a ground unit stand on the cell of (x, y)? `grid` is Ares' clean ground grid (`get_cached_ground_grid`, [x, y]): np.inf where
+    the terrain is not walkable and under rocks, minerals and the footprint of a building - a townhall's 5x5 included."""
+    i, j = int(x), int(y)
+    return 0 <= i < grid.shape[0] and 0 <= j < grid.shape[1] and grid[i, j] != np.inf
+
+
+def reachable_from_ground(grid: np.ndarray, position, reach: float = 0.75) -> bool:
+    """Can an SCV get to a flying unit hovering over `position`? Not when it hovers over the middle of a building, over minerals or over a
+    cliff: there is nothing within `reach` (the flyer's radius) for the SCV to stand on, it stops at the edge, out of repair range."""
+    x, y = float(position[0]), float(position[1])
+    return any(ground_free(grid, x + dx, y + dy) for dx, dy in ((0.0, 0.0), (reach, 0.0), (-reach, 0.0), (0.0, reach), (0.0, -reach)))
+
+
+def open_ground_near(grid: np.ndarray, point: Point2, max_distance: float, limit: int = 12) -> List[Point2]:
+    """The nearest `limit` cells (centres) within `max_distance` of `point` with room around them on the clean ground grid: the cell and its
+    four neighbours are walkable, so a flyer can hover over it with an SCV standing under it. Nearest first."""
+    x0, x1 = max(1, int(point.x - max_distance)), min(grid.shape[0] - 1, int(point.x + max_distance) + 1)
+    y0, y1 = max(1, int(point.y - max_distance)), min(grid.shape[1] - 1, int(point.y + max_distance) + 1)
+    if x1 <= x0 or y1 <= y0:
+        return []
+    free = grid[x0 - 1: x1 + 1, y0 - 1: y1 + 1] != np.inf
+    room = free[1:-1, 1:-1] & free[:-2, 1:-1] & free[2:, 1:-1] & free[1:-1, :-2] & free[1:-1, 2:]
+    xs, ys = np.nonzero(room)
+    cx, cy = xs + x0 + 0.5, ys + y0 + 0.5
+    gap = np.hypot(cx - point.x, cy - point.y)
+    near = np.nonzero(gap <= max_distance)[0]
+    near = near[np.argsort(gap[near], kind="stable")][:limit]
+    return [Point2((float(cx[i]), float(cy[i]))) for i in near]
 
 
 class Crowd:

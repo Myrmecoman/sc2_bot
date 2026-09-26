@@ -48,6 +48,9 @@ gamefix.STATS.update({
 gamefix.FLYING_TYPES.update({U.PHOENIX, U.CARRIER, U.TEMPEST, U.ORACLE, U.MOTHERSHIP, U.OBSERVER, U.WARPPRISM, U.VOIDRAY,
                              U.MUTALISK, U.CORRUPTOR, U.BROODLORD, U.VIPER, U.OVERSEER, U.INTERCEPTOR})
 
+# a mineral field (neutral): the reapers' tour of the enemy's mineral lines and the banshees' repair spot look at where they are
+gamefix.STATS[U.MINERALFIELD] = (100, 0, 0, 0.0, [], [], 0, 0, 0)
+
 # tech structures the enemy shows us (what the scouting reactions look for, bot/reactions.py); approximate LotV stats
 _TECH = lambda hp, mins, gas: (hp, 0, 1, 0.0, [], [ARMORED, STRUCT], mins, gas, 0)
 gamefix.STATS.update({

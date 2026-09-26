@@ -6,8 +6,9 @@ without this a banshee flies in, is driven out by the danger, flies back in, ...
 one, or goes on to another base.
 
 A banshee never just waits. Over its base with nothing to shoot (only buildings, the workers dead, nobody there at all) it moves on
-to the next base after IDLE_PATIENCE, and when no base has anything for it, it rejoins the army for a while. A hurt one waits at a
-townhall - where the SCVs are - for its repair, and goes back to work if nobody comes (no SCVs, no gas for the repair)."""
+to the next base after IDLE_PATIENCE, and when no base has anything for it, it rejoins the army for a while. A hurt one waits for its
+repair beside a townhall - where the SCVs are, on open ground they can stand on, never over the townhall itself, which they cannot
+walk through - and goes back to work if nobody comes (no SCVs, no gas for the repair)."""
 from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
@@ -24,6 +25,7 @@ from bot.army.context import ArmyContext
 from bot.army.orders import GroupOrders
 from bot.army.positioning import TOWNHALL_TYPES, Positioning
 from bot.army.units.common import attack_unit, kite_away, path_move, run
+from bot.pathing.order_utils import open_ground_near, path_length
 
 RETREAT_BELOW_HEALTH = 0.4     # fly home to be repaired below this...
 RESUME_ABOVE_HEALTH = 0.9      # ...and go back out once repaired above this
@@ -38,9 +40,15 @@ WRITE_OFF_RADIUS = 8.0
 IDLE_PATIENCE = 6.0            # seconds a banshee may hover over its base with nothing to shoot before it moves on to another one
 ARRIVED_RADIUS = 10.0          # "over its base": this close to the spot it was sent to
 RECALL_SECONDS = 20.0          # with every base written off it rejoins the army for this long, then tries the bases again
-REPAIR_WAIT_RADIUS = 6.0       # "waiting for its repair": this close to the townhall it flew home to
-REPAIR_PATIENCE = 25.0         # seconds a hurt banshee waits there before it goes back to work unrepaired...
+REPAIR_WAIT_RADIUS = 6.0       # "waiting for its repair": this close to the spot it flew home to
+REPAIR_PATIENCE = 25.0         # seconds a hurt banshee waits there without being repaired any further before it goes back to work unrepaired...
 RETREAT_COOLDOWN = 60.0        # ...and is not sent home again for this long
+REPAIR_LANE_DISTANCE = 4.5     # the repair spot is looked for from this far from the townhall, towards its mineral line (where the SCVs mine)
+REPAIR_SPOT_DISTANCE = 9.0     # ...within this distance of that point
+REPAIR_SPOT_CANDIDATES = 40    # the nearest cells with room that are checked for a way for the SCVs there (one side of a base can be cliffs)
+REPAIR_SPOT_REFRESH = 5.0      # seconds a spot chosen at a townhall is kept (buildings go up around a base)
+REPAIR_WALK_FACTOR = 2.5       # a spot the SCVs would have to walk more than this many times the straight line (+ REPAIR_WALK_SLACK) to is
+REPAIR_WALK_SLACK = 4.0        # ...not one: there is a cliff or a wall in between
 MIN_CLOAKED_ENERGY = 3.0       # a cloaked banshee with more than this is only in danger where a detector sees it
 CLOAK_START_ENERGY = 25.0      # energy needed to switch the cloak on
 CLOAK_ON = AbilityId.BEHAVIOR_CLOAKON_BANSHEE
@@ -62,12 +70,14 @@ class BansheeHarass:
         self._recalled_until: Dict[int, float] = {}          # banshee tag -> it is with the army (no base is worth a visit) until then
         self._repair_wait_since: Dict[int, float] = {}       # banshee tag -> since when it has waited at home for its repair
         self._no_retreat_until: Dict[int, float] = {}        # banshee tag -> it gave up waiting for a repair: not sent home before then
+        self._repair_health: Dict[int, float] = {}           # banshee tag -> its health when last looked at while it waited for its repair
+        self._repair_spots: Dict[int, Tuple[float, Point2]] = {}   # townhall tag -> (when chosen, the spot banshees wait at)
 
     # ------------------------------------------------------------------------------------------------------------
     def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext) -> None:
         alive = {u.tag for u in units}
         for table in (self.roam, self._focus, self._last_fired, self._idle_since, self._recalled_until, self._repair_wait_since,
-                      self._no_retreat_until):
+                      self._no_retreat_until, self._repair_health):
             for tag in [t for t in list(table) if t not in alive]:
                 del table[tag]
         self.retreating &= alive
@@ -146,26 +156,61 @@ class BansheeHarass:
     # ------------------------------------------------------------------------------------------------------------
     # per-banshee control
     # ------------------------------------------------------------------------------------------------------------
-    def _repair_spot(self, unit: Unit, orders: GroupOrders) -> Point2:
-        """Where a hurt banshee waits for its repair: over the nearest townhall, which is where the SCVs are (they only repair units
-        near a base, see bot/macro.py). The army's hold point can be farther from any base than that."""
+    def _repair_spot(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext) -> Point2:
+        """Where a hurt banshee waits for its repair: on open ground next to the nearest townhall, which is where the SCVs are (they only
+        repair units near a base, see bot/repair.py). Not over the townhall: it is a 5x5 block the SCVs cannot walk through, and a banshee
+        over the middle of it is out of their reach. The army's hold point can be farther from any base than that."""
         bases = self.ai.townhalls.not_flying
-        return bases.closest_to(unit).position if bases else orders.hold_point
+        if not bases:
+            return orders.hold_point
+        base = bases.closest_to(unit)
+        now = self.ai.time
+        chosen = self._repair_spots.get(base.tag)
+        if chosen is None or now - chosen[0] >= REPAIR_SPOT_REFRESH:
+            chosen = self._repair_spots[base.tag] = (now, self._find_repair_spot(base, ctx))
+        return chosen[1]
 
-    def _update_retreat(self, unit: Unit, orders: GroupOrders, now: float) -> None:
-        """Hurt banshees go home, and come out again repaired - or unrepaired, when nobody repairs them (see REPAIR_PATIENCE)."""
+    def _find_repair_spot(self, base: Unit, ctx: ArmyContext) -> Point2:
+        """The open cell nearest to the lane between the townhall and its minerals - where the SCVs come and go, out of the way of the rest
+        of the base - that the SCVs can walk to without a long way round. (The nearest open cell when they can walk to none of them, the
+        townhall itself when there is no open cell at all.)"""
+        grid = ctx.mediator.get_cached_ground_grid
+        centre = base.position
+        minerals = self.ai.mineral_field.closer_than(10.0, centre)
+        if minerals:
+            lane = minerals.center
+            centre = centre.towards(lane, min(REPAIR_LANE_DISTANCE, centre.distance_to(lane)))
+        spots = open_ground_near(grid, centre, REPAIR_SPOT_DISTANCE, limit=REPAIR_SPOT_CANDIDATES)
+        for spot in spots:
+            path = ctx.mediator.find_raw_path(start=base.position, target=spot, grid=grid, sensitivity=1)
+            walk = path_length(base.position, path)
+            if walk is not None and walk <= REPAIR_WALK_FACTOR * base.position.distance_to(spot) + REPAIR_WALK_SLACK:
+                return spot
+        return spots[0] if spots else base.position
+
+    def _update_retreat(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext, now: float) -> None:
+        """Hurt banshees go home, and come out again repaired - or unrepaired, when nobody repairs them (see REPAIR_PATIENCE: the wait
+        starts over each time the repair has got the banshee a little further)."""
         tag = unit.tag
         health = unit.health_percentage
         if tag in self.retreating:
             if health >= RESUME_ABOVE_HEALTH:
                 self.retreating.discard(tag)
                 self._repair_wait_since.pop(tag, None)
-            elif unit.distance_to(self._repair_spot(unit, orders)) > REPAIR_WAIT_RADIUS:
+                self._repair_health.pop(tag, None)
+            elif unit.distance_to(self._repair_spot(unit, orders, ctx)) > REPAIR_WAIT_RADIUS:
                 self._repair_wait_since.pop(tag, None)                   # still on its way
-            elif now - self._repair_wait_since.setdefault(tag, now) > REPAIR_PATIENCE:
-                self.retreating.discard(tag)
-                self._repair_wait_since.pop(tag, None)
-                self._no_retreat_until[tag] = now + RETREAT_COOLDOWN
+                self._repair_health.pop(tag, None)
+            else:
+                since = self._repair_wait_since.setdefault(tag, now)
+                if health > self._repair_health.get(tag, health):
+                    since = self._repair_wait_since[tag] = now           # being repaired: worth waiting for
+                self._repair_health[tag] = health
+                if now - since > REPAIR_PATIENCE:
+                    self.retreating.discard(tag)
+                    self._repair_wait_since.pop(tag, None)
+                    self._repair_health.pop(tag, None)
+                    self._no_retreat_until[tag] = now + RETREAT_COOLDOWN
         elif health < RETREAT_BELOW_HEALTH and now >= self._no_retreat_until.get(tag, 0.0):
             self.retreating.add(tag)
 
@@ -201,7 +246,7 @@ class BansheeHarass:
 
     def _control_unit(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext) -> None:
         now = self.ai.time
-        self._update_retreat(unit, orders, now)
+        self._update_retreat(unit, orders, ctx, now)
 
         danger = self._in_danger(unit, ctx)
         if danger:
@@ -213,7 +258,7 @@ class BansheeHarass:
 
         if unit.tag in self.retreating:
             self._idle_since.pop(unit.tag, None)
-            path_move(self.ai, ctx, unit, self._repair_spot(unit, orders), grid=ctx.air_grid)
+            path_move(self.ai, ctx, unit, self._repair_spot(unit, orders, ctx), grid=ctx.air_grid)
             return
 
         # nothing threatening and nothing to hide from: stop paying for the cloak

@@ -9,7 +9,9 @@ ground they cannot cross. So:
   SCV that has walked that far on one job (a unit that keeps moving away) goes back to mining;
 * only near home: what is repaired stands within HOME_RADIUS of one of our landed townhalls, and only SCVs within LEASH of one are
   sent (an SCV that ends up farther is called back). The leash is wider than the radius so that an SCV trailing a unit that walks
-  out of the radius is not sent back and picked again, over and over.
+  out of the radius is not sent back and picked again, over and over;
+* a flying unit only while it hovers where an SCV can stand under it - not over the middle of a townhall, a mineral line or a cliff,
+  where the SCV stops at the edge, out of repair range (the banshees' repair spot is open ground for that reason, units/banshees.py).
 
 Only SCVs that are mining (or idle) are sent, never one that has a job of its own (building, scouting, walking to an expansion).
 """
@@ -22,6 +24,8 @@ from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.unit import Unit
 from sc2.units import Units
+
+from bot.pathing.order_utils import path_length, reachable_from_ground
 
 MAX_REPAIRERS = 4              # never more than this many SCVs on one unit or building
 MAX_TRAVEL = 70.0              # never a longer walk than this (ground path) to repair something, or on one repair job
@@ -65,13 +69,7 @@ def ground_walk(self: BotAI, worker: Unit, target: Unit) -> Optional[float]:
     path = self.mediator.find_raw_path(
         start=worker.position, target=target.position, grid=self.mediator.get_cached_ground_grid, sensitivity=1
     )
-    length: Optional[float] = None
-    if path is not None and len(path) > 0:
-        length, x, y = 0.0, float(worker.position.x), float(worker.position.y)
-        for point in path:
-            px, py = float(point[0]), float(point[1])
-            length += math.hypot(px - x, py - y)
-            x, y = px, py
+    length = path_length(worker.position, path)
     self.repair_walks[key] = (now, length)
     return length
 
@@ -130,10 +128,13 @@ def _wanted(target: Unit) -> int:
 
 def _targets(self: BotAI, bases: Units) -> List[Unit]:
     """What needs repairing and is worth sending SCVs to, the most damaged first: buildings (ready, below STRUCTURE_BELOW) and mechanical
-    army units (below UNIT_BELOW, and standing where it is safe to send an SCV) - near home only."""
+    army units (below UNIT_BELOW, and standing where it is safe to send an SCV) - near home only. A flying one has to hover where an SCV
+    can stand under it: over the middle of a townhall, a mineral line or a cliff it cannot be reached (the SCV stops at the edge)."""
+    grid = self.mediator.get_cached_ground_grid
     targets: List[Unit] = [
         s for s in self.structures.ready
         if s.health_percentage <= STRUCTURE_BELOW and s.type_id not in _NOT_REPAIRED and _home_distance(bases, s) <= HOME_RADIUS
+        and (not s.is_flying or reachable_from_ground(grid, s.position, s.radius))
     ]
     # is_mechanical is also true for SCVs/MULEs in the actual game data - excluding them is required, not a style choice, otherwise every
     # worker that takes a scratch of damage is queued as a repair target and pulls other workers off mining to chase it down
@@ -141,6 +142,7 @@ def _targets(self: BotAI, bases: Units) -> List[Unit]:
         u for u in self.units
         if u.is_mechanical and u.type_id not in _NOT_REPAIRED and u.health_percentage <= UNIT_BELOW
         and _home_distance(bases, u) <= HOME_RADIUS and self.is_unit_position_safe(u)
+        and (not u.is_flying or reachable_from_ground(grid, u.position, u.radius))
     )
     targets.sort(key=lambda t: t.health_percentage)
     return targets

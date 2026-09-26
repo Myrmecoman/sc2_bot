@@ -35,7 +35,9 @@ tests/offline/               checks that need no StarCraft II, see the end of th
 * **Repairs** (`repair.py`) keep three rules: never more than 4 SCVs on one unit or building; never a walk longer than 70 to come and
   repair something (the ground path, measured with Ares' pathing - not the straight line - and an SCV that has walked 70 on one job goes
   back to mining); only near home (what is repaired stands within 25 of a landed townhall, and only SCVs within 35 of one are sent). Only
-  SCVs that are mining or idle are sent, never the scout or the scripted build order's builder.
+  SCVs that are mining or idle are sent, never the scout or the scripted build order's builder. A flying unit is only repaired where an
+  SCV can stand under it: over the middle of a townhall (a 5x5 block, checked on Ares' clean ground grid) the SCV stops at the edge, out
+  of repair range.
 * **Reactions to the scouting** (`reactions.py`): a table of rules, "we have seen X -> change Y", applied on top of the advisor's usual
   per-race numbers every step (so nothing sticks once its trigger is gone) and logged once each as `[react] ...`. A Dark Shrine (or Dark
   Templar): the Starport makes a Raven before a Banshee, is built at once, a missile turret goes into every mineral line. A Roach Warren:
@@ -106,8 +108,13 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   Cyclone back to the normal logic.
 * **Banshees** skip targets they cannot shoot without flying into anti-air (unless they can cloak) and write off a target they have not
   managed to fire at for a few seconds. They never just wait: over a base with nothing to shoot they move on to the next one, and with no
-  base worth a visit they rejoin the army for a while; a hurt one waits over a townhall (where the SCVs repair, only near a base) and goes
-  back to work if nobody comes.
+  base worth a visit they rejoin the army for a while; a hurt one waits for its repair on open ground in the lane between a townhall and
+  its minerals - where the SCVs are, never over the townhall itself, which they cannot walk through - and goes back to work if nobody
+  comes (the wait starts over each time the repair has got it a little further).
+* **Reapers** never shoot buildings: they are never attack-moved (that shoots whatever is in range) and never left standing next to them
+  (an idle unit shoots too). With no enemy unit in sight a reaper tours the two ends of the mineral line of each enemy base we know of,
+  nearest first - the workers are there - leaving out an end the enemy defends, and goes on to the next stop as soon as it gets close to
+  one. Units in reach are still shot first.
 * **Bio against sieged tanks** spreads out on the way in (`TANK_SPLIT_*` in `units/bio.py`) until something is in weapon range, so a shell
   hits a few marines instead of a dozen. **Ravens** drop Auto-Turrets in front of themselves, towards the enemy (damage and something to
   shoot at), flying up to do it when the spot is safe - not under themselves.
