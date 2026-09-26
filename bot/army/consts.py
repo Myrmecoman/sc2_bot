@@ -82,6 +82,14 @@ NEAR_ENEMY_RADIUS = 15.0        # enemies within this of one of our units count 
 BANELING_KITE_MARGIN = 1.0      # a unit backs away from banelings once one is inside ITS OWN weapon range plus this: any farther and it
                                 # would retreat without shooting (it cannot reach them yet) and get caught anyway; any closer is too late
 BANELING_RETREAT_DISTANCE = 6.0 # ... towards a point this far from them, on the side away from their centre
+# Melee-only enemies (Zealots, Zerglings, Ultralisks, ...) are backed away from as well, on the same shoot-and-step-back rhythm: the unit
+# shoots when its weapon is ready and steps back while it is not - a melee unit has to come to us, so this is free value. Ares' danger grid
+# only marks a disk of RangeBuffer (4) around a melee unit, so waiting for "this cell is dangerous" starts the retreat when the Zealot is
+# already on the Marine (and, with "kite in when winning", a mixed Zealot/Stalker army made Marines walk INTO the Zealots).
+MELEE_RANGE_THRESHOLD = 1.0     # an enemy at or below this ground_range counts as melee (Zealot/Zergling/Ultralisk/...)
+MELEE_KITE_MARGIN = 1.0         # a unit backs away from melee enemies once one is inside ITS OWN weapon range plus this (as for banelings)
+MELEE_KITE_MAX_SPEED_RATIO = 1.35   # ...unless they are much faster than the unit: no step back gains distance on those, it stands and shoots
+KITE_IN_MELEE_RADIUS = 10.0     # no "kite in" while a melee enemy is this close: it would be on the unit before the step forward is done
 LOCAL_FIGHT_RADIUS = 14.0       # radius (around a squad) used for the local fight assessment - user-tuned value
 SQUAD_RADIUS = 9.0              # Ares squad clustering radius for the main army (units farther apart split off)
 

@@ -117,12 +117,19 @@ def make_response_data():
     return data
 
 
+class NoCreep:
+    """`state.creep` of a map without creep (units read it for the speed of Zerg units: Unit.real_speed)"""
+
+    def __getitem__(self, position):
+        return 0
+
+
 class World:
     """A BotAI (never started) + a hand-built GameData; creates real Unit objects."""
 
     def __init__(self, bot=None):
         self.bot = bot if bot is not None else BotAI()
-        self.bot.state = SimpleNamespace(game_loop=100, upgrades=set(), effects=set(), dead_units=set())
+        self.bot.state = SimpleNamespace(game_loop=100, upgrades=set(), effects=set(), dead_units=set(), creep=NoCreep())
         self.bot.game_data = GameData(make_response_data())
         self.bot._distances_override_functions(0)
         self._tags = itertools.count(1000)

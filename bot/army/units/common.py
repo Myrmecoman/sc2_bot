@@ -6,12 +6,10 @@ from ares.behaviors.combat.individual import KeepUnitSafe
 from sc2.position import Point2
 from sc2.unit import Unit
 
-from bot.army.consts import BANELING_RETREAT_DISTANCE
+from bot.army.consts import BANELING_RETREAT_DISTANCE, MELEE_RANGE_THRESHOLD
 from bot.army.context import ArmyContext
 from bot.army.orders import GroupOrders
 from bot.pathing.order_utils import is_already_attack_moving_to, is_already_attacking, is_already_moving_to, segment_walkable
-
-MELEE_RANGE_THRESHOLD = 1.0   # an enemy at or below this ground_range counts as melee (Zealot/Zergling/Ultralisk/...)
 
 
 def run(ai, behavior) -> bool:
@@ -97,6 +95,16 @@ def retreat_point(ai, unit: Unit, threats: Sequence[Unit], fallback: Point2) -> 
     return fallback
 
 
+def step_back_from(
+    ai, ctx: ArmyContext, unit: Unit, threats: Sequence[Unit], orders: GroupOrders, grid=None
+) -> None:
+    """Steps away from the pack `threats` (which must not be empty) - or heads for the hold point when the group is retreating anyway."""
+    if orders.retreating:
+        path_move(ai, ctx, unit, orders.hold_point, grid=grid)
+        return
+    path_move(ai, ctx, unit, retreat_point(ai, unit, threats, orders.hold_point), grid=grid)
+
+
 def kite_from_banelings(
     ai, ctx: ArmyContext, unit: Unit, banelings: Sequence[Unit], orders: GroupOrders, grid=None
 ) -> None:
@@ -104,10 +112,7 @@ def kite_from_banelings(
     reaches just 3 around a baneling, about a second before it arrives) and not "unless we are winning" (bio that walks into
     banelings because the simulator likes the fight loses its marines to splash for nothing). Steps away from the pack, or
     heads for the hold point when the group is retreating anyway. `banelings` must not be empty."""
-    if orders.retreating:
-        path_move(ai, ctx, unit, orders.hold_point, grid=grid)
-        return
-    path_move(ai, ctx, unit, retreat_point(ai, unit, banelings, orders.hold_point), grid=grid)
+    step_back_from(ai, ctx, unit, banelings, orders, grid=grid)
 
 
 def path_move(ai, ctx: ArmyContext, unit: Unit, target: Point2, grid=None, sense_danger: bool = True) -> None:

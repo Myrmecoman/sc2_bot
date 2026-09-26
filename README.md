@@ -73,7 +73,10 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   only once the fight is under way (each side can already shoot the other - walking up to sieged tanks or spines is not kiting in), on
   a "very very high" verdict that also holds when they walk into a side that stands its ground, and only after it has held for 2
   seconds. Never against melee-only enemies, and never against banelings, which bio, cyclones and reapers always step back from whatever
-  the simulator says (no push-in, no "futile to run").
+  the simulator says (no push-in, no "futile to run"). Marines and marauders also step back from melee-only enemies (Zealots, Zerglings,
+  ...) that come within their weapon range + 1 while their weapon is on cooldown - shoot when ready, step back when not, without waiting
+  for the danger grid (a disk of 4 around a melee unit, which flags the cell when the Zealot is already on top of the Marine) - except from
+  ones much faster than they are, and they never push in with a melee unit within 10 (`MELEE_*` and `KITE_IN_MELEE_RADIUS` in `consts.py`).
 * **The simulator is set up for the situation** (`Stance` in `fight.py`; its settings are undocumented, each was probed). Holding a
   position (`HOLD`, base defense) the enemy walks into us and the side with the longer reach gets the first volley; walking into a held
   position (`ATTACK`, kiting in) they get it; a meeting, or a fight that is under way, is everything in contact from the start. Units that

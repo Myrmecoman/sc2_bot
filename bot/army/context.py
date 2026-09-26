@@ -9,11 +9,21 @@ from sc2.unit import Unit
 from sc2.units import Units
 from sc2.ids.upgrade_id import UpgradeId
 
-from bot.army.consts import ATTACK_TARGET_IGNORE, BANELING_KITE_MARGIN, BANELING_TYPES, LOCAL_FIGHT_RADIUS, NEAR_ENEMY_RADIUS
+from bot.army.consts import (
+    ATTACK_TARGET_IGNORE,
+    BANELING_KITE_MARGIN,
+    BANELING_TYPES,
+    ENEMY_WORKER_TYPES,
+    LOCAL_FIGHT_RADIUS,
+    MELEE_KITE_MARGIN,
+    MELEE_KITE_MAX_SPEED_RATIO,
+    MELEE_RANGE_THRESHOLD,
+    NEAR_ENEMY_RADIUS,
+)
 from bot.army.local_fight import FightMap
 
 # what an enemy unit is to a shooter, see ArmyContext._kind
-_GROUND_TARGET, _AIR_TARGET, _BANELING = 1, 2, 4
+_GROUND_TARGET, _AIR_TARGET, _BANELING, _MELEE = 1, 2, 4, 8
 
 
 class ArmyContext:
@@ -47,6 +57,8 @@ class ArmyContext:
         self._wide: Dict[Tuple[int, float], Units] = {}
         self._kinds: Dict[int, Tuple[Unit, int]] = {}
         self._baneling_present: Optional[bool] = None
+        self._melee: Dict[int, List[Unit]] = {}
+        self._melee_present: Optional[bool] = None
         self.tank_closest: Dict[int, Optional[float]] = {}      # tank tag -> distance to what it could shoot (units/tanks.py)
 
     # ------------------------------------------------------------------------------------------------------------
@@ -102,6 +114,12 @@ class ArmyContext:
                     kind |= _BANELING
                 if type_id not in ATTACK_TARGET_IGNORE:
                     kind |= _AIR_TARGET if enemy.is_flying else _GROUND_TARGET
+                    # (a Baneling has a rule of its own, workers are not what a fight is about, a building with no weapon is not a threat)
+                    if (
+                        not enemy.is_flying and not enemy.is_structure and type_id not in BANELING_TYPES
+                        and type_id not in ENEMY_WORKER_TYPES and 0 < enemy.ground_range <= MELEE_RANGE_THRESHOLD
+                    ):
+                        kind |= _MELEE
             # the unit is kept in the entry so that its id cannot be handed to another object while the step is still running
             entry = self._kinds[id(enemy)] = (enemy, kind)
         return entry[1]
@@ -130,6 +148,28 @@ class ArmyContext:
             ]
             self._banelings[unit.tag] = cached
         return cached
+
+    def _melee_enemies(self, unit: Unit, radius: float) -> List[Unit]:
+        if self._melee_present is None:
+            self._melee_present = any(self._kind(e) & _MELEE for e in self.ai.enemy_units)
+        if not self._melee_present:
+            return []
+        return [e for e in self.enemies_near(unit) if self._kind(e) & _MELEE and e.distance_to(unit) <= radius]
+
+    def close_melee(self, unit: Unit) -> List[Unit]:
+        """The melee-only enemies (Zealots, Zerglings, ...) visible right now inside the unit's own weapon range plus MELEE_KITE_MARGIN, and
+        not much faster than it: the ones it steps back from while its weapon is on cooldown (see units/bio.py). A melee unit that is
+        much faster than the unit (MELEE_KITE_MAX_SPEED_RATIO) cannot be kited: no step back gains distance on it."""
+        cached = self._melee.get(unit.tag)
+        if cached is None:
+            speed = max(unit.real_speed, 0.1) * MELEE_KITE_MAX_SPEED_RATIO
+            cached = [e for e in self._melee_enemies(unit, unit.ground_range + MELEE_KITE_MARGIN) if e.real_speed <= speed]
+            self._melee[unit.tag] = cached
+        return cached
+
+    def melee_within(self, unit: Unit, radius: float) -> List[Unit]:
+        """Every melee-only enemy visible right now within `radius` of the unit (however fast)."""
+        return self._melee_enemies(unit, radius)
 
     def close_banelings(self, unit: Unit) -> List[Unit]:
         """The banelings from `banelings_near` that are inside the unit's own weapon range (plus BANELING_KITE_MARGIN): the

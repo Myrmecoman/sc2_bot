@@ -1152,6 +1152,60 @@ def test_farthest_within():
     check("geometry: no move at all is no step", farthest_within(Point2((60, 60)), Point2((60, 60)), centre, 14.25) is None)
 
 
+# ------------------------------------------------------------------------------------------------------------------------------
+# bio steps back from melee enemies (Zealots, Zerglings): shoot when the weapon is ready, step back while it is not
+# ------------------------------------------------------------------------------------------------------------------------------
+def _vs_melee(enemies, unit=U.MARINE, cooldown=10.0, local=None, mode=Mode.ATTACK, at=(60, 60), retreating=False, danger_x=None, patch=None):
+    """a bio unit at `at` against `enemies` [(type, x)] at y = 60; returns (its commands, the scene)"""
+    sc = mk()
+    m = sc.own(unit, at, cooldown=cooldown)
+    for type_id, x in enemies:
+        e = sc.enemy(type_id, (x, 60))
+        if patch:
+            patch(e)
+    if danger_x is not None:
+        danger(sc, (danger_x, 60), radius=5)
+    ctx = begin(sc)
+    sc.manager.bio.control(sc.world.units([m]), orders(sc, mode=mode, local=local, retreating=retreating), ctx)
+    return cmds(sc, m), sc
+
+
+def test_bio_kites_away_from_zealots():
+    c, _ = _vs_melee([(U.ZEALOT, 65.5)])
+    check("bio: a marine that has just fired steps back from a zealot 5.5 away (inside its range + 1), with no danger grid needed", _backs_away(c), str(c))
+    c, _ = _vs_melee([(U.ZEALOT, 69.0)])
+    check("bio: ...but not from one that is still 9 away", not any(a == A.MOVE_MOVE for a, t, q in c) and any(a == A.ATTACK for a, t, q in c), str(c))
+    c, _ = _vs_melee([(U.ZEALOT, 65.5)], cooldown=0.0)
+    check("bio: ...and when its weapon is ready it shoots (the step back is for the cooldown)", any(a == A.ATTACK for a, t, q in c) and not any(a == A.MOVE_MOVE for a, t, q in c), str(c))
+    c, _ = _vs_melee([(U.ZEALOT, 66.5)], unit=U.MARAUDER)
+    check("bio: a marauder (range 6) steps back from one 6.5 away", _backs_away(c), str(c))
+    c, _ = _vs_melee([(U.ZERGLING, 65.5)])
+    check("bio: and from zerglings", _backs_away(c), str(c))
+
+
+def test_bio_does_not_kite_in_towards_zealots():
+    # a mixed army: the zealot is 4 away, the stalker behind it - "not all melee", and the simulator is sure: the marine used to step FORWARD
+    c, _ = _vs_melee([(U.ZEALOT, 64.0), (U.STALKER, 68.0)], local=ER.VICTORY_EMPHATIC)
+    check("bio: a zealot close, a stalker behind it, at overwhelming odds: the marine steps back, not into the zealot", _backs_away(c), str(c))
+    # no melee unit close (the zealot is 9 away): the kite-in against the ranged units carries on...
+    c, _ = _vs_melee([(U.ROACH, 64.0), (U.HYDRALISK, 66.0)], local=ER.VICTORY_OVERWHELMING, danger_x=62)
+    check("bio: (control) against ranged units alone it still pushes in", any(a == A.MOVE_MOVE and t[0] > 60 for a, t, q in c), str(c))
+    # ...but not with a melee unit within 10 of it
+    c, _ = _vs_melee([(U.ROACH, 64.0), (U.HYDRALISK, 66.0), (U.ZEALOT, 69.0)], local=ER.VICTORY_OVERWHELMING, danger_x=62)
+    check("bio: ...and not with a zealot 9 away, which would be on it before the step forward is done", not any(a == A.MOVE_MOVE and t[0] > 60 for a, t, q in c), str(c))
+
+
+def test_bio_melee_kiting_leaves_out_what_it_cannot_help():
+    c, _ = _vs_melee([(U.PROBE, 63.0)])
+    check("bio: a probe is not something to run from", not any(a == A.MOVE_MOVE for a, t, q in c), str(c))
+    c, _ = _vs_melee([(U.ZEALOT, 65.5)], patch=lambda e: e.__dict__.__setitem__("real_speed", 9.0))
+    check("bio: nor a melee unit far faster than the marine (a step back gains nothing on it)", not any(a == A.MOVE_MOVE for a, t, q in c), str(c))
+    c, _ = _vs_melee([(U.COMMANDCENTER, 63.0)])
+    check("bio: nor a building", not any(a == A.MOVE_MOVE and t[0] < 60 for a, t, q in c), str(c))
+    c, _ = _vs_melee([(U.ZEALOT, 80.5)], at=(75, 60), mode=Mode.HOLD, retreating=True)
+    check("bio: a retreating group's marine goes home (the hold point at x = 60) instead of picking its own way", any(a == A.MOVE_MOVE and abs(t[0] - 60) < 1 for a, t, q in c), str(c))
+
+
 def main():
     tests = [v for k, v in globals().items() if k.startswith("test_")]
     only = sys.argv[1:]

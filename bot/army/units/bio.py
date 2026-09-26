@@ -16,7 +16,7 @@ from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
-from bot.army.consts import FIGHT_GHOST_MAX_AGE, KITE_IN_RESULT, LOCAL_FIGHT_RADIUS
+from bot.army.consts import FIGHT_GHOST_MAX_AGE, KITE_IN_MELEE_RADIUS, KITE_IN_RESULT, LOCAL_FIGHT_RADIUS
 from bot.army.context import ArmyContext
 from bot.army.orders import GroupOrders
 from bot.army.units.common import (
@@ -28,6 +28,7 @@ from bot.army.units.common import (
     kite_from_banelings,
     path_move,
     run,
+    step_back_from,
     target_harmless,
 )
 from bot.pathing.order_utils import Crowd, spread_out_point
@@ -107,6 +108,15 @@ class BioController:
             kite_from_banelings(self.ai, ctx, unit, close_banelings, orders)
             return
 
+        # melee-only enemies close by (Zealots, Zerglings, ...): the same rhythm - shoot when the weapon is ready (above), step back while it
+        # is not. They have to come to us, so the step back costs nothing, and it does not wait for the danger grid (a disk of 4 around the
+        # melee unit, which flags the cell when the Zealot is already on the Marine) or for the fight to look bad: "kite in" is for ranged
+        # enemies, and never with a melee unit near
+        close_melee = ctx.close_melee(unit)
+        if close_melee:
+            step_back_from(self.ai, ctx, unit, close_melee, orders)
+            return
+
         # weapon on cooldown. Decide between backing off, pushing in, and holding
         # kite in only with "very very high" confidence in THIS fight - the one this unit is in, judged on the units that take part in it
         # and as an advance into the enemy (see GroupOrders.advance_result) - and never against melee-only enemies, where kiting away
@@ -116,6 +126,7 @@ class BioController:
             advance is not None
             and advance >= KITE_IN_RESULT
             and not banelings
+            and not ctx.melee_within(unit, KITE_IN_MELEE_RADIUS)
             and not all_melee([e for e in ctx.enemies_near(unit) if not e.is_memory and e.distance_to(unit) <= LOCAL_FIGHT_RADIUS])
         )
         futile = futile_to_kite(unit, target) and not banelings

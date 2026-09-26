@@ -11,7 +11,7 @@ from sc2.bot_ai import BotAI
 from sc2.position import Point2
 from sc2.units import Units
 
-from gamefix import World
+from gamefix import NoCreep, World
 
 
 class FakeMediator:
@@ -216,7 +216,7 @@ class FakeAI(BotAI):
         super().__init__()
         self.world = world
         world.bot = self
-        self.state = SimpleNamespace(game_loop=100, upgrades=set(), effects=set(), dead_units=set())
+        self.state = SimpleNamespace(game_loop=100, upgrades=set(), effects=set(), dead_units=set(), creep=NoCreep())
         self.game_data = game_data
         self._distances_override_functions(0)
         self.actions = []
