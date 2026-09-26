@@ -53,8 +53,8 @@ if __name__ == "__main__":
         # picking one at module level runs before its import exists and fails with NameError
         #enemy = Computer(Race.Zerg, Difficulty.CheatInsane, AIBuild.Macro)
         #enemy = Computer(Race.Zerg, Difficulty.CheatInsane, AIBuild.Rush)
-        #enemy = Computer(Race.Protoss, Difficulty.CheatInsane, AIBuild.Air)
-        enemy = Computer(Race.Terran, Difficulty.CheatInsane, AIBuild.Macro)
+        enemy = Computer(Race.Protoss, Difficulty.CheatInsane, AIBuild.Air)
+        #enemy = Computer(Race.Terran, Difficulty.CheatInsane, AIBuild.Macro)
         #enemy = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBotEnemy")
         #enemy = Bot(Race.Terran, MassReaper(), "MassReaper")
         #enemy = Bot(Race.Protoss, WorkerRushBot(), "WorkerRush")

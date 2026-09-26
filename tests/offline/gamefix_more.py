@@ -47,3 +47,12 @@ gamefix.STATS.update({
 })
 gamefix.FLYING_TYPES.update({U.PHOENIX, U.CARRIER, U.TEMPEST, U.ORACLE, U.MOTHERSHIP, U.OBSERVER, U.WARPPRISM, U.VOIDRAY,
                              U.MUTALISK, U.CORRUPTOR, U.BROODLORD, U.VIPER, U.OVERSEER, U.INTERCEPTOR})
+
+# tech structures the enemy shows us (what the scouting reactions look for, bot/reactions.py); approximate LotV stats
+_TECH = lambda hp, mins, gas: (hp, 0, 1, 0.0, [], [ARMORED, STRUCT], mins, gas, 0)
+gamefix.STATS.update({
+    U.DARKSHRINE: _TECH(500, 150, 150), U.ROACHWARREN: _TECH(550, 150, 0), U.HYDRALISKDEN: _TECH(850, 100, 100),
+    U.BANELINGNEST: _TECH(850, 100, 50), U.SPIRE: _TECH(850, 200, 200), U.GREATERSPIRE: _TECH(1000, 300, 350),
+    U.LURKERDENMP: _TECH(850, 100, 150), U.STARGATE: _TECH(600, 150, 150), U.ROBOTICSBAY: _TECH(450, 150, 150),
+    U.ULTRALISKCAVERN: _TECH(850, 150, 200), U.FUSIONCORE: _TECH(750, 150, 150),
+})

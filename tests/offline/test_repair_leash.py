@@ -1,20 +1,27 @@
-"""SCVs that repair must stay near home (bot/macro.py: REPAIR_HOME_RADIUS / REPAIR_LEASH), the whole bot on the real Ares hub.
+"""SCV repairs keep their rules (bot/repair.py), the whole bot on the real Ares hub:
 
-The bug: an SCV with a repair order on a unit follows it wherever it goes, so with the army marching across the map every SCV
-repairing one of its tanks / medivacs went along and walked all the way back afterwards. Three layouts, each once with the leash
-and once with it switched off (the "control" run must show the old behavior - it proves the layout really is one where the bot
-sends an SCV, so a quiet run with the leash on is the leash's doing and not an unrelated reason):
+  * never more than 4 SCVs on one unit or building
+  * never a walk longer than 70 to get to a repair - the ground path, not the straight line - and an SCV that has walked that far
+    on one job goes back to mining
+  * only near home: what is repaired stands within 25 of a landed townhall, and SCVs more than 35 from one are called back
 
-  home     a damaged tank next to the base gets an SCV (repairs still work), and the SCV already repairing it is left alone
-  far      a damaged tank 32 cells from the only base, with SCVs within reach of it: nobody is sent
-  trailing an SCV that is repairing a tank that has since walked far away is sent back to mine"""
+Every layout runs once with the rules and once with the limits switched off (the "control" run must show the old behavior - it proves
+the layout really is one where the bot sends an SCV / leaves one alone, so a quiet run with the rules on is the rules' doing and not an
+unrelated reason).
+
+  home       a damaged tank next to the base gets an SCV; one that is already on it is left alone and no second one is sent
+  far        a damaged tank 32 cells from the only base, with SCVs within reach of it: nobody is sent
+  trailing   an SCV that is repairing a tank that has since walked far away is sent back to mine
+  crew       a badly damaged building gets exactly 4 SCVs, not more - and 6 already on it are cut to 4
+  wall       a tank 12 cells from an SCV but on the other side of a wall (a 90-cell walk round it) gets nobody; on this side it does
+  budget     an SCV that has walked 70 on one repair job is sent back to mine"""
 import _bootstrap  # noqa: F401  (repo root on sys.path - keep this first)
 import asyncio, math
 from loguru import logger
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as U
 
-import bot.macro as macro
+import bot.repair as repair
 from dynamic import BASES, run_frame, start_game
 from test_dynamic import build_game
 import gamefix_more  # noqa: F401
@@ -35,11 +42,12 @@ def repair_order(worker_proto, target_tag):
     order.target_unit_tag = target_tag
 
 
-def run(layout, leash=True, frames=8):
-    """returns (tags of SCVs sent to repair the tank, tags of SCVs sent to mine, the tank's tag, the tracked worker's tag or None)"""
-    saved = macro.REPAIR_HOME_RADIUS, macro.REPAIR_LEASH
-    if not leash:
-        macro.REPAIR_HOME_RADIUS = macro.REPAIR_LEASH = math.inf          # = the bot as it was
+def run(layout, rules=True, frames=8):
+    """returns (SCVs sent to repair the target, SCVs sent to mine that were on a job, the target's tag, the job's SCVs)"""
+    saved = repair.HOME_RADIUS, repair.LEASH, repair.MAX_TRAVEL, repair.MAX_REPAIRERS
+    if not rules:
+        repair.HOME_RADIUS = repair.LEASH = repair.MAX_TRAVEL = math.inf          # = the bot as it was
+        repair.MAX_REPAIRERS = 999
     try:
         errors = []
         logger.remove()
@@ -49,46 +57,89 @@ def run(layout, leash=True, frames=8):
         loop = asyncio.new_event_loop()
         client, proto_gi = loop.run_until_complete(start_game(game, bot))
         cx, cy = BASES["our_main"]
-        tracked = None
-        if layout == "home":
+        job_workers = []
+        if layout in ("home", "home_crewed"):
             tank = game.add(U.SIEGETANK, (cx + 12, cy + 12), 1, hp=DAMAGED)
-            tracked = game.add(U.SCV, (cx + 11, cy + 11), 1)            # already repairing it: must keep doing so
-            repair_order(tracked, tank.tag)
+            if layout == "home_crewed":
+                worker = game.add(U.SCV, (cx + 11, cy + 11), 1)            # already repairing it: must keep doing so
+                repair_order(worker, tank.tag)
+                job_workers.append(worker)
         elif layout == "far":
             tank = game.add(U.SIEGETANK, (cx + 22.6, cy + 22.6), 1, hp=DAMAGED)      # 32 from the base, ~25 from the nearest SCVs
-        else:
+        elif layout == "trailing":
             tank = game.add(U.SIEGETANK, (cx + 40, cy + 40), 1, hp=DAMAGED)          # walked off with the army
-            tracked = game.add(U.SCV, (cx + 29, cy + 29), 1)                          # 41 from the base, on its heels
-            repair_order(tracked, tank.tag)
-        repairs, mining = set(), set()
+            worker = game.add(U.SCV, (cx + 29, cy + 29), 1)                          # 41 from the base, on its heels
+            repair_order(worker, tank.tag)
+            job_workers.append(worker)
+        elif layout in ("crew", "overcrowded"):
+            tank = next(u for u in game.units_raw if u.unit_type == U.BARRACKS.value)
+            tank.health = 200                                                        # 20% of 1000: four SCVs' worth of damage
+            if layout == "overcrowded":
+                for k in range(6):                                                   # six SCVs on it, whoever put them there
+                    worker = game.add(U.SCV, (cx + 9 + k * 0.5, cy - 4), 1)
+                    repair_order(worker, tank.tag)
+                    job_workers.append(worker)
+        elif layout in ("wall", "wall_same_side"):
+            game.add(U.COMMANDCENTER, (54.5, 12.5), 1)                               # a base right by the wall (x 62-65), ...
+            tank = game.add(U.SIEGETANK, (70 if layout == "wall" else 50, 12), 1, hp=DAMAGED)   # ...the tank over it (or on this side)
+        else:  # "budget"
+            tank = game.add(U.SIEGETANK, (cx + 12, cy + 12), 1, hp=DAMAGED)
+            worker = game.add(U.SCV, (cx + 11, cy + 11), 1)
+            repair_order(worker, tank.tag)
+            job_workers.append(worker)
+            bot.repair_jobs[worker.tag] = repair.RepairJob(target=tank.tag, since=0.0, last=(worker.pos.x, worker.pos.y), walked=66.0)
+        repairs, called_off, distinct = set(), set(), set()
+        job_tags = {w.tag for w in job_workers}
         for i in range(frames):
+            if layout == "budget" and i == 1:
+                job_workers[0].pos.x += 8                                            # 8 more on the road: 74 walked
             before = len(client.sent_actions)
             loop.run_until_complete(run_frame(game, bot, proto_gi, i))
             for a in client.sent_actions[before:]:
                 if a.ability == AbilityId.EFFECT_REPAIR_SCV and getattr(a.target, "tag", None) == tank.tag:
                     repairs.add(a.unit.tag)
-                elif a.ability == AbilityId.HARVEST_GATHER and tracked is not None and a.unit.tag == tracked.tag:
-                    mining.add(a.unit.tag)
+                elif a.ability == AbilityId.HARVEST_GATHER and a.unit.tag in job_tags:
+                    called_off.add(a.unit.tag)
         assert not errors, errors[:1]
-        return repairs, mining, tank.tag, tracked.tag if tracked is not None else None
+        return repairs, called_off, tank.tag, job_tags
     finally:
-        macro.REPAIR_HOME_RADIUS, macro.REPAIR_LEASH = saved
+        repair.HOME_RADIUS, repair.LEASH, repair.MAX_TRAVEL, repair.MAX_REPAIRERS = saved
 
 
 def main():
-    repairs, mining, _, tracked = run("home")
-    check("home: a damaged tank next to the base gets an SCV", repairs - {tracked}, str(repairs))
-    check("home: the SCV already repairing it is not called off", not mining, str(mining))
+    repairs, called_off, _, _ = run("home")
+    check("home: a damaged tank next to the base gets an SCV", len(repairs) == 1, str(repairs))
+    repairs, called_off, _, jobs = run("home_crewed")
+    check("home: an SCV already on it is not called off, and no second one is sent", not called_off and not repairs, f"{called_off} {repairs}")
 
-    repairs, _, _, _ = run("far", leash=False)
-    check("far (control, leash off): the old code sends an SCV to a tank 32 cells from the base", repairs, str(repairs))
+    repairs, _, _, _ = run("far", rules=False)
+    check("far (control, rules off): the old code sends an SCV to a tank 32 cells from the base", repairs, str(repairs))
     repairs, _, _, _ = run("far")
     check("far: nobody is sent to a tank that far from the base", not repairs, str(repairs))
 
-    _, mining, _, tracked = run("trailing", leash=False)
-    check("trailing (control, leash off): the old code lets the SCV follow the tank", not mining, str(mining))
-    _, mining, _, tracked = run("trailing")
-    check("trailing: an SCV repairing a tank that walked away is sent back to mine", tracked in mining, str(mining))
+    _, called_off, _, _ = run("trailing", rules=False)
+    check("trailing (control, rules off): the old code lets the SCV follow the tank", not called_off, str(called_off))
+    _, called_off, _, jobs = run("trailing")
+    check("trailing: an SCV repairing a tank that walked away is sent back to mine", called_off == jobs, str(called_off))
+
+    repairs, _, _, _ = run("crew")
+    check("crew: a badly damaged building gets four SCVs, no more", len(repairs) == 4, str(len(repairs)))
+    _, called_off, _, _ = run("overcrowded")
+    check("crew: six SCVs on one building are cut to four (two go back to mine)", len(called_off) == 2, str(called_off))
+    _, called_off, _, _ = run("overcrowded", rules=False)
+    check("crew (control, rules off): ...and nothing cuts them without the cap", not called_off, str(called_off))
+
+    repairs, _, _, _ = run("wall", rules=False)
+    check("wall (control, rules off): the old code sends an SCV over a wall to a tank 12 cells away as the crow flies", repairs, str(repairs))
+    repairs, _, _, _ = run("wall")
+    check("wall: a tank behind a wall is 90 cells away on foot: nobody is sent", not repairs, str(repairs))
+    repairs, _, _, _ = run("wall_same_side")
+    check("wall: a tank on this side of it, a short walk away, gets an SCV", len(repairs) == 1, str(repairs))
+
+    _, called_off, _, jobs = run("budget")
+    check("budget: an SCV that has walked more than 70 on one repair job is sent back to mine", called_off == jobs, str(called_off))
+    _, called_off, _, _ = run("budget", rules=False)
+    check("budget (control): ...and stays on it without that rule", not called_off, str(called_off))
 
     failed = [r for r in RESULTS if not r[1]]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")

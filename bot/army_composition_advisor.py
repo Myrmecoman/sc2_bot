@@ -1,11 +1,17 @@
+from collections import Counter
+from copy import copy
+
+from loguru import logger
+
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.unit import Unit
 from sc2.units import Units
 from sc2.position import Point2
 from sc2.bot_ai import BotAI
-from typing import FrozenSet, Set
+from typing import Dict, FrozenSet, List, Set
 from sc2.data import Race
 from bot.pathing.consts import DANGEROUS_STRUCTURES, SKYTOSS_TYPES
+from bot.reactions import KNOBS, REACTIONS, Scouted, react
 
 
 # rough supply-equivalent weight for each visible bunker/cannon/spine crawler/etc when sizing up
@@ -15,7 +21,8 @@ DANGEROUS_STRUCTURE_THREAT = 5
 
 # What to BUILD, based on what the enemy has shown us.
 #
-# This class decides army composition only (the max_* caps, marine/marauder split, tech-lab ratios) and answers
+# This class decides army composition only (the max_* caps, marine/marauder split, tech-lab ratios; what the scouting calls for
+# on top of the usual per-race numbers lives in reactions.py) and answers
 # a few questions macro needs (is the wall closed, were we zergling-rushed, how much enemy army supply is out
 # there). Everything about how the army MOVES and FIGHTS - when to push, when to hold, who defends, harass,
 # scouting - lives in bot/army/ (built on the Ares library).
@@ -52,6 +59,16 @@ class ArmyCompositionAdvisor():
 
         # jump Vikings to the front of Starport production
         self.prioritize_vikings = False
+
+        # set by the reactions to what we scouted (reactions.py): see the module docstring there
+        self.raven_first = False                 # the Starport's first unit is a Raven, not a Banshee
+        self.priority_units: List[UnitTypeId] = []   # money is held back for these (marines do not starve them)
+        self.turrets_per_base = 0                # missile turrets in every mineral line
+        self.starport_now = False                # build the Starport at once, not once a second base is up
+        self.reactions_fired: Set[str] = set()   # the reactions already logged
+        self.active_reactions: List[str] = []    # the reactions that applied on the last step
+        self._startup: Dict[str, object] = {}    # the knobs as provide_advices_startup left them: what every step starts from
+        self._startup_race = None
 
         # make less techlabs if we want more marines
         self.barracks_techlab_ratio = 0.5
@@ -214,7 +231,23 @@ class ArmyCompositionAdvisor():
     # Main advisor
     # -------------------------------------------------------------
 
+    def scouted(self) -> Scouted:
+        """What we know of the enemy right now (see reactions.py)."""
+        return Scouted(
+            race=self.bot.enemy_race,
+            structures=Counter(s.type_id for s in self.bot.enemy_structures),
+            units=Counter(type_id for _, type_id, _ in self.known_enemy_units.values()),
+        )
+
     def provide_advices(self):
+
+        # a Random opponent only shows its race once we have seen a unit of theirs: start over with that race's numbers then
+        if self._startup_race != self.bot.enemy_race:
+            self.provide_advices_startup()
+        # every step starts from the usual numbers, then the race's rules and the reactions to the scouting adjust them - so nothing
+        # sticks once whatever called for it is gone
+        for name, value in self._startup.items():
+            setattr(self, name, copy(value))
 
         visible_enemies: Units = self.bot.visible_enemy_units
 
@@ -421,6 +454,13 @@ class ArmyCompositionAdvisor():
                 else 2
             )
 
+        self.active_reactions = react(self.scouted(), self)
+        for name in self.active_reactions:
+            if name not in self.reactions_fired:
+                self.reactions_fired.add(name)
+                reaction = next(r for r in REACTIONS if r.name == name)
+                logger.info(f"[react] {name} (at {self.bot.time:.0f}s): {reaction.why}")
+
     # -------------------------------------------------------------
     # Startup
     # -------------------------------------------------------------
@@ -474,3 +514,7 @@ class ArmyCompositionAdvisor():
             self.barracks_techlab_ratio = 0.4
             self.factory_techlab_ratio = 0.5
             self.starport_techlab_ratio = 0.5
+
+        # what every later step starts from (see provide_advices)
+        self._startup_race = self.bot.enemy_race
+        self._startup = {name: copy(getattr(self, name)) for name in KNOBS}

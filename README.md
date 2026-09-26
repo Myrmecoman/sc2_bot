@@ -15,8 +15,8 @@ influence grids, pathing, KD-tree unit queries, the Rust combat simulator and th
 ```
 bot/
   bot.py                     SmoothBrainBot(AresBot). One step = Ares managers -> macro -> workers -> army
-  build_order.py macro.py production.py speedmining.py custom_utils.py scouting.py
-  worker_rush_defense.py worker_micro.py army_composition_advisor.py        the macro side (not Ares based)
+  build_order.py macro.py production.py speedmining.py custom_utils.py scouting.py repair.py
+  worker_rush_defense.py worker_micro.py army_composition_advisor.py reactions.py     the macro side (not Ares based)
   army/                      the Ares based army, see below
   ares_compat.py             the bridge between the vendored python-sc2 and Ares, see "python-sc2 and Ares" below
   pathing/                   order helpers used everywhere; grid_pathing/pathing_fallback/influence_costs are the in-house
@@ -29,6 +29,24 @@ arena-submission.py          zips the bot for the AI Arena ladder (see Setup)
 training_bots/               bots to test against
 tests/offline/               checks that need no StarCraft II, see the end of this file
 ```
+
+### The macro side: repairs, reactions to the scouting, production limits
+
+* **Repairs** (`repair.py`) keep three rules: never more than 4 SCVs on one unit or building; never a walk longer than 70 to come and
+  repair something (the ground path, measured with Ares' pathing - not the straight line - and an SCV that has walked 70 on one job goes
+  back to mining); only near home (what is repaired stands within 25 of a landed townhall, and only SCVs within 35 of one are sent). Only
+  SCVs that are mining or idle are sent, never the scout or the scripted build order's builder.
+* **Reactions to the scouting** (`reactions.py`): a table of rules, "we have seen X -> change Y", applied on top of the advisor's usual
+  per-race numbers every step (so nothing sticks once its trigger is gone) and logged once each as `[react] ...`. A Dark Shrine (or Dark
+  Templar): the Starport makes a Raven before a Banshee, is built at once, a missile turret goes into every mineral line. A Roach Warren:
+  Siege Tanks, and **money is held back for the tank** - cheap units bought all the time (Marines, 50 minerals, from several Barracks) never
+  let the bank reach 150, so while a Factory stands ready and only the money is missing, production spends only what is left over
+  (`priority_reserve` in `production.py`; nothing is held back when the gas or the supply is missing, or enough tanks are out). More rules
+  for Lurkers, mines, Banshees, Mutalisks, Brood Lords, Colossi, Banelings, Ultralisks, Hydralisks, Battlecruisers - add one by adding a
+  `Reaction(...)` to the table; `tests/offline/test_reactions.py` shows how a rule is tested.
+* **Production buildings**: what the number of bases calls for, never more than 6 Barracks, 2 Factories and 2 Starports, and while the bank
+  keeps piling up late in the game (1000+ minerals, 100+ supply used; the gas buildings also need 350+ gas) one more at a time up to
+  those limits (`production_targets` in `macro.py`).
 
 ### The army (`bot/army/`)
 

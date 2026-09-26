@@ -50,8 +50,10 @@ class SmoothBrainBot(Sc2Bridge, AresBot):
         self.worker_rushed = False                   # tells if we are worker rushed, if the enemies were repelled we should close the wall quick before they come back
         self.worker_rush_clear_since = None           # timestamp since the worker rush threat has been gone, used to eventually stand down
         self.scouting_units = []                     # lists units assigned to scout so that we do not cancel their orders
-        self.worker_assigned_to_repair = {}          # lists workers assigned to repair
-        self.worker_assigned_to_repair_mech = {}     # lists workers assigned to repair damaged mechanical army units
+        self.repair_jobs = {}                        # SCV tag -> the repair job it was sent on (see repair.py)
+        self.repair_walks = {}                       # (SCV tag, target tag) -> (when measured, length of the ground walk there)
+        self.repair_backoff = {}                     # target tag -> until when nobody is looked for to repair it
+        self.turret_backoff = {}                     # townhall tag -> until when no turret is tried for its mineral line again (see macro.build_turrets)
         self.worker_assigned_to_follow = {}          # lists workers assigned to follow objects (used to prevent Planetary Fortress rushes)
         self.worker_assigned_to_defend = {}          # lists workers assigned to defend other workers during construction
         self.worker_assigned_to_resume_building = {} # lists workers assigned to resume the construction of a building

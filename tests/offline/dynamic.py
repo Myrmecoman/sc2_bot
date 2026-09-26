@@ -46,7 +46,8 @@ def make_game_data():
         if u.unit_id in (U.COMMANDCENTER.value, U.ORBITALCOMMAND.value, U.SUPPLYDEPOT.value, U.SUPPLYDEPOTLOWERED.value,
                          U.BARRACKS.value, U.FACTORY.value, U.STARPORT.value, U.REFINERY.value, U.ENGINEERINGBAY.value,
                          U.ARMORY.value, U.BARRACKSREACTOR.value, U.BARRACKSTECHLAB.value, U.BUNKER.value,
-                         U.MISSILETURRET.value, U.SENSORTOWER.value, U.PLANETARYFORTRESS.value):
+                         U.MISSILETURRET.value, U.SENSORTOWER.value, U.PLANETARYFORTRESS.value,
+                         U.FACTORYTECHLAB.value, U.FACTORYREACTOR.value, U.STARPORTTECHLAB.value, U.STARPORTREACTOR.value):
             if gamefix.STRUCT not in list(u.attributes):
                 u.attributes.append(gamefix.STRUCT)
     # creation abilities (python-sc2 needs them to place / train anything) + building footprints

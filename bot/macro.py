@@ -2,6 +2,7 @@ from bot.custom_utils import can_build_structure
 from bot.custom_utils import get_safest_expansion
 from bot.custom_utils import is_supply_critical
 from bot.custom_utils import update_rally_points
+from bot.repair import manage_repairs
 
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.upgrade_id import UpgradeId
@@ -103,9 +104,9 @@ async def smart_build(self : BotAI, type : UnitTypeId):
 
 
 HALF_OFFSET = Point2((.5, .5))
-async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId):
-    # try all ccs and find average position of its mineral fields
-    for cc in self.townhalls.ready:
+async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId, townhalls : Units = None):
+    # try all ccs (or just the given ones) and find average position of its mineral fields
+    for cc in (self.townhalls.ready if townhalls is None else townhalls):
         mfs: Units = self.mineral_field.closer_than(10, cc)
         if mfs.amount == 0:
             continue
@@ -129,154 +130,6 @@ async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId):
                 await self.build(type, near=position_further, max_distance=4)
                 return
         print("Could not place tech building behind mineral lines")
-
-
-# An SCV with a repair order on a unit follows that unit for as long as it needs repairs, wherever it goes: with the army marching
-# to the enemy's base, every SCV repairing one of its tanks / medivacs / vikings went along across the whole map, and walked all the
-# way back (micro_worker sends idle workers home) once the repair was over. Repairs are a job for the home area:
-REPAIR_HOME_RADIUS = 25.0   # a damaged unit or building is only repaired while it is this close to one of our (landed) townhalls
-REPAIR_LEASH = 35.0         # only workers this close to one of them are sent to repair, and one that ends up farther is sent back to mine
-# (the leash is wider than the radius so a worker trailing a unit that walks out of the radius is not sent back and re-picked, over and over)
-
-
-def release_far_repairers(self : BotAI):
-    """Send SCVs that repair far from every landed townhall back to mining (the unit gets repaired again once it is back home)."""
-    bases: Units = self.townhalls.not_flying
-    if bases.empty or self.mineral_field.empty:
-        return
-    for worker in self.workers.filter(lambda w: w.is_repairing):
-        if bases.closest_distance_to(worker) > REPAIR_LEASH:
-            worker.gather(self.mineral_field.closest_to(bases.closest_to(worker)))
-
-
-def repair_buildings(self : BotAI):
-
-    if self.worker_rushed and not self.army_advisor.is_wall_closed():
-        return
-
-    bases: Units = self.townhalls.not_flying
-    if bases.empty:
-        return
-
-    # adding tag if needs to be repaired, else remove it
-    for i in self.structures.ready:
-        if i.health_percentage > 0.9:
-            if i.tag in self.worker_assigned_to_repair.keys():
-                self.worker_assigned_to_repair.pop(i.tag)
-            continue
-        if i.tag in self.worker_assigned_to_repair.keys():
-            continue
-        self.worker_assigned_to_repair[i.tag] = []
-    
-    for key in self.worker_assigned_to_repair.keys():
-        if self.structures.find_by_tag(key) is None: # the building died
-            continue
-        total_repairing = len(self.worker_assigned_to_repair[key])
-
-        # keep only workers still actually repairing this specific target - one whose repair
-        # got interrupted or redirected elsewhere shouldn't keep occupying a counted slot while
-        # it just stands there idle
-        new_value = []
-        for i in range(total_repairing):
-            worker_tag = self.worker_assigned_to_repair[key][i]
-            worker = self.workers.find_by_tag(worker_tag)
-            if worker is not None and worker.is_repairing and worker.order_target == key:
-                new_value.append(worker_tag)
-        self.worker_assigned_to_repair[key] = new_value
-        total_repairing = len(self.worker_assigned_to_repair[key])
-
-        i = self.structures.find_by_tag(key)
-        # a flying building (e.g. a CC lifted to evade a rush) is already out of danger - still
-        # repairable, but doesn't need a full repair crew the way something actively under fire does
-        max_repairers = 1 if i.is_flying else (4 if i.health_percentage < 0.5 else 2)
-        if total_repairing >= max_repairers or bases.closest_distance_to(i) > REPAIR_HOME_RADIUS:
-            continue
-
-        sorted_workers : Units = self.workers.sorted(lambda x: x.distance_to(i))
-        for wo in sorted_workers:
-            # total_repairing must be re-checked (not just gated once above) - otherwise every
-            # qualifying worker in range gets assigned in this same pass, blowing straight past
-            # the cap, since the tracking list only reflects the count again next frame
-            if total_repairing >= max_repairers:
-                break
-            if wo.is_repairing or wo.is_constructing_scv or bases.closest_distance_to(wo) > REPAIR_LEASH:
-                continue
-            if wo.distance_to(i) < 30:
-                wo(AbilityId.EFFECT_REPAIR_SCV, i)
-                self.worker_assigned_to_repair[key].append(wo.tag)
-                total_repairing += 1
-                total_repairing = len(self.worker_assigned_to_repair[key])
-
-
-def repair_mechanical_units(self : BotAI):
-    """Same idea as repair_buildings, but for damaged mechanical army units (tanks, hellions,
-    thors, cyclones, vikings, banshees, ravens, battlecruisers) instead of structures. Kept more
-    conservative than building repair (higher damage threshold, fewer repairers) since army units
-    take routine chip damage constantly in any engagement - repairing every scratch is what was
-    pulling workers off mining so often."""
-
-    if self.worker_rushed and not self.army_advisor.is_wall_closed():
-        return
-
-    bases: Units = self.townhalls.not_flying
-    if bases.empty:
-        return
-
-    # is_mechanical is also true for SCVs/MULEs in the actual game data - excluding them explicitly
-    # is required, not just a style choice, otherwise every worker that takes a scratch of damage
-    # gets queued as a repair target and pulls other workers off mining to chase it down
-    mech_units : Units = self.units.filter(lambda u: u.is_mechanical and u.type_id not in {UnitTypeId.SCV, UnitTypeId.MULE})
-
-    # only bother once meaningfully damaged, and only if it's actually safe to send a worker there - and only at home: a worker
-    # sent to a unit out on the map follows it (see REPAIR_LEASH)
-    for i in mech_units:
-        if i.health_percentage > 0.7 or not self.is_unit_position_safe(i) or bases.closest_distance_to(i) > REPAIR_HOME_RADIUS:
-            if i.tag in self.worker_assigned_to_repair_mech.keys():
-                self.worker_assigned_to_repair_mech.pop(i.tag)
-            continue
-        if i.tag in self.worker_assigned_to_repair_mech.keys():
-            continue
-        self.worker_assigned_to_repair_mech[i.tag] = []
-
-    # workers repair_buildings already committed this frame shouldn't also get pulled here -
-    # issuing a command doesn't update a unit's own cached order state until next frame, so
-    # without this a worker could get claimed by both in the same step
-    already_repairing_structures = {tag for tags in self.worker_assigned_to_repair.values() for tag in tags}
-
-    for key in list(self.worker_assigned_to_repair_mech.keys()):
-        target = mech_units.find_by_tag(key)
-        if target is None: # the unit died
-            self.worker_assigned_to_repair_mech.pop(key, None)
-            continue
-        total_repairing = len(self.worker_assigned_to_repair_mech[key])
-
-        # keep only workers still actually repairing this specific target - see repair_buildings
-        new_value = []
-        for i in range(total_repairing):
-            worker_tag = self.worker_assigned_to_repair_mech[key][i]
-            worker = self.workers.find_by_tag(worker_tag)
-            if worker is not None and worker.is_repairing and worker.order_target == key:
-                new_value.append(worker_tag)
-        self.worker_assigned_to_repair_mech[key] = new_value
-        total_repairing = len(self.worker_assigned_to_repair_mech[key])
-
-        max_repairers = 2 if target.health_percentage < 0.3 else 1
-        if total_repairing >= max_repairers:
-            continue
-
-        # only ever pull workers that are otherwise just mining, never ones already tasked elsewhere
-        candidates : Units = self.workers.filter(lambda w: (w.is_gathering or w.is_idle) and bases.closest_distance_to(w) <= REPAIR_LEASH)
-        candidates = candidates.tags_not_in(already_repairing_structures)
-        sorted_workers : Units = candidates.sorted(lambda x: x.distance_to(target))
-        for wo in sorted_workers:
-            if wo.is_repairing or wo.is_constructing_scv:
-                continue
-            if wo.distance_to(target) < 30:
-                wo(AbilityId.EFFECT_REPAIR_SCV, target)
-                self.worker_assigned_to_repair_mech[key].append(wo.tag)
-                total_repairing = len(self.worker_assigned_to_repair_mech[key])
-                if total_repairing >= max_repairers:
-                    break
 
 
 def cancel_building(self : BotAI):
@@ -310,12 +163,80 @@ def resume_building_construction(self : BotAI):
         worker(AbilityId.SMART, i)
 
 
+# Production buildings: how many the number of bases calls for, how many at most, and when a bank that keeps piling up calls for more.
+MAX_BARRACKS = 6               # never more than this many of each, whatever the bank says
+MAX_FACTORIES = 2
+MAX_STARPORTS = 2
+BANK_MINERALS = 1000           # "piling up": this much unspent...
+BANK_GAS = 350                 # ...and this much gas, for the buildings that make gas units (a Factory, a Starport)
+END_GAME_SUPPLY = 100          # ...late in the game: at least this much supply used
+TURRET_BASE_RADIUS = 15.0      # a turret this close to a townhall belongs to its base
+
+
+def production_targets(self : BotAI) -> dict:
+    """How many of each production building we want right now: what the number of bases calls for (the caps of the schedule below), and
+    one more than we have while the bank piles up - one at a time, up to MAX_*. The gas buildings only when gas piles up as well and
+    there is something left for them to make."""
+    bases = self.townhalls.amount
+    advisor = self.army_advisor
+    have = {
+        UnitTypeId.BARRACKS: self.structures(UnitTypeId.BARRACKS).amount + self.structures(UnitTypeId.BARRACKSFLYING).amount,
+        UnitTypeId.FACTORY: self.structures(UnitTypeId.FACTORY).amount + self.structures(UnitTypeId.FACTORYFLYING).amount,
+        UnitTypeId.STARPORT: self.structures(UnitTypeId.STARPORT).amount + self.structures(UnitTypeId.STARPORTFLYING).amount,
+    }
+    starports = 2 if bases >= 4 else (1 if bases >= 2 or advisor.starport_now else 0)
+    # a second factory is only worth it once we're actually planning a real mech presence
+    factories = 2 if bases >= 3 and (advisor.max_tanks + advisor.max_cyclones) > 10 else (1 if bases >= 1 else 0)
+    barracks = 6 if bases >= 4 else (5 if bases >= 3 else (2 if bases >= 2 else (1 if bases >= 1 else 0)))
+    targets = {UnitTypeId.STARPORT: starports, UnitTypeId.FACTORY: factories, UnitTypeId.BARRACKS: barracks}
+
+    if self.supply_used >= END_GAME_SUPPLY and self.minerals >= BANK_MINERALS:
+        gas_banking = self.vespene >= BANK_GAS
+        tanks = self.units.of_type({UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED}).amount
+        targets[UnitTypeId.BARRACKS] = max(targets[UnitTypeId.BARRACKS], have[UnitTypeId.BARRACKS] + 1)
+        if gas_banking and tanks < advisor.max_tanks:
+            targets[UnitTypeId.FACTORY] = max(targets[UnitTypeId.FACTORY], have[UnitTypeId.FACTORY] + 1)
+        if gas_banking:
+            targets[UnitTypeId.STARPORT] = max(targets[UnitTypeId.STARPORT], have[UnitTypeId.STARPORT] + 1)
+    caps = {UnitTypeId.BARRACKS: MAX_BARRACKS, UnitTypeId.FACTORY: MAX_FACTORIES, UnitTypeId.STARPORT: MAX_STARPORTS}
+    return {t: min(caps[t], amount) for t, amount in targets.items()}
+
+
+async def build_production_buildings(self : BotAI):
+    """Starports, Factories and Barracks, in that order of priority (the ones that make the units we need most come first)."""
+    targets = production_targets(self)
+    for building, flying in ((UnitTypeId.STARPORT, UnitTypeId.STARPORTFLYING), (UnitTypeId.FACTORY, UnitTypeId.FACTORYFLYING),
+                             (UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING)):
+        if can_build_structure(self, building, flying, targets[building]):
+            await smart_build(self, building)
+
+
+async def build_turrets(self : BotAI):
+    """A missile turret (two against a big Mutalisk flock) in every mineral line when the scouting calls for it (army_advisor.turrets_per_base,
+    see reactions.py): Dark Templar, Banshees, Oracles and Mutalisks all get there faster than an army can be brought home - and a turret
+    is a detector that needs no energy and no Raven. Needs an Engineering Bay, which is built first."""
+    per_base = self.army_advisor.turrets_per_base
+    if per_base <= 0 or self.townhalls.amount == 0:
+        return
+    if not self.structures(UnitTypeId.ENGINEERINGBAY).ready:
+        if can_build_structure(self, UnitTypeId.ENGINEERINGBAY, None, 1):
+            await smart_build_behind_mineral(self, UnitTypeId.ENGINEERINGBAY)
+        return
+    if self.already_pending(UnitTypeId.MISSILETURRET) > 0 or not self.can_afford(UnitTypeId.MISSILETURRET):
+        return
+    for cc in self.townhalls.ready:
+        if self.turret_backoff.get(cc.tag, 0.0) > self.time:
+            continue
+        if self.structures(UnitTypeId.MISSILETURRET).closer_than(TURRET_BASE_RADIUS, cc).amount < per_base:
+            self.turret_backoff[cc.tag] = self.time + 4.0        # (placing can fail, and the new turret takes a moment to show up)
+            await smart_build_behind_mineral(self, UnitTypeId.MISSILETURRET, townhalls=Units([cc], self))
+            return
+
+
 async def macro(self : BotAI):
 
     cancel_building(self)
-    release_far_repairers(self)
-    repair_buildings(self)
-    repair_mechanical_units(self)
+    manage_repairs(self)
     resume_building_construction(self)
     update_rally_points(self)
 
@@ -329,25 +250,8 @@ async def macro(self : BotAI):
     # nothing" bugs: any single stuck build_order step (bad placement, no worker, timing) silently
     # blocked every later structure/expansion decision too, not just the stuck one
 
-    if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTFLYING, 1):
-        await smart_build(self, UnitTypeId.STARPORT)
-    if self.townhalls.amount >= 4 and can_build_structure(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTFLYING, 2):
-        await smart_build(self, UnitTypeId.STARPORT)
-
-    if self.townhalls.amount >= 1 and can_build_structure(self, UnitTypeId.FACTORY, UnitTypeId.FACTORYFLYING, 1):
-        await smart_build(self, UnitTypeId.FACTORY)
-    # a second factory is only worth it once we're actually planning a real mech presence
-    if self.townhalls.amount >= 3 and (self.army_advisor.max_tanks + self.army_advisor.max_cyclones) > 10 and can_build_structure(self, UnitTypeId.FACTORY, UnitTypeId.FACTORYFLYING, 2):
-        await smart_build(self, UnitTypeId.FACTORY)
-
-    if self.townhalls.amount >= 1 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 1):
-        await smart_build(self, UnitTypeId.BARRACKS)
-    if self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 2):
-        await smart_build(self, UnitTypeId.BARRACKS)
-    if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 5):
-        await smart_build(self, UnitTypeId.BARRACKS)
-    if self.townhalls.amount >= 4 and can_build_structure(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSFLYING, 8):
-        await smart_build(self, UnitTypeId.BARRACKS)
+    await build_production_buildings(self)
+    await build_turrets(self)
 
     if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.ENGINEERINGBAY, None, 2):
         await smart_build_behind_mineral(self, UnitTypeId.ENGINEERINGBAY)
