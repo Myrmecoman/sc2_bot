@@ -50,7 +50,8 @@ class CycloneController:
         self.locks: Dict[int, Tuple[int, float]] = {}   # cyclone tag -> (enemy tag, time) of the lock it has running
         self.lockon_range: float = ai.game_data.abilities[AbilityId.LOCKON_LOCKON.value]._proto.cast_range
 
-    def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext) -> None:
+    def begin_step(self, units: Units, ctx: ArmyContext) -> None:
+        """Forget the locks that are over (also for the raiding Cyclones, cyclone_raid.py, which share this state)."""
         now = self.ai.time
         for tag in [t for t, cast_at in self.lock_ons.items() if now - cast_at > LOCK_ON_TIMEOUT]:
             del self.lock_ons[tag]
@@ -58,21 +59,15 @@ class CycloneController:
         for tag in [t for t in self.locks if t not in alive]:
             del self.locks[tag]
         ctx.prefetch_near(units)
+
+    def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext) -> None:
+        self.begin_step(units, ctx)
         for unit in units:
             self._control_unit(unit, orders, ctx)
 
     # ------------------------------------------------------------------------------------------------------------
     def _control_unit(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext) -> None:
-        # a lock-on that is running keeps draining the target without the cyclone having to stay in front of it: kite (and do not spend
-        # the ability again - a new cast would end this lock)
-        locked = self._locked_target(unit)
-        if locked is not None:
-            # (while the cast itself is still on the unit - its order is there, or it was ordered a moment ago - a move order could
-            # cancel it: nothing is ordered before it is through)
-            if not unit.is_using_ability(LOCK_ON_ABILITIES) and self.ai.time - self.locks[unit.tag][1] >= LOCK_ON_CAST_SECONDS:
-                self._kite_locked(unit, locked, orders, ctx)
-            return
-        if unit.is_using_ability(LOCK_ON_ABILITIES):        # a lock we have no record of (yet): leave it alone
+        if self.handle_running_lock(unit, orders, ctx):
             return
 
         targets = ctx.targets_near(unit)
@@ -120,6 +115,19 @@ class CycloneController:
             return
         attack_unit(unit, nearest)
 
+    def handle_running_lock(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext) -> bool:
+        """A lock-on that is running keeps draining the target without the cyclone having to stay in front of it: it kites (and does not spend
+        the ability again - a new cast would end this lock). True when the unit has a lock going or a cast under way: nothing else may be
+        ordered for it this step."""
+        locked = self._locked_target(unit)
+        if locked is not None:
+            # (while the cast itself is still on the unit - its order is there, or it was ordered a moment ago - a move order could
+            # cancel it: nothing is ordered before it is through)
+            if not unit.is_using_ability(LOCK_ON_ABILITIES) and self.ai.time - self.locks[unit.tag][1] >= LOCK_ON_CAST_SECONDS:
+                self._kite_locked(unit, locked, orders, ctx)
+            return True
+        return unit.is_using_ability(LOCK_ON_ABILITIES)        # a lock we have no record of (yet): leave it alone
+
     # ------------------------------------------------------------------------------------------------------------
     def _try_lock_on(self, unit: Unit, targets: List[Unit]) -> bool:
         """Spend Lock-On on a fresh, worthwhile target (never a worker). True if the command was issued."""
@@ -133,7 +141,10 @@ class CycloneController:
         ]
         if not candidates:
             return False
-        target = self.pick_lockon_target(candidates)
+        return self.cast_lock_on(unit, self.pick_lockon_target(candidates))
+
+    def cast_lock_on(self, unit: Unit, target: Unit) -> bool:
+        """Order the lock on `target` (the air or the ground one) and record it. False when the game does not offer that ability now."""
         ability = AbilityId.LOCKONAIR_LOCKONAIR if target.is_flying else AbilityId.LOCKON_LOCKON
         if ability not in unit.abilities:
             return False

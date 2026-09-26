@@ -453,6 +453,40 @@ def test_army_must_be_tighter_against_protoss_to_push():
     check("push: against Protoss it takes 90%", not grouped_with(Race.Protoss))
 
 
+def _cyclone_role(sc, cy):
+    return next((name for name, tags in sc.ai.mediator.get_unit_role_dict.items() if cy.tag in tags), None)
+
+
+def test_cyclones_raid_against_protoss_until_the_army_pushes():
+    import asyncio
+    from bot.ares_compat import refresh_ability_cache
+
+    def scene(race):
+        sc = scene_basic(enemy_race=race)
+        cy = sc.own(U.CYCLONE, (25, 25))
+        sc.ai.ability_grants[cy.tag] = {AbilityId.LOCKON_LOCKON, AbilityId.LOCKONAIR_LOCKONAIR}
+        return sc, cy
+    sc, cy = scene(Race.Protoss)
+    sc.step()
+    moves = [c.target for c in sc.commands_for(cy) if c.ability == AbilityId.MOVE_MOVE]
+    check("raid: a new Cyclone against Protoss goes raiding at once (HARASSING role, on its way to their natural)", _cyclone_role(sc, cy) == "HARASSING" and moves and abs(moves[0].x - 150) < 1, str((_cyclone_role(sc, cy), moves)))
+    sc.manager.attacking = True
+    sc.step()
+    check("raid: ...and is part of the army again once it pushes", _cyclone_role(sc, cy) == "ATTACKING", str(_cyclone_role(sc, cy)))
+    sc.manager.attacking = False
+    sc.step()
+    check("raid: ...and goes raiding again when the push is over", _cyclone_role(sc, cy) == "HARASSING", str(_cyclone_role(sc, cy)))
+    sc, cy = scene(Race.Zerg)
+    sc.step()
+    check("raid (control): against Zerg the Cyclone stays with the army", _cyclone_role(sc, cy) == "ATTACKING", str(_cyclone_role(sc, cy)))
+    sc, cy = scene(Race.Protoss)
+    sc.step()
+    sc.enemy_many(U.ZEALOT, 6, (32, 26))                                    # a raid on our base: the Cyclone is the base defense's to use
+    sc.step()                                                               # (the defense sees the threat in this step, the roles are put right in the next)
+    sc.step()
+    check("raid: ...and it is called back when something threatens home", _cyclone_role(sc, cy) == "ATTACKING", str(_cyclone_role(sc, cy)))
+
+
 def main():
     tests = [v for k, v in globals().items() if k.startswith("test_")]
     only = sys.argv[1:]

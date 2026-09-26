@@ -65,6 +65,7 @@ class ArmyCompositionAdvisor():
         self.priority_units: List[UnitTypeId] = []   # money is held back for these (marines do not starve them)
         self.turrets_per_base = 0                # missile turrets in every mineral line
         self.starport_now = False                # build the Starport at once, not once a second base is up
+        self.mech_focus = False                  # a Factory-led army (Cyclones first, a few Tanks) with a smaller bio part: see reactions.py
         self.reactions_fired: Set[str] = set()   # the reactions already logged
         self.active_reactions: List[str] = []    # the reactions that applied on the last step
         self._startup: Dict[str, object] = {}    # the knobs as provide_advices_startup left them: what every step starts from
@@ -339,17 +340,16 @@ class ArmyCompositionAdvisor():
                 )
             )
 
+            # (the Cyclones - the core of the army against Protoss - are at their usual cap either way: see provide_advices_startup)
             if detected_skytoss:
 
                 self.marine_marauder_ratio = 0.9
-                self.max_cyclones = 6
                 self.max_vikings = 10
                 self.prioritize_vikings = True
 
             else:
 
                 self.marine_marauder_ratio = 0.5
-                self.max_cyclones = 0
                 self.max_vikings = 4
                 self.prioritize_vikings = False
 
@@ -363,8 +363,9 @@ class ArmyCompositionAdvisor():
                 > 3
             )
 
+            # a few Tanks among the Cyclones (against skytoss the last reaction rule caps them at 2)
             self.max_tanks = (
-                10 if enemy_mech_heavy else 6
+                6 if enemy_mech_heavy else 4
             )
 
             hellion_countered = any(
@@ -467,6 +468,8 @@ class ArmyCompositionAdvisor():
 
     def provide_advices_startup(self):
 
+        self.mech_focus = False
+
         if self.bot.enemy_race == Race.Terran:
 
             self.max_medivacs = 2
@@ -489,14 +492,17 @@ class ArmyCompositionAdvisor():
             self.max_vikings = 4
             self.max_battlecruisers = 1
             self.max_ravens = 2
-            self.max_tanks = 6
-            self.max_cyclones = 0
+            self.max_tanks = 4
+            self.max_cyclones = 12
             self.max_banshees = 2
 
+            # Marines are picked up by almost everything a Protoss has: the army is led by Cyclones (with the Cyclone research and the
+            # vehicle upgrades), a few Tanks and the Marines that one Barracks makes - see macro.production_targets
+            self.mech_focus = True
             self.marine_marauder_ratio = 0.5
 
             self.barracks_techlab_ratio = 0.5
-            self.factory_techlab_ratio = 0.5
+            self.factory_techlab_ratio = 1.0         # every Factory gets a Tech Lab: Cyclones, Tanks and their research need one
             self.starport_techlab_ratio = 0.5
 
         if self.bot.enemy_race == Race.Zerg:

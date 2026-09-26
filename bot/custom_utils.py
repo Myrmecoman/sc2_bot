@@ -77,7 +77,9 @@ def handle_add_ons(self : BotAI):
 
     fac: Units = self.structures(UnitTypeId.FACTORY)
     for f in fac.ready.idle:
-        if self.structures(UnitTypeId.FACTORYTECHLAB).amount + self.already_pending(UnitTypeId.FACTORYTECHLAB) < fac.amount/2:
+        # (Tech Labs on this share of the Factories, the rest Reactors: half of them, or all of them for a mech-led army - Cyclones,
+        # Tanks and their research need a Tech Lab, see army_advisor.factory_techlab_ratio)
+        if self.structures(UnitTypeId.FACTORYTECHLAB).amount + self.already_pending(UnitTypeId.FACTORYTECHLAB) < fac.amount * self.army_advisor.factory_techlab_ratio:
             if self.can_afford(UnitTypeId.TECHLAB):
                 build_add_on(self, UnitTypeId.FACTORY, UnitTypeId.FACTORYTECHLAB)
         elif self.can_afford(UnitTypeId.REACTOR):
@@ -197,6 +199,36 @@ def handle_upgrades(self : BotAI):
     cores = self.structures(UnitTypeId.FUSIONCORE).ready.idle
     for core in cores:
         continue # not sure if we should buy any upgrade from fusion core since we play bio
+
+
+# The Cyclone research at the Factory's Tech Lab. Which one the game has depends on its version (Lock On damage, rapid fire launchers, hurricane
+# thrusters, Lock On range: all of them are ids of this library), so the Tech Lab is asked what it can research right now, and only what it lists
+# is ordered - an upgrade the game version does not have is never tried, over and over.
+CYCLONE_UPGRADES = (
+    (AbilityId.RESEARCH_CYCLONELOCKONDAMAGE, UpgradeId.CYCLONELOCKONDAMAGEUPGRADE),
+    (AbilityId.RESEARCH_CYCLONERAPIDFIRELAUNCHERS, UpgradeId.CYCLONERAPIDFIRELAUNCHERS),
+    (AbilityId.FACTORYTECHLABRESEARCH_CYCLONERESEARCHHURRICANETHRUSTERS, UpgradeId.HURRICANETHRUSTERS),
+    (AbilityId.FACTORYTECHLABRESEARCH_RESEARCHLOCKONRANGEUPGRADE, UpgradeId.CYCLONELOCKONRANGEUPGRADE),
+)
+CYCLONE_UPGRADE_LOOK_SECONDS = 3.0      # how often an idle Tech Lab is asked what it can research
+
+
+async def research_cyclone_upgrade(self : BotAI):
+    """Once we make Cyclones, an idle Tech Lab on a Factory researches the Cyclone upgrade(s) the game offers it, when we can afford them."""
+    if self.time < self.cyclone_upgrade_next_look:
+        return
+    if self.units(UnitTypeId.CYCLONE).amount + self.already_pending(UnitTypeId.CYCLONE) == 0:
+        return
+    techlabs: Units = self.structures(UnitTypeId.FACTORYTECHLAB).ready.idle
+    if techlabs.amount == 0:
+        return
+    self.cyclone_upgrade_next_look = self.time + CYCLONE_UPGRADE_LOOK_SECONDS
+    offered = await self.get_available_abilities(techlabs, ignore_resource_requirements=True)
+    for techlab, abilities in zip(techlabs, offered):
+        for ability, upgrade in CYCLONE_UPGRADES:
+            if ability in abilities and self.already_pending_upgrade(upgrade) == 0 and self.can_afford(upgrade):
+                techlab(ability)
+                return                  # (one at a time: what was just ordered is not in the observation yet)
 
 
 def is_supply_critical(self : BotAI) -> bool:

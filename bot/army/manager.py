@@ -7,6 +7,7 @@ Units live in one role at a time, each with its own controller and orders:
     BASE_DEFENDER       a detachment split off to answer a specific enemy group near one of our bases (defense.py)
     CONTROL_GROUP_ONE   a small diversion squad sent at a different enemy base to split their defense
     HARASSING_BANSHEE / HARASSING_REAPER   harassers with their own targeting (units/banshees.py, units/reapers.py)
+    HARASSING           Cyclones on a raid against Protoss - lock on, step back, again - while the army is not pushing (units/cyclone_raid.py)
     SCOUTING            a hidden-base sweep, protected from everything else (scouting.py)
 
 The strategic decision - push or hold - comes from the combat simulator run on our army against EVERYTHING we know
@@ -65,6 +66,7 @@ from bot.army.scouting import HiddenBaseScouting
 from bot.army.units.banshees import BansheeHarass
 from bot.army.units.bio import BioController
 from bot.army.units.common import attack_move
+from bot.army.units.cyclone_raid import CycloneRaid
 from bot.army.units.cyclones import CycloneController
 from bot.army.units.generic import GenericController
 from bot.army.units.liberators import LiberatorController
@@ -109,7 +111,7 @@ DIVERSION_ARRIVAL_RANGE = 10.0        # arrived at the target and nothing there 
 # ---- roles ----------------------------------------------------------------------------------------------------------
 MANAGED_ROLES = (
     UnitRole.ATTACKING, UnitRole.BASE_DEFENDER, UnitRole.CONTROL_GROUP_ONE, UnitRole.SCOUTING,
-    UnitRole.HARASSING_BANSHEE, UnitRole.HARASSING_REAPER,
+    UnitRole.HARASSING_BANSHEE, UnitRole.HARASSING_REAPER, UnitRole.HARASSING,
 )
 
 
@@ -134,6 +136,7 @@ class ArmyManager:
         self.bio = BioController(ai)
         self.tanks = TankController(ai, self.positioning)
         self.cyclones = CycloneController(ai)
+        self.cyclone_raid = CycloneRaid(ai, self.cyclones)
         self.medivacs = MedivacController(ai)
         self.ravens = RavenController(ai)
         self.vikings = VikingController(ai)
@@ -246,6 +249,7 @@ class ArmyManager:
 
         self._guard("banshees", self._harass, self.banshees, role(role=UnitRole.HARASSING_BANSHEE), main_orders, ctx)
         self._guard("reapers", self._harass, self.reapers, role(role=UnitRole.HARASSING_REAPER), main_orders, ctx)
+        self._guard("cyclone raid", self._raid, role(role=UnitRole.HARASSING), main_orders, ctx)
 
     def _begin_step(self) -> ArmyContext:
         self.tracker.update(self.ai.visible_enemy_units)
@@ -308,6 +312,7 @@ class ArmyManager:
         for role in MANAGED_ROLES:
             for tag in role_sets.get(role.name, ()):
                 assigned[tag] = role.name
+        raiding = self._raiding()
         for unit in self._army_units():
             wanted: Optional[UnitRole] = None
             current = assigned.get(unit.tag)
@@ -317,10 +322,21 @@ class ArmyManager:
             elif unit.type_id in REAPER_TYPES:
                 if current not in (UnitRole.HARASSING_REAPER.name, UnitRole.SCOUTING.name):
                     wanted = UnitRole.HARASSING_REAPER
+            elif unit.type_id in CYCLONE_TYPES and current in (None, UnitRole.ATTACKING.name, UnitRole.HARASSING.name):
+                # (a Cyclone that is a base defender, in the diversion squad or scouting is left where it is)
+                wanted = UnitRole.HARASSING if raiding else UnitRole.ATTACKING
+                if current == wanted.name:
+                    wanted = None
             elif current is None:
                 wanted = UnitRole.ATTACKING
             if wanted is not None:
                 mediator.assign_role(tag=unit.tag, role=wanted)
+
+    def _raiding(self) -> bool:
+        """Do the Cyclones go out to raid (units/cyclone_raid.py) instead of standing with the army? Against Protoss, whose units pick Marines up
+        too easily and which a Cyclone that locks on and steps back hurts for nothing: yes, while the army is not pushing (then they are part
+        of it) and nothing threatens home (then the base defense may need them)."""
+        return self.ai.enemy_race == Race.Protoss and not self.attacking and not self.defense.tasks
 
     # ================================================================================================================
     # main army
@@ -724,6 +740,11 @@ class ArmyManager:
         await self.ravens.control(units.of_type(RAVEN_TYPES), orders, ctx)
         # banshees and reapers are never in these groups (_sweep_roles keeps them in their harass roles)
         self.generic.control(units.exclude_type(DEDICATED_TYPES), orders, ctx)
+
+    def _raid(self, units: Units, main_orders: GroupOrders, ctx: ArmyContext) -> None:
+        raiders = units.of_type(CYCLONE_TYPES)
+        if raiders:
+            self.cyclone_raid.control(raiders, main_orders, ctx)
 
     def _harass(self, controller, units: Units, main_orders: GroupOrders, ctx: ArmyContext) -> None:
         if not units:

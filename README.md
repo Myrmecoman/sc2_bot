@@ -60,6 +60,15 @@ tests/offline/               checks that need no StarCraft II, see the end of th
 * **Production buildings**: what the number of bases calls for, never more than 6 Barracks, 2 Factories and 2 Starports, and while the bank
   keeps piling up late in the game (1000+ minerals, 100+ supply used; the gas buildings also need 350+ gas) one more at a time up to
   those limits (`production_targets` in `macro.py`).
+* **Against Protoss the army is mech-led** (`army_advisor.mech_focus`): Marines are picked up by almost everything a Protoss has, so the
+  scripted opening (Barracks, Refinery, Orbital, Command Center, Factory) is followed by a Starport as soon as the Factory stands and
+  ONE Barracks for the first two bases (2 at three bases, 3 at four; a second Factory at three bases; an Armory once the Starport is up,
+  for the vehicle upgrades, which `handle_upgrades` researches once there are 3 mechanical units). Every Factory gets a Tech Lab. The
+  Factory makes Cyclones first (cap 12), a Siege Tank after each three of them (`factory_order` in `production.py`, cap 4 - 2 against
+  skytoss) and Tanks alone once the Cyclones are at their cap; money is held back for the next one (as for the tanks above), so the bio
+  is still made, but out of what is left over. Once a Cyclone is made or ordered, an idle Factory Tech Lab researches the Cyclone
+  upgrade(s) it offers (`research_cyclone_upgrade`: it is asked what it can research, because which upgrade exists depends on the
+  game version).
 
 ### The army (`bot/army/`)
 
@@ -71,6 +80,7 @@ tests/offline/               checks that need no StarCraft II, see the end of th
 | `BASE_DEFENDER` | a detachment split off to answer one enemy group near a base; sized with the combat simulator as the smallest group that wins (`defense.py`); the whole army answers when no detachment can |
 | `CONTROL_GROUP_ONE` | a small diversion squad sent at a different enemy base to split their defense (only with enough bio) |
 | `HARASSING_BANSHEE` / `HARASSING_REAPER` | harassers with their own targeting (`units/banshees.py`, `units/reapers.py`) |
+| `HARASSING` | Cyclones on a raid against Protoss (`units/cyclone_raid.py`) |
 | `SCOUTING` | a hidden-base sweep, protected from the rest of the army manager (`scouting.py`) |
 
 * **Push or hold** is decided by the combat simulator (`fight.py`) run on our whole army against everything we know of theirs
@@ -116,6 +126,17 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   steps out of enemy fire - never so far that the target leaves that range - and follows a target that is walking away; it does not spend
   a second lock while one is running. A lock that ended (the target died or left view, got out of range, the cast never took) hands the
   Cyclone back to the normal logic.
+* **Cyclones raid Protoss** (`units/cyclone_raid.py`): against Protoss a Cyclone does not wait for the army - as long as the army is not
+  pushing and nothing threatens home (the manager gives them the `HARASSING` role, and back to `ATTACKING` when a push starts or the base
+  defense may need them) it goes out to hurt the enemy: lock on, step back out of reach (the lock keeps working up to 15), again. It
+  **attacks only with a Lock On available** (the ability must be in the game's list for that Cyclone; waiting for the cooldown it stays out
+  of reach of everything that can hit it, and out of its own weapon range of everything else, so that it does not shoot on its own). Targets:
+  **units first, then Shield Batteries, then Photon Cannons**, workers when there is nothing else, no other building. Only a target it can
+  reach safely: nothing else that can hit the Cyclone may cover the spot it casts from or the way there (the target itself may hit back:
+  a Cannon reaches 7, a shot or two), so a unit in the middle of a Stalker ball is left alone while a lone one, a Battery or a Cannon is
+  not. Reach comes from the enemies' weapons, not from Ares' danger grid (which marks 4 more around everything, workers included). With
+  nothing to hit it walks towards what it knows of the enemy (a Cannon or Battery, an army, a Nexus, else their natural) and stops outside
+  the reach of what it sees; below half health it goes home to be repaired.
 * **Banshees** skip targets they cannot shoot without flying into anti-air (unless they can cloak) and write off a target they have not
   managed to fire at for a few seconds. They never just wait: over a base with nothing to shoot they move on to the next one, and with no
   base worth a visit they rejoin the army for a while; a hurt one waits for its repair on open ground in the lane between a townhall and

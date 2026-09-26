@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.bot_ai import BotAI
@@ -13,9 +13,27 @@ made_raven = False
 # tech lab), and how many we want of it
 _PRIORITY_MAKERS = {
     UnitTypeId.SIEGETANK: (UnitTypeId.FACTORY, True),
+    UnitTypeId.CYCLONE: (UnitTypeId.FACTORY, True),
     UnitTypeId.RAVEN: (UnitTypeId.STARPORT, True),
     UnitTypeId.VIKINGFIGHTER: (UnitTypeId.STARPORT, False),
 }
+
+
+CYCLONES_PER_TANK = 3      # a mech-led army (army_advisor.mech_focus): this many Cyclones for every Siege Tank we have, the first tank after three
+
+
+def factory_order(self : BotAI) -> List[UnitTypeId]:
+    """What a Factory with a Tech Lab makes, the one wanted most first, leaving out what is at its cap (units in production count).
+    Usually the Tanks come first. A mech-led army (army_advisor.mech_focus) is Cyclones first - the tank only when CYCLONES_PER_TANK more
+    of them have been made since the last one - so the Cyclones are there early and the Tanks follow, and the Tanks make up for it once
+    the Cyclones are at their cap."""
+    advisor = self.army_advisor
+    tanks = self.units.of_type({UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED}).amount + self.already_pending(UnitTypeId.SIEGETANK)
+    cyclones = self.units(UnitTypeId.CYCLONE).amount + self.already_pending(UnitTypeId.CYCLONE)
+    tank_due = not advisor.mech_focus or cyclones >= CYCLONES_PER_TANK * (tanks + 1)
+    order = [UnitTypeId.SIEGETANK, UnitTypeId.CYCLONE] if tank_due else [UnitTypeId.CYCLONE, UnitTypeId.SIEGETANK]
+    caps = {UnitTypeId.SIEGETANK: (tanks, advisor.max_tanks), UnitTypeId.CYCLONE: (cyclones, advisor.max_cyclones)}
+    return [unit for unit in order if caps[unit][0] < caps[unit][1]]
 
 
 def priority_reserve(self : BotAI) -> Optional[Tuple[UnitTypeId, int, int]]:
@@ -26,10 +44,16 @@ def priority_reserve(self : BotAI) -> Optional[Tuple[UnitTypeId, int, int]]:
     waits for ever. So when the scouting has made a unit our priority (army_advisor.priority_units) and a building that can make it is
     standing ready and idle, everything else in `produce` may only spend what is left over after its price.
 
+    A mech-led army (army_advisor.mech_focus) holds money for what its Factory makes next (`factory_order`) - Cyclones first - as the last
+    of them: whatever the scouting has called for is more urgent. Marines still get made, out of what is left over.
+
     Nothing is held back when it would be for nothing: the unit is not wanted any more (enough of them), nothing that can make it is
     idle, or the gas or the supply for it is missing (holding minerals for that would stall everything and buy nothing)."""
     advisor = self.army_advisor
-    for unit in advisor.priority_units:
+    candidates = list(advisor.priority_units)
+    if advisor.mech_focus and self.produce_from_factories:
+        candidates.extend(unit for unit in factory_order(self) if unit not in candidates)
+    for unit in candidates:
         if unit not in _PRIORITY_MAKERS:
             continue
         maker, needs_techlab = _PRIORITY_MAKERS[unit]
@@ -37,6 +61,8 @@ def priority_reserve(self : BotAI) -> Optional[Tuple[UnitTypeId, int, int]]:
             wanted = advisor.max_tanks
             have = self.units.of_type({UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED}).amount
             allowed = self.produce_from_factories
+        elif unit == UnitTypeId.CYCLONE:
+            wanted, have, allowed = advisor.max_cyclones, self.units(UnitTypeId.CYCLONE).amount, self.produce_from_factories
         elif unit == UnitTypeId.RAVEN:
             wanted, have, allowed = 1, self.units(UnitTypeId.RAVEN).amount, self.produce_from_starports
         else:
@@ -174,10 +200,10 @@ def produce(self : BotAI):
     if self.produce_from_factories:
         for fac in self.structures(UnitTypeId.FACTORY).ready.idle:
                 if fac.has_techlab:
-                    if afford(UnitTypeId.SIEGETANK) and self.units.of_type({UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED}).amount < self.army_advisor.max_tanks:
-                        fac.build(UnitTypeId.SIEGETANK)
-                    elif afford(UnitTypeId.CYCLONE) and self.units(UnitTypeId.CYCLONE).amount < self.army_advisor.max_cyclones:
-                        fac.build(UnitTypeId.CYCLONE)
+                    for unit_type in factory_order(self):
+                        if afford(unit_type):
+                            fac.build(unit_type)
+                            break
                 elif fac.has_reactor:
                     if afford(UnitTypeId.CYCLONE) and self.units(UnitTypeId.CYCLONE).amount < self.army_advisor.max_cyclones:
                         fac.build(UnitTypeId.CYCLONE)

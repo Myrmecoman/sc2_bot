@@ -5,6 +5,7 @@ from bot.custom_utils import build_worker
 from bot.custom_utils import handle_add_ons
 from bot.custom_utils import handle_depot_status
 from bot.custom_utils import handle_upgrades
+from bot.custom_utils import research_cyclone_upgrade
 from bot.custom_utils import handle_supply
 from bot.custom_utils import handle_command_centers
 from bot.custom_utils import get_rally_point
@@ -55,6 +56,7 @@ class SmoothBrainBot(Sc2Bridge, AresBot):
         self.repair_backoff = {}                     # target tag -> until when nobody is looked for to repair it
         self.turret_backoff = {}                     # townhall tag -> until when no turret is tried for its mineral line again (see macro.build_turrets)
         self.worker_assigned_to_follow = {}          # lists workers assigned to follow objects (used to prevent Planetary Fortress rushes)
+        self.cyclone_upgrade_next_look = 0.0          # game time before which the Factory Tech Labs are not asked again what they can research (see custom_utils.research_cyclone_upgrade)
         self.oracle_fleeing = set()                  # tags of workers that dodged an Oracle and stay out of its range instead of going back to mining (see worker_micro.avoid_oracles)
         self.worker_assigned_to_defend = {}          # lists workers assigned to defend other workers during construction
         self.worker_assigned_to_resume_building = {} # lists workers assigned to resume the construction of a building
@@ -185,6 +187,7 @@ class SmoothBrainBot(Sc2Bridge, AresBot):
         handle_add_ons(self)
         produce(self)
         handle_upgrades(self)
+        await research_cyclone_upgrade(self)
 
         worker_micro(self)
         await self.army.update(iteration)

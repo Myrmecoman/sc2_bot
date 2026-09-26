@@ -171,6 +171,10 @@ BANK_MINERALS = 1000           # "piling up": this much unspent...
 BANK_GAS = 350                 # ...and this much gas, for the buildings that make gas units (a Factory, a Starport)
 END_GAME_SUPPLY = 100          # ...late in the game: at least this much supply used
 TURRET_BASE_RADIUS = 15.0      # a turret this close to a townhall belongs to its base
+# a mech-led army (army_advisor.mech_focus: against Protoss, whose units pick Marines up too easily) has the Factory for its core and a
+# smaller bio part: ONE Barracks for the first two bases (then Barracks, Factory, Starport, and a second Factory once a third base is up),
+# more Barracks only as the bases come
+MECH_BARRACKS_BY_BASES = {1: 1, 2: 1, 3: 2, 4: 3}
 
 
 def production_targets(self : BotAI) -> dict:
@@ -188,13 +192,16 @@ def production_targets(self : BotAI) -> dict:
     # a second factory is only worth it once we're actually planning a real mech presence
     factories = 2 if bases >= 3 and (advisor.max_tanks + advisor.max_cyclones) > 10 else (1 if bases >= 1 else 0)
     barracks = 6 if bases >= 4 else (5 if bases >= 3 else (2 if bases >= 2 else (1 if bases >= 1 else 0)))
+    if advisor.mech_focus:
+        barracks = MECH_BARRACKS_BY_BASES.get(min(bases, 4), 0)
     targets = {UnitTypeId.STARPORT: starports, UnitTypeId.FACTORY: factories, UnitTypeId.BARRACKS: barracks}
 
     if self.supply_used >= END_GAME_SUPPLY and self.minerals >= BANK_MINERALS:
         gas_banking = self.vespene >= BANK_GAS
         tanks = self.units.of_type({UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED}).amount
+        cyclones = self.units(UnitTypeId.CYCLONE).amount
         targets[UnitTypeId.BARRACKS] = max(targets[UnitTypeId.BARRACKS], have[UnitTypeId.BARRACKS] + 1)
-        if gas_banking and tanks < advisor.max_tanks:
+        if gas_banking and (tanks < advisor.max_tanks or cyclones < advisor.max_cyclones):
             targets[UnitTypeId.FACTORY] = max(targets[UnitTypeId.FACTORY], have[UnitTypeId.FACTORY] + 1)
         if gas_banking:
             targets[UnitTypeId.STARPORT] = max(targets[UnitTypeId.STARPORT], have[UnitTypeId.STARPORT] + 1)
@@ -255,6 +262,14 @@ async def macro(self : BotAI):
 
     if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.ENGINEERINGBAY, None, 2):
         await smart_build_behind_mineral(self, UnitTypeId.ENGINEERINGBAY)
+
+    # the vehicle upgrades of a mech-led army: an Armory as soon as the Barracks, Factory and Starport stand and a second base is up
+    if (
+        self.army_advisor.mech_focus and self.townhalls.amount >= 2
+        and self.structures(UnitTypeId.STARPORT).amount + self.already_pending(UnitTypeId.STARPORT) >= 1
+        and can_build_structure(self, UnitTypeId.ARMORY, None, 1)
+    ):
+        await smart_build_behind_mineral(self, UnitTypeId.ARMORY)
 
     if (self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) > 0.3 or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)) > 0.3 and can_build_structure(self, UnitTypeId.ARMORY, None, 1):
         await smart_build_behind_mineral(self, UnitTypeId.ARMORY)

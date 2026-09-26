@@ -23,7 +23,7 @@ def fresh(**kw):
     """the advisor's usual numbers"""
     advice = SimpleNamespace(marine_marauder_ratio=0.7, max_tanks=8, max_cyclones=0, max_hellions=6, max_ravens=1, max_medivacs=4,
                              max_vikings=4, max_liberators=0, max_battlecruisers=1, max_banshees=2, prioritize_vikings=False,
-                             raven_first=False, priority_units=[], turrets_per_base=0, starport_now=False)
+                             raven_first=False, priority_units=[], turrets_per_base=0, starport_now=False, mech_focus=False)
     for k, v in kw.items():
         setattr(advice, k, v)
     return advice
@@ -127,7 +127,9 @@ def make_advisor(race):
 def test_advisor_reacts_and_lets_go():
     sc, advisor = make_advisor(Race.Protoss)
     advisor.provide_advices()
-    check("advisor: nothing scouted, the usual Protoss numbers", not advisor.raven_first and advisor.turrets_per_base == 0 and advisor.max_tanks == 6, str(advisor.active_reactions))
+    check("advisor: nothing scouted, the usual Protoss numbers: a mech-led army - 12 Cyclones, a few (4) Tanks, a Tech Lab on every Factory",
+          not advisor.raven_first and advisor.turrets_per_base == 0 and advisor.max_tanks == 4 and advisor.max_cyclones == 12
+          and advisor.mech_focus and advisor.factory_techlab_ratio == 1.0, str((advisor.active_reactions, vars(advisor))))
     shrine = sc.enemy(U.DARKSHRINE, (150, 150))
     advisor.provide_advices()
     check("advisor: a Dark Shrine scouted -> Raven first, turrets, Starport now",
@@ -142,13 +144,27 @@ def test_advisor_reacts_and_lets_go():
 def test_advisor_skytoss_tank_ceiling():
     sc, advisor = make_advisor(Race.Protoss)
     advisor.provide_advices()
-    check("advisor: no skytoss, the usual 6 tanks", advisor.max_tanks == 6, str(advisor.max_tanks))
+    check("advisor: no skytoss, the usual 4 tanks and 12 Cyclones", advisor.max_tanks == 4 and advisor.max_cyclones == 12, str((advisor.max_tanks, advisor.max_cyclones)))
     gate = sc.enemy(U.STARGATE, (150, 150))
     advisor.provide_advices()
-    check("advisor: a Stargate scouted -> 2 tanks at most, and the anti-air answer is on (6 cyclones)", advisor.max_tanks == 2 and advisor.max_cyclones == 6, str((advisor.max_tanks, advisor.max_cyclones)))
+    check("advisor: a Stargate scouted -> 2 tanks at most, the Cyclones (12) stay and Vikings come", advisor.max_tanks == 2 and advisor.max_cyclones == 12 and advisor.max_vikings == 10 and advisor.prioritize_vikings, str((advisor.max_tanks, advisor.max_cyclones)))
     sc.ai._enemies.remove(gate)
     advisor.provide_advices()
-    check("advisor: the Stargate gone, the ceiling goes with it", advisor.max_tanks == 6, str(advisor.max_tanks))
+    check("advisor: the Stargate gone, the ceiling goes with it", advisor.max_tanks == 4, str(advisor.max_tanks))
+
+
+def test_advisor_mech_focus_is_a_protoss_thing():
+    for race in (Race.Zerg, Race.Terran):
+        sc, advisor = make_advisor(race)
+        advisor.provide_advices()
+        check(f"advisor: against {race.name} the army is not mech-led (no Cyclones, Tech Labs on half the Factories)", not advisor.mech_focus and advisor.max_cyclones == 0 and advisor.factory_techlab_ratio == 0.5, str(vars(advisor)))
+    sc, advisor = make_advisor(Race.Protoss)
+    sc.enemy(U.COLOSSUS, (150, 150))
+    sc.enemy(U.IMMORTAL, (151, 150))
+    sc.enemy(U.IMMORTAL, (152, 150))
+    sc.enemy(U.IMMORTAL, (153, 150))
+    advisor.provide_advices()
+    check("advisor: a Colossus and Immortals: a few more tanks (6), and still the Cyclones", advisor.max_tanks == 6 and advisor.max_cyclones == 12, str((advisor.max_tanks, advisor.max_cyclones)))
 
 
 def test_advisor_random_opponent_gets_its_races_numbers_once_seen():

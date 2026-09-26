@@ -6,13 +6,20 @@ building limits: never more than 6 Barracks, 2 Factories and 2 Starports - and m
   skytoss    a Stargate scouted: the Factory stops at 2 tanks and makes Cyclones
   turrets    a Dark Shrine scouted: an Engineering Bay, then a missile turret in the mineral line
   starport   ... and the Starport is built now, not once a second base is up
-  caps       6 Barracks / 2 Factories / 2 Starports at most, the bank builds one more at a time while it piles up"""
+  caps       6 Barracks / 2 Factories / 2 Starports at most, the bank builds one more at a time while it piles up
+
+Against Protoss (a mech-led army, army_advisor.mech_focus):
+  cyclones   the Factory makes Cyclones first, a Tank once three more Cyclones than 3 x tanks are out; money is held back for them
+             (Marines carry on with what is left); the Cyclone research is ordered once we make Cyclones
+  buildings  one Barracks for two bases (two at three), the Starport once the Factory stands, a second Factory at three bases, an
+             Armory once the Starport is up, a Tech Lab on every Factory"""
 import _bootstrap  # noqa: F401  (repo root on sys.path - keep this first)
 import asyncio
 from loguru import logger
 from s2clientprotocol import common_pb2
 from sc2.ids.ability_id import AbilityId as A
 from sc2.ids.unit_typeid import UnitTypeId as U
+from sc2.ids.upgrade_id import UpgradeId
 
 import bot.production as production
 import gamefix_more  # noqa: F401
@@ -35,7 +42,7 @@ def with_addon(game, type_id, addon_type, pos):
     return building
 
 
-def play(setup, race=common_pb2.Zerg, minerals=500, gas=200, supply=(60, 200), frames=4):
+def play(setup, race=common_pb2.Zerg, minerals=500, gas=200, supply=(60, 200), frames=4, upgrades=()):
     """Build the game, let `setup(game, cx, cy)` add to it, run a few frames; returns the set of abilities the bot ordered"""
     production.made_banshee = production.made_raven = False
     logger.remove()
@@ -50,7 +57,7 @@ def play(setup, race=common_pb2.Zerg, minerals=500, gas=200, supply=(60, 200), f
     client, proto_gi = loop.run_until_complete(start_game(game, bot))
     bot.build_order = []                                # the scripted opening is not what is being tested
     for i in range(frames):
-        loop.run_until_complete(run_frame(game, bot, proto_gi, i, supply_used=supply[0], supply_cap=supply[1]))
+        loop.run_until_complete(run_frame(game, bot, proto_gi, i, supply_used=supply[0], supply_cap=supply[1], upgrades=upgrades))
     assert not errors, errors[:1]
     return {a.ability for a in client.sent_actions}
 
@@ -71,6 +78,98 @@ def count_barracks(game, n, busy=True):
 def more_bases(game, n):
     for name in ("our_nat", "our_third", "enemy_third")[:n]:
         game.add(U.COMMANDCENTER, BASES[name], 1)
+
+
+def mech():
+    Protoss, Zerg = common_pb2.Protoss, common_pb2.Zerg
+
+    def names(done):
+        return str(sorted(a.name for a in done))
+
+    def factory(cyclones=0, tanks=0):
+        def setup(game, cx, cy):
+            with_addon(game, U.FACTORY, U.FACTORYTECHLAB, (cx + 14, cy - 6))
+            for k in range(cyclones):
+                game.add(U.CYCLONE, (cx + 8 + 2 * (k % 5), cy + 12 + 2 * (k // 5)), 1)
+            for k in range(tanks):
+                game.add(U.SIEGETANK, (cx + 8 + 2 * k, cy + 8), 1)
+        return setup
+
+    # ---- what the Factory makes: Cyclones first, a tank for every three
+    done = play(factory(), race=Protoss, minerals=600, gas=400, frames=1)
+    check("cyclones: Protoss, an idle Factory with a Tech Lab: a Cyclone - not a Tank", A.TRAIN_CYCLONE in done and A.FACTORYTRAIN_SIEGETANK not in done, names(done))
+    done = play(factory(), race=Zerg, minerals=600, gas=400, frames=1)
+    check("cyclones (control): against Zerg the Tank comes first, as it did", A.FACTORYTRAIN_SIEGETANK in done and A.TRAIN_CYCLONE not in done, names(done))
+    done = play(factory(cyclones=2), race=Protoss, minerals=600, gas=400, frames=1)
+    check("cyclones: two out, no tank yet: another Cyclone", A.TRAIN_CYCLONE in done and A.FACTORYTRAIN_SIEGETANK not in done, names(done))
+    done = play(factory(cyclones=3), race=Protoss, minerals=600, gas=400, frames=1)
+    check("cyclones: three out, no tank yet: the tank is due", A.FACTORYTRAIN_SIEGETANK in done and A.TRAIN_CYCLONE not in done, names(done))
+    done = play(factory(cyclones=3, tanks=1), race=Protoss, minerals=600, gas=400, frames=1)
+    check("cyclones: three out and a tank: Cyclones again (the next tank waits for six)", A.TRAIN_CYCLONE in done and A.FACTORYTRAIN_SIEGETANK not in done, names(done))
+    done = play(factory(cyclones=12, tanks=1), race=Protoss, minerals=600, gas=400, frames=1)
+    check("cyclones: at the cap of 12 the Factory makes tanks (up to 4) instead of nothing", A.FACTORYTRAIN_SIEGETANK in done and A.TRAIN_CYCLONE not in done, names(done))
+    done = play(factory(cyclones=12, tanks=4), race=Protoss, minerals=600, gas=400, frames=1)
+    check("cyclones: ...and nothing once both are at their caps", A.FACTORYTRAIN_SIEGETANK not in done and A.TRAIN_CYCLONE not in done, names(done))
+
+    # ---- cyclones get priority over bio: money is held for them
+    done = play(factory(), race=Zerg, minerals=120, gas=100)
+    check("priority (control): against Zerg the Barracks spends its 50 on a Marine at once", A.BARRACKSTRAIN_MARINE in done, names(done))
+    done = play(factory(), race=Protoss, minerals=120, gas=100)
+    check("priority: against Protoss no Marine while the Cyclone (125) is not paid for yet", A.BARRACKSTRAIN_MARINE not in done and A.TRAIN_CYCLONE not in done, names(done))
+    done = play(factory(), race=Protoss, minerals=400, gas=100)
+    check("priority: ...the moment there is enough the Factory builds it", A.TRAIN_CYCLONE in done, names(done))
+    done = play(factory(), race=Protoss, minerals=120, gas=20)
+    check("priority: no gas for a Cyclone (50) -> nothing is held back for it, Marines carry on", A.BARRACKSTRAIN_MARINE in done, names(done))
+
+    # ---- the buildings: 1 Barracks, the Factory, the Starport; a second Factory later; the Armory
+    def bases(n, barracks=1, factories=0, starports=0, armory=False):
+        def setup(game, cx, cy):
+            more_bases(game, n - 1)
+            count_barracks(game, barracks)
+            for k in range(factories):
+                game.add(U.FACTORY, (cx + 14 + 4 * k, cy - 6), 1)
+            for k in range(starports):
+                game.add(U.STARPORT, (cx + 14 + 4 * k, cy + 4), 1)
+            if armory:
+                game.add(U.ARMORY, (cx - 10, cy - 12), 1)
+        return setup
+    done = play(bases(2, factories=1), race=Zerg, minerals=900, gas=300)
+    check("buildings (control): against Zerg two bases build a second Barracks", A.TERRANBUILD_BARRACKS in done, names(done))
+    done = play(bases(2, factories=1), race=Protoss, minerals=900, gas=300)
+    check("buildings: against Protoss two bases keep ONE Barracks - and the Starport goes up once the Factory stands", A.TERRANBUILD_BARRACKS not in done and A.TERRANBUILD_STARPORT in done, names(done))
+    done = play(bases(2, factories=1, starports=1), race=Protoss, minerals=900, gas=300)
+    check("buildings: ...one Factory for two bases", A.TERRANBUILD_FACTORY not in done, names(done))
+    done = play(bases(3, factories=1, starports=1), race=Protoss, minerals=900, gas=300)
+    check("buildings: three bases: a second Factory and a second Barracks", A.TERRANBUILD_FACTORY in done and A.TERRANBUILD_BARRACKS in done, names(done))
+    done = play(bases(3, barracks=2, factories=2, starports=1), race=Protoss, minerals=900, gas=300)
+    check("buildings: ...and no third Barracks yet", A.TERRANBUILD_BARRACKS not in done, names(done))
+    done = play(bases(2, factories=1, starports=1), race=Protoss, minerals=900, gas=300)
+    check("armory: against Protoss, two bases and the Starport up: an Armory for the vehicle upgrades", A.TERRANBUILD_ARMORY in done, names(done))
+    done = play(bases(2, factories=1), race=Protoss, minerals=900, gas=300)
+    check("armory: ...not before the Starport", A.TERRANBUILD_ARMORY not in done, names(done))
+    done = play(bases(2, factories=1, starports=1, armory=True), race=Protoss, minerals=900, gas=300)
+    check("armory: ...and only one", A.TERRANBUILD_ARMORY not in done, names(done))
+    done = play(bases(2, factories=1, starports=1), race=Zerg, minerals=900, gas=300)
+    check("armory (control): against Zerg nothing calls for one yet", A.TERRANBUILD_ARMORY not in done, names(done))
+
+    # ---- a Tech Lab on every Factory
+    def two_factories(game, cx, cy):
+        with_addon(game, U.FACTORY, U.FACTORYTECHLAB, (cx + 14, cy - 6))
+        game.add(U.FACTORY, (cx + 20, cy - 6), 1)
+    done = play(two_factories, race=Protoss, minerals=600, gas=300)
+    check("add-ons: against Protoss the second Factory gets a Tech Lab too", A.BUILD_TECHLAB_FACTORY in done and A.BUILD_REACTOR_FACTORY not in done, names(done))
+    done = play(two_factories, race=Zerg, minerals=600, gas=300)
+    check("add-ons (control): against Zerg it gets a Reactor", A.BUILD_REACTOR_FACTORY in done and A.BUILD_TECHLAB_FACTORY not in done, names(done))
+
+    # ---- the Cyclone research
+    done = play(factory(cyclones=1), race=Protoss, minerals=600, gas=300)
+    check("research: a Cyclone out and an idle Tech Lab: the Cyclone upgrade the Tech Lab offers is researched", A.RESEARCH_CYCLONELOCKONDAMAGE in done, names(done))
+    done = play(factory(), race=Protoss, minerals=600, gas=300, frames=1)
+    check("research: ...but not before we make Cyclones (the first is being ordered in this very frame)", A.RESEARCH_CYCLONELOCKONDAMAGE not in done, names(done))
+    done = play(factory(cyclones=1), race=Protoss, minerals=600, gas=300, upgrades=(UpgradeId.CYCLONELOCKONDAMAGEUPGRADE,))
+    check("research: ...nor when it is done already", A.RESEARCH_CYCLONELOCKONDAMAGE not in done, names(done))
+    done = play(factory(cyclones=1), race=Protoss, minerals=600, gas=50)
+    check("research: ...nor without the gas for it", A.RESEARCH_CYCLONELOCKONDAMAGE not in done, names(done))
 
 
 def main():
@@ -111,6 +210,8 @@ def main():
             with_addon(game, U.FACTORY, U.FACTORYTECHLAB, (cx + 14, cy - 6))
             for k in range(2):
                 game.add(U.SIEGETANK, (cx + 8 + 2 * k, cy + 8), 1)
+            for k in range(9):                                     # (a mech-led army makes its third tank after nine Cyclones)
+                game.add(U.CYCLONE, (cx + 8 + 2 * (k % 5), cy + 12 + 2 * (k // 5)), 1)
             if stargate:
                 game.add(U.STARGATE, BASES["enemy_main"], 4)
         return setup
@@ -170,6 +271,8 @@ def main():
     done = play(full_house, minerals=3000, gas=1000, supply=(140, 200))
     check("caps: 6 Barracks, 2 Factories and 2 Starports - nothing more is built, whatever the bank",
           not ({A.TERRANBUILD_BARRACKS, A.TERRANBUILD_FACTORY, A.TERRANBUILD_STARPORT} & done), str(sorted(a.name for a in done)))
+
+    mech()
 
     failed = [r for r in RESULTS if not r[1]]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")

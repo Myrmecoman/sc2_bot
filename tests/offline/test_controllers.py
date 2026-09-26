@@ -8,6 +8,7 @@ from sc2.ids.ability_id import AbilityId as A
 from sc2.ids.buff_id import BuffId
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
+from sc2.data import Race
 from sc2.position import Point2
 
 import gamefix_more  # noqa: F401  (more unit types for the fixture: banelings, ...)
@@ -1407,6 +1408,205 @@ def test_base_defense_ignores_a_forward_auto_turret():
     sc.enemy_many(U.ROACH, 8, (34, 26))
     threats = sc.manager.defense.find_threats(begin(sc))
     check("defense: (control) the same units around a building at home are", len(threats) == 1 and len(threats[0].units) == 8, str(len(threats)))
+
+
+# ------------------------------------------------------------------------------------------------------------------------------
+# Cyclone raids against Protoss (units/cyclone_raid.py): lock on, step back, again - never without a Lock On, and only at what can be reached safely
+# ------------------------------------------------------------------------------------------------------------------------------
+def _raider(sc, pos, lock=True, air_lock=True, **kw):
+    cy = sc.own(U.CYCLONE, pos, role=UnitRole.HARASSING, **kw)
+    sc.ai.ability_grants[cy.tag] = ({A.LOCKON_LOCKON} if lock else set()) | ({A.LOCKONAIR_LOCKONAIR} if air_lock else set())
+    return cy
+
+
+def _raid_step(sc, *raiders, **order_kw):
+    from bot.ares_compat import refresh_ability_cache
+    asyncio.run(refresh_ability_cache(sc.ai, sc.ai.units))
+    ctx = begin(sc)
+    sc.manager.cyclone_raid.control(sc.world.units(list(raiders)), orders(sc, **order_kw), ctx)
+    return [cmds(sc, cy) for cy in raiders] if len(raiders) > 1 else cmds(sc, raiders[0])
+
+
+def _cast_on(c, target):
+    return any(a in (A.LOCKON_LOCKON, A.LOCKONAIR_LOCKONAIR) and getattr(t, "tag", None) == target.tag for a, t, q in c)
+
+
+def _no_attack(c):
+    return not any(a in (A.LOCKON_LOCKON, A.LOCKONAIR_LOCKONAIR, A.ATTACK, A.ATTACK_ATTACK) for a, t, q in c)
+
+
+def test_raid_locks_on_to_a_lone_unit_in_range_and_walks_up_to_one_out_of_it():
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100))
+    stalker = sc.enemy(U.STALKER, (106, 100))
+    c = _raid_step(sc, cy)
+    check("raid: a lone Stalker in cast range: Lock On", _cast_on(c, stalker), str(c))
+    check("raid: ...the lock is recorded (it kites now, cyclones.py)", sc.manager.cyclones.locks.get(cy.tag, (None,))[0] == stalker.tag, str(sc.manager.cyclones.locks))
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100))
+    sc.enemy(U.STALKER, (114, 100))
+    c = _raid_step(sc, cy)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("raid: one 14 away: it walks to a spot just inside the cast range of it (7 - a little), not into its own range", _no_attack(c) and moves and abs(moves[0][0] - 106.85) < 0.3, str(c))
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100))
+    sc.enemy(U.STALKER, (135, 100))
+    c = _raid_step(sc, cy)
+    check("raid: ...one 35 away is not gone for (the search heads for it, below)", _no_attack(c), str(c))
+
+
+def test_raid_target_priority_units_then_batteries_then_cannons_then_workers():
+    def chosen(*enemies):
+        sc = mk(enemy_race=Race.Protoss)
+        cy = _raider(sc, (100, 100))
+        made = {name: sc.enemy(type_id, pos) for name, type_id, pos in reversed(enemies)}      # (the least wanted is made first: a tie would pick it)
+        c = _raid_step(sc, cy)
+        return next((name for name, e in made.items() if _cast_on(c, e)), None), c
+    # (far apart, so that none of them makes the cast on another unsafe)
+    everything = (("stalker", U.STALKER, (100, 106.5)), ("battery", U.SHIELDBATTERY, (106.5, 100)), ("cannon", U.PHOTONCANNON, (100, 120)),
+                  ("probe", U.PROBE, (93.5, 100)), ("pylon", U.NEXUS, (93, 93)))
+    name, c = chosen(*everything)
+    check("raid: units first (a Stalker, before a Battery, a Cannon, a Probe)", name == "stalker", str((name, c)))
+    name, c = chosen(*everything[1:])
+    check("raid: then Shield Batteries", name == "battery", str((name, c)))
+    name, c = chosen(*everything[2:])
+    check("raid: then Photon Cannons", name == "cannon" or (name is None and any(a == A.MOVE_MOVE for a, t, q in c)), str((name, c)))
+    name, c = chosen(*everything[3:])
+    check("raid: workers only when there is nothing else - and never a Nexus", name == "probe", str((name, c)))
+    name, c = chosen(*everything[4:])
+    check("raid: a Nexus alone is not a target", name is None and _no_attack(c), str((name, c)))
+
+
+def test_raid_only_attacks_with_a_lock_on_available():
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100), lock=False, air_lock=False)
+    sc.enemy(U.STALKER, (106, 100))
+    c = _raid_step(sc, cy)
+    check("raid: no Lock On -> no attack at all, and it backs out of the Stalker's reach instead", _no_attack(c) and any(a == A.MOVE_MOVE and t[0] < 100 for a, t, q in c), str(c))
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100), lock=False, air_lock=False)
+    sc.enemy(U.STALKER, (120, 100))
+    c = _raid_step(sc, cy)
+    check("raid: ...out of reach of everything it waits: nothing is ordered", c == [], str(c))
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100), lock=True, air_lock=False)
+    sc.enemy(U.VOIDRAY, (106, 100))
+    c = _raid_step(sc, cy)
+    check("raid: an air target needs the AIR Lock On: with only the ground one it does not cast (and backs off)", _no_attack(c), str(c))
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100), lock=False, air_lock=True)
+    voidray = sc.enemy(U.VOIDRAY, (106, 100))
+    c = _raid_step(sc, cy)
+    check("raid: ...and with it, it locks on to the Void Ray", any(a == A.LOCKONAIR_LOCKONAIR and t.tag == voidray.tag for a, t, q in c), str(c))
+
+
+def test_raid_leaves_what_it_cannot_reach_safely():
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100))
+    sc.enemy(U.STALKER, (106, 100))
+    sc.enemy(U.STALKER, (106, 103))                                        # two together: each covers the spot the cast on the other is made from
+    c = _raid_step(sc, cy)
+    check("raid: two Stalkers side by side are not 'almost free damage': no cast, it backs off", _no_attack(c) and any(a == A.MOVE_MOVE and t[0] < 100 for a, t, q in c), str(c))
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100))
+    lone = sc.enemy(U.STALKER, (106, 100))
+    sc.enemy(U.STALKER, (100, 125))                                        # another one, far off: no reason to hold back
+    c = _raid_step(sc, cy)
+    check("raid: (control) with the second one far away the first is locked on to", _cast_on(c, lone), str(c))
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100))
+    near = sc.enemy(U.STALKER, (100, 106))                                 # it covers the Cyclone where it stands (and is locked on to already: not a target)
+    sc.manager.cyclones.lock_ons[near.tag] = sc.ai.time
+    sc.enemy(U.STALKER, (118, 100))                                        # the spot to cast on this one from is far from the first...
+    c = _raid_step(sc, cy)
+    check("raid: ...but the way there starts in the reach of the first: not taken - it backs off", not any(a == A.MOVE_MOVE and t[0] > 101 for a, t, q in c) and any(a == A.MOVE_MOVE and t[1] < 100 for a, t, q in c), str(c))
+
+
+def test_raid_a_cannon_may_shoot_the_cast_but_nothing_else_may():
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100))
+    cannon = sc.enemy(U.PHOTONCANNON, (108, 100))
+    c = _raid_step(sc, cy)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("raid: a Cannon 8 away: it walks up to the cast range (its 7 reaches the spot: a shot or two is the price)", moves and abs(moves[0][0] - 100.85) < 0.3, str(c))
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (101, 100))
+    cannon = sc.enemy(U.PHOTONCANNON, (108, 100))
+    c = _raid_step(sc, cy)
+    check("raid: ...and in cast range it locks on to it", _cast_on(c, cannon), str(c))
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (101, 100))
+    cannon = sc.enemy(U.PHOTONCANNON, (108, 100), build_progress=0.5)
+    c = _raid_step(sc, cy)
+    check("raid: (an unfinished Cannon shoots nobody: no reason to stay out of its range, it is a target all the same)", _cast_on(c, cannon), str(c))
+
+
+def test_raid_two_cyclones_do_not_lock_on_to_the_same_unit():
+    sc = mk(enemy_race=Race.Protoss)
+    a, b = _raider(sc, (100, 100)), _raider(sc, (100, 101))
+    stalker = sc.enemy(U.STALKER, (106, 100))
+    ca, cb = _raid_step(sc, a, b)
+    check("raid: two Cyclones, one Stalker: one casts, the other does not spend its lock on the same unit", _cast_on(ca, stalker) != _cast_on(cb, stalker), str((ca, cb)))
+
+
+def test_raid_goes_looking_and_stops_outside_reach():
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100))
+    sc.enemy(U.PHOTONCANNON, (140, 100), visible=False)                    # a Cannon we saw before (a snapshot: cannot be locked on to)
+    c = _raid_step(sc, cy)
+    check("raid: nothing in sight: it heads for the Cannon it knows of", _no_attack(c) and any(a == A.MOVE_MOVE and t[0] > 130 for a, t, q in c), str(c))
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100))
+    c = _raid_step(sc, cy)
+    check("raid: nothing known at all: it heads for their natural", any(a == A.MOVE_MOVE and abs(t[0] - 150) < 1 and abs(t[1] - 150) < 1 for a, t, q in c), str(c))
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100))
+    sc.enemy(U.STALKER, (125, 100))                                        # too far to go for (24 gap) - but it is where the search goes, and it can hit back
+    c = _raid_step(sc, cy)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("raid: ...and it stops outside the reach of what it sees on the way (a Stalker's 6 + radii + margin)", moves and 116 < moves[0][0] < 117.5, str(c))
+
+
+def test_raid_hurt_cyclone_goes_home_and_comes_back():
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100), hp=60)
+    sc.enemy(U.STALKER, (106, 100))
+    c = _raid_step(sc, cy)
+    check("raid: a Cyclone below half health goes home to be repaired instead of locking on", _no_attack(c) and any(a == A.MOVE_MOVE and abs(t[0] - 60) < 1 for a, t, q in c) and cy.tag in sc.manager.cyclone_raid.retreating, str(c))
+    sc.ai._own.remove(cy)
+    cy = sc.own(U.CYCLONE, (62, 60), tag=cy.tag, role=UnitRole.HARASSING, hp=170)
+    sc.ai.ability_grants[cy.tag] = {A.LOCKON_LOCKON}
+    _raid_step(sc, cy)
+    check("raid: ...and is back at it once it is repaired (above 90%)", cy.tag not in sc.manager.cyclone_raid.retreating, str(sc.manager.cyclone_raid.retreating))
+
+
+def test_raid_a_waiting_cyclone_does_not_shoot_what_is_in_its_range():
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100), lock=False, air_lock=False)
+    sc.enemy(U.PROBE, (103, 100))
+    sc.enemy(U.NEXUS, (98, 106))
+    c = _raid_step(sc, cy)
+    check("raid: no Lock On and workers or buildings in its weapon range: it steps out of it (idle, it would shoot them)",
+          _no_attack(c) and any(a == A.MOVE_MOVE for a, t, q in c), str(c))
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100), lock=False, air_lock=False)
+    sc.enemy(U.PROBE, (108, 100))
+    c = _raid_step(sc, cy)
+    check("raid: ...out of it (8 away) it stays where it is", c == [], str(c))
+
+
+def test_raid_geometry():
+    from bot.army.units.cyclone_raid import clip_before, segment_hits_circle
+    p = Point2
+    check("raid geometry: a way that passes a circle within its radius hits it, one that misses does not",
+          segment_hits_circle(p((0, 0)), p((10, 0)), p((5, 2)), 3) and not segment_hits_circle(p((0, 0)), p((10, 0)), p((5, 4)), 3)
+          and not segment_hits_circle(p((0, 0)), p((4, 0)), p((10, 0)), 3))
+    q = clip_before(p((0, 0)), p((20, 0)), [(p((15, 0)), 5)])
+    check("raid geometry: clipped before it enters a circle", abs(q.x - 10) < 1e-9 and abs(q.y) < 1e-9, str(q))
+    q = clip_before(p((0, 0)), p((20, 0)), [(p((15, 8)), 5), (p((12, 0)), 4)])
+    check("raid geometry: ...the first of several", abs(q.x - 8) < 1e-9, str(q))
+    check("raid geometry: no circle in the way: the whole way; a start inside one: no way at all",
+          clip_before(p((0, 0)), p((20, 0)), [(p((15, 9)), 5)]) == p((20, 0)) and clip_before(p((0, 0)), p((20, 0)), [(p((2, 0)), 5)]) == p((0, 0)))
 
 
 def main():

@@ -10,6 +10,8 @@ macro read:
                      Starport that stands ready from affording them (production.py, `priority_reserve`)
     turrets_per_base missile turrets in every mineral line (macro.py, `build_turrets`)
     starport_now     the Starport is built at once, not once a second base is up (macro.py)
+    mech_focus       the army is led by the Factory (Cyclones, a few Tanks) with a smaller bio part: fewer Barracks, an Armory for the
+                     vehicle upgrades, the Cyclone research, Tech Labs on every Factory (macro.py, production.py, custom_utils.py)
 
 Caps only ever go UP (`raise_to`), so two rules never undo each other - the one exception is the last rule, which puts a ceiling on the
 tanks against skytoss; the marine share goes down for armored armies (more Marauders)
@@ -31,7 +33,7 @@ from bot.pathing.consts import SKYTOSS_TYPES
 KNOBS = (
     "marine_marauder_ratio", "max_tanks", "max_cyclones", "max_hellions", "max_ravens", "max_medivacs", "max_vikings",
     "max_liberators", "max_battlecruisers", "max_banshees", "prioritize_vikings", "raven_first", "priority_units",
-    "turrets_per_base", "starport_now",
+    "turrets_per_base", "starport_now", "mech_focus",
 )
 
 
