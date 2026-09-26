@@ -27,6 +27,7 @@ CHECKS = [
     ("whole bot, scripted events + step timing", "test_dynamic2.py", {}, True),
     ("whole bot, reaper grenade on real Ares paths", "test_reaper_grenade.py", {}, True),
     ("whole bot, SCV repairs: at most 4 per target, at most 70 walked, only near home", "test_repair_leash.py", {}, True),
+    ("whole bot, workers dodge an Oracle instead of huddling under it", "test_worker_oracle.py", {}, True),
     ("scouting reactions: the rules, and the advisor's use of them", "test_reactions.py", {}, True),
     ("whole bot, reactions in production/macro + the 6/2/2 production limits", "test_production_reactions.py", {}, True),
     ("no numpy-typed points leak into orders", "np_contagion.py", {}, True),

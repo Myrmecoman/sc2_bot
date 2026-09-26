@@ -55,6 +55,7 @@ class SmoothBrainBot(Sc2Bridge, AresBot):
         self.repair_backoff = {}                     # target tag -> until when nobody is looked for to repair it
         self.turret_backoff = {}                     # townhall tag -> until when no turret is tried for its mineral line again (see macro.build_turrets)
         self.worker_assigned_to_follow = {}          # lists workers assigned to follow objects (used to prevent Planetary Fortress rushes)
+        self.oracle_fleeing = set()                  # tags of workers that dodged an Oracle and stay out of its range instead of going back to mining (see worker_micro.avoid_oracles)
         self.worker_assigned_to_defend = {}          # lists workers assigned to defend other workers during construction
         self.worker_assigned_to_resume_building = {} # lists workers assigned to resume the construction of a building
         self.worker_assigned_to_expand = {}          # lists workers assigned to expand /!\ not used yet

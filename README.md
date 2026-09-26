@@ -38,6 +38,11 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   SCVs that are mining or idle are sent, never the scout or the scripted build order's builder. A flying unit is only repaired where an
   SCV can stand under it: over the middle of a townhall (a 5x5 block, checked on Ares' clean ground grid) the SCV stops at the edge, out
   of repair range.
+* **Workers dodge Oracles** (`worker_micro.py`): a worker within 7.5 of an Oracle moves straight away from it (from all of them, the nearer
+  counting for more) - to walkable ground within 22 of a townhall, 6 at a time, so it is never inside the Pulsar Beam's range (5 is what
+  they keep out of) - instead of running to the townhall like from any other threat, which is where the Oracle follows them to. A worker
+  that has fled stays out, not back to mining under the Oracle, until it is more than 10 away or gone. A hallucinated Oracle moves nobody;
+  SCVs that are repairing or constructing are left alone.
 * **Reactions to the scouting** (`reactions.py`): a table of rules, "we have seen X -> change Y", applied on top of the advisor's usual
   per-race numbers every step (so nothing sticks once its trigger is gone) and logged once each as `[react] ...`. A Dark Shrine (or Dark
   Templar): the Starport makes a Raven before a Banshee, is built at once, a missile turret goes into every mineral line. A Roach Warren:

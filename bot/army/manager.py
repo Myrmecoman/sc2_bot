@@ -728,5 +728,6 @@ class ArmyManager:
     def _harass(self, controller, units: Units, main_orders: GroupOrders, ctx: ArmyContext) -> None:
         if not units:
             return
-        # harassers take their targets from their own logic; the orders only carry the hold point (where to repair)
+        # harassers take their targets from their own logic; the orders only carry the hold point (where a hurt reaper goes to heal) and
+        # the army's anchor (what a banshee with nothing to do rejoins) - a hurt banshee's repair spot is worked out in units/banshees.py
         controller.control(units, main_orders, ctx)

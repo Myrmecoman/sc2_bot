@@ -52,7 +52,7 @@ def micro_worker(self : BotAI) -> None:
         return
 
     for unit in self.workers:
-        if unit.is_idle:
+        if unit.is_idle and unit.tag not in self.oracle_fleeing:       # (one that is keeping out of an Oracle's way stays where it is: worker_micro.py)
             townhall = self.townhalls.ready.closest_to(unit)
             patch = self.mineral_field.closest_to(townhall)
             unit.gather(patch)
