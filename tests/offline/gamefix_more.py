@@ -48,6 +48,9 @@ gamefix.STATS.update({
 gamefix.FLYING_TYPES.update({U.PHOENIX, U.CARRIER, U.TEMPEST, U.ORACLE, U.MOTHERSHIP, U.OBSERVER, U.WARPPRISM, U.VOIDRAY,
                              U.MUTALISK, U.CORRUPTOR, U.BROODLORD, U.VIPER, U.OVERSEER, U.INTERCEPTOR})
 
+# a Raven's Auto-Turret (ours, a structure, next to whatever the Raven is fighting - possibly at the enemy's base)
+gamefix.STATS[U.AUTOTURRET] = (150, 0, 1, 0.0, [(ANY, 18, 1, 6, 0.57, [])], [ARMORED, MECH, STRUCT], 0, 0, 0)
+
 # a mineral field (neutral): the reapers' tour of the enemy's mineral lines and the banshees' repair spot look at where they are
 gamefix.STATS[U.MINERALFIELD] = (100, 0, 0, 0.0, [], [], 0, 0, 0)
 

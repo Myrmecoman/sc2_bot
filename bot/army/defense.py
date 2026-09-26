@@ -91,7 +91,8 @@ class BaseDefense:
 
     # ------------------------------------------------------------------------------------------------------------
     def find_threats(self, ctx: ArmyContext) -> List[Threat]:
-        structures = list(self.ai.structures)
+        # (an Auto-Turret - a Raven's, dropped next to the enemy's army - is not a base: enemies around one are not attacking us)
+        structures = [s for s in self.ai.structures if s.type_id != U.AUTOTURRET]
         if not structures:
             return []
         near_lists = ctx.mediator.get_units_in_range(
