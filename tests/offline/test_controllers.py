@@ -979,6 +979,21 @@ def test_bio_spreads_out_on_the_way_in_to_sieged_tanks():
     held = points(80, mode=Mode.HOLD)
     check("bio: no splitting while holding position", not any(t.distance_to(Point2((80, 60))) < 3 for t in held), str(held[:3]))
 
+    # stopped on purpose (the staging point in front of tanks, a pause for the tail): the army holds, it does not charge the tanks
+    for what in ("staging", "pausing"):
+        sc = mk()
+        marines = sc.own_many(U.MARINE, 12, (60, 60), spacing=0.5)
+        sc.enemy(U.SIEGETANKSIEGED, (80, 60))
+        o = orders(sc, mode=Mode.ATTACK, target=(60, 60))
+        if what == "staging":
+            o.staging = Point2((60, 60))
+        else:
+            o.pausing = True
+        ctx = begin(sc)
+        sc.manager.bio.control(sc.world.units(marines), o, ctx)
+        ordered = [t for m in marines for a, t, q in cmds(sc, m) if a == A.ATTACK and hasattr(t, "x")]
+        check(f"bio: while the army is {what} it does not spread out towards the tanks it faces", ordered and all(t.x < 68 for t in ordered), str([round(t.x) for t in ordered]))
+
     # something already in weapon range: the fight logic, not the split
     sc = mk()
     m = sc.own(U.MARINE, (60, 60), cooldown=0.0)

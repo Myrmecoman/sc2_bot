@@ -86,6 +86,13 @@ tests/offline/               checks that need no StarCraft II, see the end of th
 * **Marching**: ground units never hop to a point ahead of them that lies behind terrain they cannot stand on (they go for the far target
   and the engine finds the way), floating enemy buildings are not chased while ground ones exist, and an army that stops getting anywhere
   without fighting gives its target up for a while and goes for the next one (`progress.py`).
+* **Massing** (`manager.py`, the `MIN_PUSH_SUPPLY_VS_PROTOSS` ... `REINFORCE_*` constants): Stalkers blink and kite whatever runs ahead of the
+  army and skytoss out-trades bio, so against Protoss a push starts later - 60+ army supply, 90% of the ground army together (75% against the
+  others) and the simulator (which knows nothing of blink) at "overwhelming", not just "decisive". Against everyone: a push that has got
+  strung out stops and waits for its tail (12 s at most; the next wait is 25 s away, twice as far each time the tail failed to come); the
+  stragglers of an army that is in a fight rush to it with an attack-move instead of steering round the fire; and new units do not walk
+  across the map one by one - they wait at home until there is a wave (a fifth of the army out there, 8 to 20 supply) and go together. While
+  the army is stopped on purpose (the staging point, a pause for the tail) the bio does not spread out towards the enemy's sieged tanks.
 * **Sieging**: tanks stay sieged while they can shoot anything, buildings included (measured edge to edge - a Hatchery can be 16 away centre
   to centre and still be in range). Liberators are ordered into Defender Mode without waiting for the game to list the morph as usable (an
   order that never takes effect is given up on after a few tries), hold it for a shooting window after it first shows up, and come down as

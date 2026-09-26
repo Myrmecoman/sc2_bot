@@ -30,6 +30,7 @@ class GroupOrders:
     unit_results: Optional[Dict[int, EngagementResult]] = None
     retreating: bool = False                     # HOLD entered because a fight went badly: run for the hold point instead of kiting locally
     staging: Optional[Point2] = None             # ATTACK is currently a stop at this point (tanks siege up here) before committing
+    pausing: bool = False                        # ATTACK is currently a stop at `target` to let the tail of the army catch up: hold there, do not advance or dig in
     hold_radius: float = 3.5                     # how close to its hold position a unit must be to stand still (grows with the size of the group)
 
     @property

@@ -54,7 +54,7 @@ class BioController:
         self._tanks = [
             e for e in self.ai.enemy_units
             if e.type_id == UnitTypeId.SIEGETANKSIEGED and (not e.is_memory or e.age <= FIGHT_GHOST_MAX_AGE)
-        ] if orders.aggressive and not orders.retreating else []
+        ] if orders.aggressive and not orders.retreating and orders.staging is None and not orders.pausing else []      # (not while the army is stopped on purpose)
         self._crowd = Crowd(units) if orders.aggressive else None
         for unit in units:
             self._control_unit(unit, units, orders, ctx)

@@ -5,6 +5,7 @@ from ares.consts import UnitRole, EngagementResult
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
+from sc2.data import Race
 from sc2.position import Point2
 
 from gamefix import World
@@ -328,6 +329,128 @@ def test_numpy_points_from_ares():
     sc.step()
     sc.step()
     check("attacking on a numpy-typed approach path: no stage errored", sc.manager.attacking and not sc.manager._errors, str(sc.manager._errors))
+
+
+# ------------------------------------------------------------------------------------------------------------------------------
+# massing: the army fights as one (a bigger, tighter push against Protoss; waiting for the tail; reinforcement waves; stragglers rushing in)
+# ------------------------------------------------------------------------------------------------------------------------------
+def _ordered_points(sc, units, ability=AbilityId.ATTACK):
+    return [c.target for u in units for c in sc.commands_for(u) if c.ability == ability and hasattr(c.target, "x")]
+
+
+def _out_on_the_map():
+    """an army 24 marines strong out at (100, 100) heading for the enemy base at (180, 180), 8 marines 28 cells behind it"""
+    sc = scene_basic()
+    sc.ai.supply_army = 60
+    head = sc.own_many(U.MARINE, 24, (100, 100), spacing=2.0, role=UnitRole.ATTACKING)     # (spread out: nobody is nudged off the straight line)
+    tail = sc.own_many(U.MARINE, 8, (76, 88), role=UnitRole.ATTACKING)
+    sc.enemy(U.HATCHERY, (180, 180))
+    sc.manager.attacking = True
+    return sc, head, tail
+
+
+def _main_body(sc, units):
+    """the ones of `units` that are in the main army (a diversion squad of three is split off from an army like this one)"""
+    return [u for u in units if u.tag in sc.ai.mediator.roles[UnitRole.ATTACKING]]
+
+
+def test_strung_out_push_waits_for_its_tail():
+    sc, head, tail = _out_on_the_map()
+    sc.step()
+    head = _main_body(sc, head)
+    anchor = sc.manager.anchor
+    check("massing: a push with a quarter of its ground army behind stops to let it catch up", sc.manager.regroup_point is not None, str(sc.manager.regroup_point))
+    points = _ordered_points(sc, head)
+    check("massing: ...the head holds where it is (its attack-moves stay by the anchor, not on the way to the enemy base)",
+          points and all(p.distance_to(anchor) < 8 for p in points), str([(round(p.x), round(p.y)) for p in points[:4]]))
+    moves = [c.target for u in tail for c in sc.commands_for(u) if c.ability == AbilityId.MOVE_MOVE and hasattr(c.target, "x")]
+    check("massing: ...and the tail is sent to it", moves and all(m.distance_to(anchor) < 8 for m in moves), str(moves[:3]))
+    sc.step(dt=13.0)                                                        # REGROUP_MAX_SECONDS is up: on it goes, tail or no tail
+    head = _main_body(sc, head)
+    points = _ordered_points(sc, head)
+    check("massing: a tail that does not arrive holds the army up only so long", sc.manager.regroup_point is None and points and all(p.x > 150 for p in points), str([(round(p.x), round(p.y)) for p in points[:3]]))
+    sc.step(dt=2.0)
+    check("massing: ...and no new pause follows at once (cooldown)", sc.manager.regroup_point is None)
+    first = sc.manager.regroup_cooldown_until - sc.ai.time
+    sc.step(dt=30.0)                                                        # the cooldown is over and the tail is still not there: a second pause
+    check("massing: ...but a tail that is still behind is waited for again", sc.manager.regroup_point is not None)
+    sc.step(dt=13.0)                                                        # ...which also runs out
+    second = sc.manager.regroup_cooldown_until - sc.ai.time
+    check("massing: the more often a tail fails to come, the longer the army goes before waiting for it again", second > first + 15, f"{first:.0f}s then {second:.0f}s")
+
+
+def test_push_in_a_fight_does_not_wait_and_stragglers_rush_in():
+    sc, head, tail = _out_on_the_map()
+    sc.enemy_many(U.ROACH, 3, (106, 100))                                   # the head is in contact
+    sc.step()
+    check("massing: no pause when the army is already fighting", sc.manager.regroup_point is None)
+    rush = _ordered_points(sc, tail)
+    check("massing: ...the stragglers rush to the fight with an attack-move (steering round enemy fire would keep them out of it)", len(rush) >= 6, str(len(rush)))
+
+
+def test_tail_that_is_small_is_not_waited_for():
+    sc = scene_basic()
+    sc.ai.supply_army = 60
+    sc.own_many(U.MARINE, 28, (100, 100), role=UnitRole.ATTACKING)
+    sc.own_many(U.MARINE, 2, (76, 88), role=UnitRole.ATTACKING)              # two stragglers: not worth stopping an army for
+    sc.enemy(U.HATCHERY, (180, 180))
+    sc.manager.attacking = True
+    sc.step()
+    check("massing: two stragglers do not stop the push", sc.manager.regroup_point is None)
+
+
+def test_reinforcements_wait_at_home_for_a_wave():
+    sc = scene_basic()
+    sc.ai.supply_army = 60
+    sc.own_many(U.MARINE, 30, (140, 140), role=UnitRole.ATTACKING)          # the army, out at the enemy's doorstep (hold point: 60, 60)
+    sc.enemy(U.HATCHERY, (180, 180))
+    sc.manager.attacking = True
+    newbies = sc.own_many(U.MARINE, 5, (58, 58), role=UnitRole.ATTACKING)
+    sc.step()
+    toward_army = [p for p in _ordered_points(sc, newbies) + _ordered_points(sc, newbies, AbilityId.MOVE_MOVE) if p.x > 90]
+    check("massing: five new marines stay at home instead of walking across the map alone", not toward_army, str(toward_army[:3]))
+    more = sc.own_many(U.MARINE, 4, (61, 58), role=UnitRole.ATTACKING)       # nine: a wave (8 supply at least)
+    sc.step()
+    wave = newbies + more
+    toward_army = [p for p in _ordered_points(sc, wave) + _ordered_points(sc, wave, AbilityId.MOVE_MOVE) if p.x > 90]
+    check("massing: once there are enough they go together", len(toward_army) >= 9 and sc.manager.wave_until > sc.ai.time, str((len(toward_army), sc.manager.wave_until)))
+    for m in more + newbies[:2]:                                            # some of them are already on their way: the rest is still not held back
+        sc.ai._own.remove(m)
+    sc.step()
+    left = [u for u in newbies[2:]]
+    toward_army = [p for p in _ordered_points(sc, left) + _ordered_points(sc, left, AbilityId.MOVE_MOVE) if p.x > 90]
+    check("massing: ...and a wave that has been sent is not held back again halfway through the door", len(toward_army) == len(left), str((len(toward_army), len(left))))
+
+
+def test_push_thresholds_are_stricter_against_protoss():
+    def starts(race, result, supply, grouped=True):
+        sc = Scene(enemy_race=race, real_managers=REAL)
+        sc.own(U.COMMANDCENTER, (20, 20))
+        sc.own_many(U.MARINE, 20, (60, 60), role=UnitRole.ATTACKING)
+        sc.manager.tracker.total_seen_supply = lambda: 999.0                 # everything about their army is known
+        sc.ai.supply_army = supply
+        sc.manager.global_result = result
+        sc.manager._update_push_state(sc.ai.time, sc.ai.units, grouped, None, None)
+        return sc.manager.attacking
+    D, O = EngagementResult.VICTORY_DECISIVE, EngagementResult.VICTORY_OVERWHELMING
+    check("push: against Zerg a decisive win with 45 supply is enough", starts(Race.Zerg, D, 45))
+    check("push: against Protoss it is not (decisive)", not starts(Race.Protoss, D, 45))
+    check("push: ...nor an overwhelming win with 45 supply", not starts(Race.Protoss, O, 45))
+    check("push: ...nor a decisive one with 65", not starts(Race.Protoss, D, 65))
+    check("push: against Protoss an overwhelming win with 65 supply is", starts(Race.Protoss, O, 65))
+
+
+def test_army_must_be_tighter_against_protoss_to_push():
+    def grouped_with(race):
+        sc = Scene(enemy_race=race, real_managers=REAL)
+        sc.own(U.COMMANDCENTER, (20, 20))
+        sc.ai.supply_army = 60
+        sc.own_many(U.MARINE, 20, (60, 60), role=UnitRole.ATTACKING)
+        sc.own_many(U.MARINE, 4, (60, 84), role=UnitRole.ATTACKING)           # 4 of 24 (17%) a squad's width away
+        sc.step()
+        return sc.manager.grouped
+    check("push: against Zerg 83% of the ground army together is enough to start", grouped_with(Race.Zerg))
+    check("push: against Protoss it takes 90%", not grouped_with(Race.Protoss))
 
 
 def main():

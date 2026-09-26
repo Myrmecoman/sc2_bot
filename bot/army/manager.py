@@ -13,11 +13,13 @@ The strategic decision - push or hold - comes from the combat simulator run on o
 of the enemy army (enemy_tracker.py, no time decay), and from the old "attack at full supply" rule.
 """
 import math
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from dataclasses import replace
+from typing import Dict, Iterable, List, NamedTuple, Optional, Set, Tuple
 
 from loguru import logger
 
 from ares.consts import EngagementResult, UnitRole, UnitTreeQueryType
+from sc2.data import Race
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.position import Point2
 from sc2.unit import Unit
@@ -83,6 +85,23 @@ KEEP_ATTACK_SUPPLY_FRACTION = 0.5     # a push that has lost half its supply is 
 MIN_ARMY_TO_KEEP_ATTACKING = 12       # ...and so is one that has shrunk below this many supply
 RECALL_RADIUS = 80.0                  # the army only comes home to defend if it is at most this far from the threat
 GIVE_UP_SECONDS = 180.0               # a target the army got stuck on (see ProgressWatch) is left alone this long
+# ---- massing: the army fights as one -------------------------------------------------------------------------------------
+# Against Protoss - Stalkers blink and kite whatever runs ahead, and skytoss trades better than bio does - a push starts later: with more
+# army, more tightly grouped, and with the simulator (which knows nothing of blink or micro) surer of the fight
+MIN_PUSH_SUPPLY_VS_PROTOSS = 60
+START_ATTACK_RESULT_VS_PROTOSS = EngagementResult.VICTORY_OVERWHELMING
+GROUPED_FRACTION_VS_PROTOSS = 0.9
+# Against everyone: a push that has got strung out stops and waits for its tail (the head of an army that meets the enemy alone is lost one
+# unit at a time)...
+REGROUP_TAIL_DISTANCE = 45.0          # units this close to the army but outside its main squad are its tail, and are waited for
+REGROUP_TAIL_FRACTION = 0.12          # ...when they are at least this share of the ground army (and at least 3 of them)
+REGROUP_MAX_SECONDS = 12.0            # a pause never lasts longer than this...
+REGROUP_COOLDOWN = 25.0               # ...and is not called again for this long (twice, four times as long when the tail never came)
+# ...new units do not walk across the map one by one - whatever meets a lone unit picks it off - but wait at home for a wave
+REINFORCE_HOME_RADIUS = 25.0          # units this close to the hold point and this far from the army are reinforcements waiting at home
+REINFORCE_WAVE_FRACTION = 0.2         # a wave is this share of the army that is out there (in supply)...
+REINFORCE_WAVE_SUPPLY = (8.0, 20.0)   # ...but not less than the first number, and never more than the second
+REINFORCE_RELEASE_SECONDS = 20.0      # a wave that has been sent is not held back again for this long: all of it gets out of the door
 # ---- diversion ------------------------------------------------------------------------------------------------------
 DIVERSION_SQUAD_SIZE = 3
 DIVERSION_MIN_MAIN_ARMY = 10          # only split one off if the main bio force can spare it
@@ -92,6 +111,15 @@ MANAGED_ROLES = (
     UnitRole.ATTACKING, UnitRole.BASE_DEFENDER, UnitRole.CONTROL_GROUP_ONE, UnitRole.SCOUTING,
     UnitRole.HARASSING_BANSHEE, UnitRole.HARASSING_REAPER,
 )
+
+
+class MainPlan(NamedTuple):
+    """What _main_orders decides for the units of the main army (three groups: the main body, its stragglers, the ones waiting at home)."""
+    orders: GroupOrders
+    stragglers: Units                 # core units outside the main squad: they rally in to it (or rush to a fight it is in)
+    straggler_orders: GroupOrders
+    waiting: Units                    # reinforcements standing at home until there are enough of them for a wave
+    waiting_orders: GroupOrders
 
 
 class ArmyManager:
@@ -129,6 +157,14 @@ class ArmyManager:
         # assault staging state
         self.staging_since: Optional[float] = None
         self.staging_cooldown_until: float = 0.0
+
+        # massing (see _regroup_pause and _waiting_at_home)
+        self.grouped: bool = True                        # is the army together enough to start a push (as of the last step)
+        self.regroup_point: Optional[Point2] = None      # where the army holds while its tail catches up (None: no pause is on)
+        self.regroup_until: float = 0.0
+        self.regroup_cooldown_until: float = 0.0
+        self.regroup_timeouts: int = 0                   # pauses in a row that ended because they ran out of time, not because the tail arrived
+        self.wave_until: float = 0.0                     # a reinforcement wave was sent: nobody at home is held back until then
 
         # stuck detection: an army (or the diversion squad) that stops getting anywhere on its way to a target
         self.attack_watch = ProgressWatch()
@@ -173,20 +209,24 @@ class ArmyManager:
         for units, orders in defense_groups:
             orders.local_result, orders.unit_results = self._guard("defense fights", self._fight_view, ctx, units, Stance.DEFENDING) or (None, {})
 
-        planned = self._guard("orders", self._main_orders, ctx, main_units, defenders, escalate_to)
-        if planned is None:
-            planned = (self._hold_orders(ctx), Units([], ai), self._hold_orders(ctx))
-        main_orders, stragglers, straggler_orders = planned
+        plan = self._guard("orders", self._main_orders, ctx, main_units, defenders, escalate_to)
+        if plan is None:
+            plan = MainPlan(self._hold_orders(ctx), Units([], ai), self._hold_orders(ctx), Units([], ai), self._hold_orders(ctx))
+        main_orders, stragglers, straggler_orders = plan.orders, plan.stragglers, plan.straggler_orders
 
         diversion = self._guard("diversion", self._manage_diversion, ctx, main_units, main_orders)
         main_units = role(role=UnitRole.ATTACKING)     # the diversion may just have taken some (or given some back)
         stragglers = stragglers.tags_in(main_units.tags)
+        waiting = plan.waiting.tags_in(main_units.tags)
 
         # ---- dispatch (each group isolated: one bug must never freeze the rest of the army) ----------------------
         groups: List[Tuple[str, Units, GroupOrders]] = []
         if stragglers:
             groups.append(("regroup", stragglers, straggler_orders))
-        groups.append(("main", main_units.tags_not_in(stragglers.tags) if stragglers else main_units, main_orders))
+        if waiting:
+            groups.append(("waiting", waiting, plan.waiting_orders))
+        apart = stragglers.tags | waiting.tags
+        groups.append(("main", main_units.tags_not_in(apart) if apart else main_units, main_orders))
         for units, orders in defense_groups:
             groups.append(("defense", units, orders))
         if diversion is not None:
@@ -287,7 +327,7 @@ class ArmyManager:
     # ================================================================================================================
     def _main_orders(
         self, ctx: ArmyContext, main_units: Units, defenders: Units, escalate_to: Optional[Point2]
-    ) -> Tuple[GroupOrders, Units, GroupOrders]:
+    ) -> MainPlan:
         ai = self.ai
         now = ai.time
         hold = ctx.hold_point
@@ -305,7 +345,9 @@ class ArmyManager:
             self.anchor = None
         grouped = True
         if core:
-            grouped = (core.amount - stragglers.amount) / core.amount >= GROUPED_FRACTION
+            needed = GROUPED_FRACTION_VS_PROTOSS if ai.enemy_race == Race.Protoss else GROUPED_FRACTION
+            grouped = (core.amount - stragglers.amount) / core.amount >= needed
+        self.grouped = grouped
 
         # ---- strategic decision: push or hold ------------------------------------------------------------------
         fighters = main_units | defenders
@@ -322,6 +364,8 @@ class ArmyManager:
 
         anchor = self.anchor if self.anchor is not None else hold
         staging: Optional[Point2] = None
+        pausing = False
+        fighting = bool(ctx.fights.fights_of(main_units))
         if defend_target is not None:
             mode, target = Mode.DEFEND, defend_target
         elif self.attacking:
@@ -331,13 +375,26 @@ class ArmyManager:
                 target = staging
                 self.attack_watch.reset()          # stopping there on purpose
             else:
-                target = self._unstick(now, anchor, target, main_units)
+                pause = self._regroup_pause(now, fighting, core, stragglers, anchor)
+                if pause is not None:
+                    target, anchor, pausing = pause, pause, True       # the head of the army holds, the tail comes to it
+                    self.attack_watch.reset()      # ...on purpose
+                else:
+                    target = self._unstick(now, anchor, target, main_units)
         else:
             mode, target = Mode.HOLD, hold
+            self.regroup_point = None
             self.staging_since = None
             self.attack_watch.reset()
         if mode == Mode.DEFEND:
             self.attack_watch.reset()
+
+        # units standing at home while the army is out on the map wait there for a wave of reinforcements
+        waiting = Units([], ai)
+        if mode == Mode.ATTACK:
+            waiting = self._waiting_at_home(now, main_units, anchor, hold)
+            if waiting:
+                stragglers = stragglers.tags_not_in(waiting.tags)
 
         # the fight the army is in, as its mode sees it (holding: they walk into us; attacking: we walk into them; answering a threat: both move)
         stance = {Mode.HOLD: Stance.DEFENDING, Mode.ATTACK: Stance.ATTACKING}.get(mode, Stance.MEETING)
@@ -346,18 +403,60 @@ class ArmyManager:
             label="main", mode=mode, target=target, hold_point=hold, front=ctx.front, bio_position=ctx.bio_position,
             anchor=anchor, local_result=local_result, unit_results=unit_results,
             retreating=(mode == Mode.HOLD and now < self.retreating_until),
-            staging=staging,
+            staging=staging, pausing=pausing,
             # the crowd standing at the hold position needs room: ~1 cell per unit, doubled for the gaps
             hold_radius=max(3.5, 1.1 * math.sqrt(max(1, main_units.amount))),
         )
-        # stragglers rally in to the main squad before fighting: they are sent to its position, not into the enemy
+        # stragglers rally in to the main squad before fighting: they are sent to its position, not into the enemy - but once that squad is
+        # in a fight they rush to it (an attack-move: the steering that keeps a unit out of enemy fire would keep it out of the fight)
         regroup_orders = GroupOrders(
-            label="regroup", mode=Mode.HOLD, target=anchor, hold_point=anchor, front=ctx.front,
-            bio_position=anchor, anchor=anchor, local_result=None, retreating=False,
+            label="regroup", mode=Mode.ATTACK if fighting and mode != Mode.HOLD else Mode.HOLD, target=anchor, hold_point=anchor,
+            front=ctx.front, bio_position=anchor, anchor=anchor, local_result=None, retreating=False,
         )
         if mode == Mode.HOLD:
             stragglers = Units([], ai)      # everyone is already heading for the hold point
-        return orders, stragglers, regroup_orders
+        waiting_orders = replace(self._hold_orders(ctx), label="waiting")
+        return MainPlan(orders, stragglers, regroup_orders, waiting, waiting_orders)
+
+    def _regroup_pause(self, now: float, fighting: bool, core: Units, stragglers: Units, anchor: Point2) -> Optional[Point2]:
+        """While the tail of a strung-out push is still coming: the point where the head of it holds. A fight puts an end to it (nobody is
+        waited for then: the stragglers rush in), and so does REGROUP_MAX_SECONDS - a tail that never arrives (stuck, dead) must not hold
+        the army up for ever - after which there is no new pause for REGROUP_COOLDOWN."""
+        tail = stragglers.closer_than(REGROUP_TAIL_DISTANCE, anchor) if stragglers else stragglers
+        if self.regroup_point is not None:                                  # a pause is on
+            if now < self.regroup_until and not fighting and tail.amount >= max(2, 0.04 * core.amount):
+                return self.regroup_point
+            if now >= self.regroup_until and not fighting:
+                self.regroup_timeouts += 1                                  # the tail did not come: the next pause has to wait longer
+            elif not fighting:
+                self.regroup_timeouts = 0                                   # it did: the army is together again
+            self.regroup_point = None
+            self.regroup_cooldown_until = now + REGROUP_COOLDOWN * 2 ** min(3, max(0, self.regroup_timeouts - 1))
+            return None
+        if now < self.regroup_cooldown_until or fighting or tail.amount < max(3, REGROUP_TAIL_FRACTION * core.amount):
+            return None
+        self.regroup_point = anchor
+        self.regroup_until = now + REGROUP_MAX_SECONDS
+        logger.info(f"[army] the push is strung out ({tail.amount} of {core.amount} ground units are behind): holding at {anchor} for the tail")
+        return anchor
+
+    def _waiting_at_home(self, now: float, main_units: Units, anchor: Point2, hold: Point2) -> Units:
+        """The units that stand at home while the army is out on the map (new ones, or ones that came back): they wait there until there
+        are enough of them for a wave (a fifth of the army out there, between REINFORCE_WAVE_SUPPLY) and then go together. Sent one by one
+        across the map they meet whatever the enemy has out there alone. A wave that has been sent is not held back again for
+        REINFORCE_RELEASE_SECONDS, so that all of it gets out of the door."""
+        ai = self.ai
+        away = main_units.filter(lambda u: u.distance_to(hold) <= REINFORCE_HOME_RADIUS and u.distance_to(anchor) > REGROUP_TAIL_DISTANCE)
+        if not away or now < self.wave_until:
+            return Units([], ai)
+        supply = sum(ai.calculate_supply_cost(u.type_id) for u in away)
+        field = sum(ai.calculate_supply_cost(u.type_id) for u in main_units.closer_than(REGROUP_TAIL_DISTANCE, anchor))
+        lowest, highest = REINFORCE_WAVE_SUPPLY
+        if supply >= min(highest, max(lowest, REINFORCE_WAVE_FRACTION * field)):
+            self.wave_until = now + REINFORCE_RELEASE_SECONDS
+            logger.info(f"[army] a wave of {supply:.0f} supply leaves home for the army ({field:.0f} supply out there)")
+            return Units([], ai)
+        return away
 
     def _unstick(self, now: float, anchor: Point2, target: Point2, units: Units) -> Point2:
         """The army is marching on `target`. If it has stopped getting anywhere - jammed against terrain it cannot cross,
@@ -434,17 +533,21 @@ class ArmyManager:
         maxed = self.positioning.is_maxed()
         army_supply = float(ai.supply_army)
         result = self.global_result
+        protoss = ai.enemy_race == Race.Protoss
 
         if not self.attacking:
             start = False
             if maxed:
                 start = True
-            elif escalate_to is None and grouped and army_supply >= MIN_PUSH_SUPPLY and result is not None and now >= self.retreating_until:
+            elif (
+                escalate_to is None and grouped and army_supply >= (MIN_PUSH_SUPPLY_VS_PROTOSS if protoss else MIN_PUSH_SUPPLY)
+                and result is not None and now >= self.retreating_until
+            ):
                 # (a push called off because the fight it was in went badly is not restarted at once on the strength of the whole-army
                 # verdict, which it did not agree with: the army gets the retreat time to pull back and regroup first)
                 # trust the sim only if we have actually SEEN a meaningful part of their army (alive or dead)
                 intel_ok = self.tracker.total_seen_supply() >= max(INTEL_MIN_SUPPLY, INTEL_FRACTION * army_supply)
-                start = intel_ok and result >= START_ATTACK_RESULT
+                start = intel_ok and result >= (START_ATTACK_RESULT_VS_PROTOSS if protoss else START_ATTACK_RESULT)
             if start and fighters:
                 self.attacking = True
                 self.attack_started = now
