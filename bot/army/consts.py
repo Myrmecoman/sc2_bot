@@ -90,6 +90,10 @@ MELEE_RANGE_THRESHOLD = 1.0     # an enemy at or below this ground_range counts 
 MELEE_KITE_MARGIN = 1.0         # a unit backs away from melee enemies once one is inside ITS OWN weapon range plus this (as for banelings)
 MELEE_KITE_MAX_SPEED_RATIO = 1.35   # ...unless they are much faster than the unit: no step back gains distance on those, it stands and shoots
 KITE_IN_MELEE_RADIUS = 10.0     # no "kite in" while a melee enemy is this close: it would be on the unit before the step forward is done
+# A unit that kites in steps towards its target between shots - only until this much is left between the two, edge to edge. Walking right up
+# to it is worth nothing (the weapon reaches 5), and the target is very often what our own Siege Tanks are shelling: a shell splashes up to
+# 1.25 around it, and a gap of 1 keeps a Marine (radius 0.375) just outside that.
+KITE_IN_STOP_GAP = 1.0
 LOCAL_FIGHT_RADIUS = 14.0       # radius (around a squad) used for the local fight assessment - user-tuned value
 SQUAD_RADIUS = 9.0              # Ares squad clustering radius for the main army (units farther apart split off)
 

@@ -8,7 +8,6 @@ from typing import List, Optional
 
 from cython_extensions import cy_attack_ready, cy_closest_to, cy_in_attack_range, cy_pick_enemy_target
 
-from ares.behaviors.combat.individual import StutterUnitForward
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.buff_id import BuffId
 from sc2.ids.unit_typeid import UnitTypeId
@@ -27,8 +26,8 @@ from bot.army.units.common import (
     kite_away,
     kite_from_banelings,
     path_move,
-    run,
     step_back_from,
+    stutter_forward,
     target_harmless,
 )
 from bot.pathing.order_utils import Crowd, spread_out_point
@@ -140,8 +139,8 @@ class BioController:
                 return
 
         if winning or harmless:
-            # "kite in": instead of retreating with each shot, step forward with each shot
-            if run(self.ai, StutterUnitForward(unit=unit, target=target)):
+            # "kite in": instead of retreating with each shot, step forward with each shot (not right up to the target: see stutter_forward)
+            if stutter_forward(self.ai, unit, target):
                 return
         # safe, futile to run, or nothing better to do: hold and keep the attack order on the target
         attack_unit(unit, target)

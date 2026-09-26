@@ -25,6 +25,7 @@ from bot.army.context import ArmyContext
 from bot.army.orders import GroupOrders
 from bot.army.positioning import TOWNHALL_TYPES, Positioning
 from bot.army.units.common import attack_unit, kite_away, path_move, run
+from bot.army.units.repair_retreat import RepairRetreat
 from bot.pathing.order_utils import open_ground_near, path_length
 
 RETREAT_BELOW_HEALTH = 0.4     # fly home to be repaired below this...
@@ -60,7 +61,6 @@ class BansheeHarass:
         self.ai = ai
         self.positioning = positioning
         self.roam: Dict[int, Point2] = {}         # banshee tag -> enemy base it is harassing
-        self.retreating: Set[int] = set()         # banshees flying home to be repaired
         self._last_assignment: float = -1e9
         self._written_off: List[Tuple[Point2, float]] = []   # (position, until): defended or unreachable spots nobody goes for
         self._dull_bases: List[Tuple[Point2, float]] = []    # (base, until): bases a banshee hovered over with nothing to shoot
@@ -68,19 +68,22 @@ class BansheeHarass:
         self._last_fired: Dict[int, float] = {}
         self._idle_since: Dict[int, float] = {}              # banshee tag -> since when it has hovered over its base with nothing to shoot
         self._recalled_until: Dict[int, float] = {}          # banshee tag -> it is with the army (no base is worth a visit) until then
-        self._repair_wait_since: Dict[int, float] = {}       # banshee tag -> since when it has waited at home for its repair
-        self._no_retreat_until: Dict[int, float] = {}        # banshee tag -> it gave up waiting for a repair: not sent home before then
-        self._repair_health: Dict[int, float] = {}           # banshee tag -> its health when last looked at while it waited for its repair
         self._repair_spots: Dict[int, Tuple[float, Point2]] = {}   # townhall tag -> (when chosen, the spot banshees wait at)
+        # hurt banshees fly home to be repaired (units/repair_retreat.py); what it keeps is reachable here under its old names
+        self.repair = RepairRetreat(self.ai, self._repair_spot, below=RETREAT_BELOW_HEALTH, resume=RESUME_ABOVE_HEALTH,
+                                    patience=REPAIR_PATIENCE, cooldown=RETREAT_COOLDOWN, wait_radius=REPAIR_WAIT_RADIUS)
+        self.retreating: Set[int] = self.repair.retreating   # banshees flying home to be repaired
+        self._repair_wait_since = self.repair.wait_since
+        self._no_retreat_until = self.repair.no_retreat_until
+        self._repair_health = self.repair.health
 
     # ------------------------------------------------------------------------------------------------------------
     def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext) -> None:
         alive = {u.tag for u in units}
-        for table in (self.roam, self._focus, self._last_fired, self._idle_since, self._recalled_until, self._repair_wait_since,
-                      self._no_retreat_until, self._repair_health):
+        for table in (self.roam, self._focus, self._last_fired, self._idle_since, self._recalled_until):
             for tag in [t for t in list(table) if t not in alive]:
                 del table[tag]
-        self.retreating &= alive
+        self.repair.forget(alive)
         now = self.ai.time
         self._written_off = [(p, until) for p, until in self._written_off if until > now]
         self._dull_bases = [(p, until) for p, until in self._dull_bases if until > now]
@@ -188,32 +191,6 @@ class BansheeHarass:
                 return spot
         return spots[0] if spots else base.position
 
-    def _update_retreat(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext, now: float) -> None:
-        """Hurt banshees go home, and come out again repaired - or unrepaired, when nobody repairs them (see REPAIR_PATIENCE: the wait
-        starts over each time the repair has got the banshee a little further)."""
-        tag = unit.tag
-        health = unit.health_percentage
-        if tag in self.retreating:
-            if health >= RESUME_ABOVE_HEALTH:
-                self.retreating.discard(tag)
-                self._repair_wait_since.pop(tag, None)
-                self._repair_health.pop(tag, None)
-            elif unit.distance_to(self._repair_spot(unit, orders, ctx)) > REPAIR_WAIT_RADIUS:
-                self._repair_wait_since.pop(tag, None)                   # still on its way
-                self._repair_health.pop(tag, None)
-            else:
-                since = self._repair_wait_since.setdefault(tag, now)
-                if health > self._repair_health.get(tag, health):
-                    since = self._repair_wait_since[tag] = now           # being repaired: worth waiting for
-                self._repair_health[tag] = health
-                if now - since > REPAIR_PATIENCE:
-                    self.retreating.discard(tag)
-                    self._repair_wait_since.pop(tag, None)
-                    self._repair_health.pop(tag, None)
-                    self._no_retreat_until[tag] = now + RETREAT_COOLDOWN
-        elif health < RETREAT_BELOW_HEALTH and now >= self._no_retreat_until.get(tag, 0.0):
-            self.retreating.add(tag)
-
     def _destination(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext, now: float) -> Point2:
         """Where a banshee with nothing to shoot goes: the base it was sent to - or, once it has hovered there for IDLE_PATIENCE with
         nothing to do, the next one, and when no base is worth a visit the army, for a while."""
@@ -246,7 +223,7 @@ class BansheeHarass:
 
     def _control_unit(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext) -> None:
         now = self.ai.time
-        self._update_retreat(unit, orders, ctx, now)
+        self.repair.update(unit, orders, ctx)                  # hurt banshees go home (units/repair_retreat.py), REPAIR_PATIENCE...
 
         danger = self._in_danger(unit, ctx)
         if danger:

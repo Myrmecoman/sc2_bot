@@ -1572,12 +1572,12 @@ def test_raid_hurt_cyclone_goes_home_and_comes_back():
     cy = _raider(sc, (100, 100), hp=60)
     sc.enemy(U.STALKER, (106, 100))
     c = _raid_step(sc, cy)
-    check("raid: a Cyclone below half health goes home to be repaired instead of locking on", _no_attack(c) and any(a == A.MOVE_MOVE and abs(t[0] - 60) < 1 for a, t, q in c) and cy.tag in sc.manager.cyclone_raid.retreating, str(c))
+    check("raid: a Cyclone that is too damaged goes home to be repaired instead of locking on", _no_attack(c) and any(a == A.MOVE_MOVE and abs(t[0] - 60) < 1 for a, t, q in c) and cy.tag in sc.manager.cyclones.repair.retreating, str(c))
     sc.ai._own.remove(cy)
     cy = sc.own(U.CYCLONE, (62, 60), tag=cy.tag, role=UnitRole.HARASSING, hp=170)
     sc.ai.ability_grants[cy.tag] = {A.LOCKON_LOCKON}
     _raid_step(sc, cy)
-    check("raid: ...and is back at it once it is repaired (above 90%)", cy.tag not in sc.manager.cyclone_raid.retreating, str(sc.manager.cyclone_raid.retreating))
+    check("raid: ...and is back at it once it is repaired (above 90%)", cy.tag not in sc.manager.cyclones.repair.retreating, str(sc.manager.cyclones.repair.retreating))
 
 
 def test_raid_a_waiting_cyclone_does_not_shoot_what_is_in_its_range():
@@ -1593,6 +1593,86 @@ def test_raid_a_waiting_cyclone_does_not_shoot_what_is_in_its_range():
     sc.enemy(U.PROBE, (108, 100))
     c = _raid_step(sc, cy)
     check("raid: ...out of it (8 away) it stays where it is", c == [], str(c))
+
+
+# ------------------------------------------------------------------------------------------------------------------------------
+# "kite in" stops 1 short of the target (edge to edge): not right up to it, where our own Siege Tanks' splash reaches
+# ------------------------------------------------------------------------------------------------------------------------------
+def _kite_in(unit_type, target_x, cooldown=10.0, controller="bio"):
+    """a Marine (or Cyclone) at x = 60 that is winning and whose weapon is on cooldown, with a Roach at `target_x` (and the enemy fire that would make it back off)"""
+    sc = mk()
+    m = sc.own(unit_type, (60, 60), cooldown=cooldown)
+    roach = sc.enemy(U.ROACH, (target_x, 60))
+    danger(sc, (61, 60), radius=3)
+    ctx = begin(sc)
+    getattr(sc.manager, controller).control(sc.world.units([m]), orders(sc, local=ER.VICTORY_EMPHATIC), ctx)
+    return cmds(sc, m), roach
+
+
+def test_kite_in_stops_one_short_of_the_target():
+    c, roach = _kite_in(U.MARINE, 64.0)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("kite in: a Marine steps forward, to a spot 1 (edge to edge) short of its target - not onto it", moves and abs(moves[0][0] - 62.25) < 0.1 and abs(moves[0][1] - 60) < 0.1, str(c))
+    c, roach = _kite_in(U.MARINE, 61.5)                                    # already within 1: (0.75 apart, edge to edge)
+    check("kite in: ...one that is that close already does not step in any closer (it keeps its attack order on the target)",
+          not any(a == A.MOVE_MOVE for a, t, q in c) and any(a == A.ATTACK and getattr(t, "tag", None) == roach.tag for a, t, q in c), str(c))
+    c, roach = _kite_in(U.MARINE, 62.0)                                    # 1.25 apart: a quarter of a step to go
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("kite in: ...a gap just over 1 is closed, no further", moves and abs(moves[0][0] - 60.25) < 0.1, str(c))
+    c, roach = _kite_in(U.MARINE, 61.0, cooldown=0.0)
+    check("kite in: with the weapon ready it shoots, however close", any(a == A.ATTACK and getattr(t, "tag", None) == roach.tag for a, t, q in c) and not any(a == A.MOVE_MOVE for a, t, q in c), str(c))
+    c, roach = _kite_in(U.CYCLONE, 64.0, controller="cyclones")
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("kite in: a Cyclone as well", moves and abs(moves[0][0] - 62.25) < 0.1, str(c))
+
+
+# ------------------------------------------------------------------------------------------------------------------------------
+# a Cyclone that is too damaged goes home to be repaired - like a Banshee (units/repair_retreat.py)
+# ------------------------------------------------------------------------------------------------------------------------------
+def test_hurt_cyclone_goes_home_to_be_repaired():
+    sc = mk()
+    cy = sc.own(U.CYCLONE, (100, 100), hp=60)                              # a third of its 180
+    sc.enemy(U.ZEALOT, (110, 100))
+    c = _next_step(sc, cy)
+    check("cyclone: one below 40% of its health goes home (the hold point, where the SCVs come) instead of fighting",
+          any(a == A.MOVE_MOVE and abs(t[0] - 60) < 1 and abs(t[1] - 60) < 1 for a, t, q in c) and not any(a in (A.ATTACK, A.LOCKON_LOCKON) for a, t, q in c)
+          and cy.tag in sc.manager.cyclones.repair.retreating, str(c))
+    sc = mk()
+    cy = sc.own(U.CYCLONE, (100, 100), hp=90)                              # half: not yet
+    sc.enemy(U.ZEALOT, (110, 100))
+    _next_step(sc, cy)
+    check("cyclone: (control) at half its health it stays in the fight", cy.tag not in sc.manager.cyclones.repair.retreating, str(sc.manager.cyclones.repair.retreating))
+    sc = mk()
+    cy = sc.own(U.CYCLONE, (100, 100), hp=60, role=UnitRole.HARASSING)
+    sc.ai.ability_grants[cy.tag] = {A.LOCKON_LOCKON}
+    sc.enemy(U.STALKER, (106, 100))
+    from bot.ares_compat import refresh_ability_cache
+    asyncio.run(refresh_ability_cache(sc.ai, sc.ai.units))
+    ctx = begin(sc)
+    sc.manager.cyclone_raid.control(sc.world.units([cy]), orders(sc), ctx)
+    c = cmds(sc, cy)
+    check("cyclone: a raider as well - no Lock On for a Cyclone that has to go home", not any(a == A.LOCKON_LOCKON for a, t, q in c) and any(a == A.MOVE_MOVE and abs(t[0] - 60) < 1 for a, t, q in c), str(c))
+
+
+def test_hurt_cyclone_waits_for_the_repair_and_gives_up_when_nobody_comes():
+    from bot.army.units.repair_retreat import RepairRetreat
+    patience = RepairRetreat(None, None).patience
+    sc = mk()
+    cy = sc.own(U.CYCLONE, (62, 60), hp=60)                                # at the hold point, hurt
+    c = _next_step(sc, cy)
+    check("cyclone: at the hold point it waits there (nothing is ordered)", c == [] and cy.tag in sc.manager.cyclones.repair.retreating, str(c))
+    for _ in range(int(patience / 0.5) + 4):
+        c = _next_step(sc, cy)
+    check("cyclone: with nobody repairing it it gives up after the patience and is back at its work - and not sent home again straight away",
+          cy.tag not in sc.manager.cyclones.repair.retreating and cy.tag in sc.manager.cyclones.repair.no_retreat_until, str((c, sc.manager.cyclones.repair.retreating)))
+    sc = mk()
+    cy = sc.own(U.CYCLONE, (62, 60), hp=60)
+    _next_step(sc, cy)
+    for i in range(int(patience / 0.5) + 12):                              # an SCV repairs it: a hit point per look - it keeps waiting, as long as that goes on
+        sc.ai._own.remove(cy)
+        cy = sc.own(U.CYCLONE, (62, 60), tag=cy.tag, hp=60 + i)
+        _next_step(sc, cy)
+    check("cyclone: while the repair goes on it keeps waiting", cy.tag in sc.manager.cyclones.repair.retreating and cy.tag not in sc.manager.cyclones.repair.no_retreat_until, str(sc.manager.cyclones.repair.no_retreat_until))
 
 
 def test_raid_geometry():

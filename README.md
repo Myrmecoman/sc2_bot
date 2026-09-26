@@ -57,13 +57,20 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   for Lurkers, mines, Banshees, Mutalisks, Brood Lords, Colossi, Banelings, Ultralisks, Hydralisks, Battlecruisers - and against skytoss (a
   Stargate or an air unit seen) no more than 2 Siege Tanks, since they cannot shoot up (the Factory makes Cyclones instead). Add a rule by
   adding a `Reaction(...)` to the table; `tests/offline/test_reactions.py` shows how a rule is tested.
+* **Vehicle and ship upgrades** (`handle_upgrades`, `next_mech_upgrade` in `custom_utils.py`): bought once enough mech is out to justify them,
+  by the supply of what each upgrade makes stronger - vehicle weapons by the vehicles (Hellions, Tanks, Cyclones, Thors), ship weapons by the
+  ships (Vikings, Banshees, Liberators, Battlecruisers), the armor by both and the mines - and each level wants more than the one before:
+  9 supply (three Tanks or Cyclones), 15, 24; a bank that piles up (800 minerals and 300 gas) buys any level at the first threshold. A level
+  is only asked for once the one before it (of its line) is done. The Armory (`macro()`) is built at two bases as soon as 9 supply of mech
+  is out - not, as it used to be, only after an infantry upgrade had started, which needs an Engineering Bay and three bases - and a second
+  one when the mech is 24 supply and the bank is piling up, to research weapons and armor at the same time.
 * **Production buildings**: what the number of bases calls for, never more than 6 Barracks, 2 Factories and 2 Starports, and while the bank
   keeps piling up late in the game (1000+ minerals, 100+ supply used; the gas buildings also need 350+ gas) one more at a time up to
   those limits (`production_targets` in `macro.py`).
 * **Against Protoss the army is mech-led** (`army_advisor.mech_focus`): Marines are picked up by almost everything a Protoss has, so the
   scripted opening (Barracks, Refinery, Orbital, Command Center, Factory) is followed by a Starport as soon as the Factory stands and
-  ONE Barracks for the first two bases (2 at three bases, 3 at four; a second Factory at three bases; an Armory once the Starport is up,
-  for the vehicle upgrades, which `handle_upgrades` researches once there are 3 mechanical units). Every Factory gets a Tech Lab. The
+  ONE Barracks for the first two bases (2 at three bases, 3 at four; a second Factory at three bases; an Armory once the Starport is up).
+  Every Factory gets a Tech Lab. The
   Factory makes Cyclones first (cap 12), a Siege Tank after each three of them (`factory_order` in `production.py`, cap 4 - 2 against
   skytoss) and Tanks alone once the Cyclones are at their cap; money is held back for the next one (as for the tanks above), so the bio
   is still made, but out of what is left over. Once a Cyclone is made or ordered, an idle Factory Tech Lab researches the Cyclone
@@ -94,7 +101,9 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   seconds still count where they were last seen. Every unit is told the verdict of ITS OWN fight. Bio and cyclones push in ("kite in")
   only once the fight is under way (each side can already shoot the other - walking up to sieged tanks or spines is not kiting in), on
   a "very very high" verdict that also holds when they walk into a side that stands its ground, and only after it has held for 2
-  seconds. Never against melee-only enemies, and never against banelings, which bio, cyclones and reapers always step back from whatever
+  seconds. Only until 1 (edge to edge) is left between the unit and its target (`stutter_forward` in `units/common.py`, instead of Ares'
+  `StutterUnitForward`, which walks onto the target): the target is often what our own Siege Tanks are shelling, and a gap of 1 keeps a
+  Marine just outside the splash (up to 1.25 around the shell). Never against melee-only enemies, and never against banelings, which bio, cyclones and reapers always step back from whatever
   the simulator says (no push-in, no "futile to run"). Marines and marauders also step back from melee-only enemies (Zealots, Zerglings,
   ...) that come within their weapon range + 1 while their weapon is on cooldown - shoot when ready, step back when not, without waiting
   for the danger grid (a disk of 4 around a melee unit, which flags the cell when the Zealot is already on top of the Marine) - except from
@@ -136,7 +145,11 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   a Cannon reaches 7, a shot or two), so a unit in the middle of a Stalker ball is left alone while a lone one, a Battery or a Cannon is
   not. Reach comes from the enemies' weapons, not from Ares' danger grid (which marks 4 more around everything, workers included). With
   nothing to hit it walks towards what it knows of the enemy (a Cannon or Battery, an army, a Nexus, else their natural) and stops outside
-  the reach of what it sees; below half health it goes home to be repaired.
+  the reach of what it sees.
+* **Hurt units go home to be repaired** (`units/repair_retreat.py`, shared by Banshees and Cyclones - the army's and the raiding ones): below
+  40% of its health a unit walks to where the SCVs (`repair.py`) can reach it - a Banshee to open ground next to a townhall, a Cyclone to the
+  army's hold point - and waits until it is up to 90%. The wait starts over each time the repair has got it a little further; with nothing
+  happening for 25 seconds (no SCVs, no gas) it gives up, goes back to work as it is, and is not sent home again for 60 seconds.
 * **Banshees** skip targets they cannot shoot without flying into anti-air (unless they can cloak) and write off a target they have not
   managed to fire at for a few seconds. They never just wait: over a base with nothing to shoot they move on to the next one, and with no
   base worth a visit they rejoin the army for a while; a hurt one waits for its repair on open ground in the lane between a townhall and

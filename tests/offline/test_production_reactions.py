@@ -172,6 +172,62 @@ def mech():
     check("research: ...nor without the gas for it", A.RESEARCH_CYCLONELOCKONDAMAGE not in done, names(done))
 
 
+def upgrades():
+    """The vehicle and ship upgrades (Armory) are bought - and the Armory built - once enough mech is out (custom_utils.next_mech_upgrade)"""
+    Zerg = common_pb2.Zerg
+
+    def names(done):
+        return str(sorted(a.name for a in done))
+
+    def mech(tanks=0, cyclones=0, banshees=0, armories=1, bases=2, hellions=0):
+        def setup(game, cx, cy):
+            more_bases(game, bases - 1)
+            game.add(U.FACTORY, (cx + 14, cy - 6), 1)                       # (the Armory needs one)
+            for k in range(armories):
+                game.add(U.ARMORY, (cx - 10 - 4 * k, cy - 12), 1)
+            for kind, count in ((U.SIEGETANK, tanks), (U.CYCLONE, cyclones), (U.BANSHEE, banshees), (U.HELLION, hellions)):
+                for k in range(count):
+                    game.add(kind, (cx + 8 + 2 * (k % 6), cy + 8 + 2 * (U.__members__[kind.name].value % 5 + k // 6)), 1)
+        return setup
+
+    def researched(done):
+        return {a for a in done if a.name.startswith("ARMORYRESEARCH_")}
+    W1, W2 = A.ARMORYRESEARCH_TERRANVEHICLEWEAPONSLEVEL1, A.ARMORYRESEARCH_TERRANVEHICLEWEAPONSLEVEL2
+    done = play(mech(tanks=3), race=Zerg, minerals=900, gas=400, frames=2)
+    check("upgrades: three Tanks (9 supply) and an Armory: vehicle weapons level 1", W1 in done, names(researched(done)))
+    done = play(mech(tanks=2), race=Zerg, minerals=900, gas=400, frames=2)
+    check("upgrades: two Tanks are not enough mech to justify them", not researched(done), names(researched(done)))
+    done = play(mech(tanks=3), race=Zerg, minerals=900, gas=400, frames=2, upgrades=(UpgradeId.TERRANVEHICLEWEAPONSLEVEL1, UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1))
+    check("upgrades: level 2 wants more (15 supply): not with three Tanks", not researched(done), names(researched(done)))
+    done = play(mech(tanks=5), race=Zerg, minerals=900, gas=400, frames=2, upgrades=(UpgradeId.TERRANVEHICLEWEAPONSLEVEL1, UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1))
+    check("upgrades: ...with five it is bought", W2 in done, names(researched(done)))
+    done = play(mech(tanks=3), race=Zerg, minerals=1500, gas=600, frames=2, upgrades=(UpgradeId.TERRANVEHICLEWEAPONSLEVEL1, UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1))
+    check("upgrades: ...and so it is with three when the money is piling up", W2 in done, names(researched(done)))
+    done = play(mech(tanks=5), race=Zerg, minerals=900, gas=400, frames=2)
+    check("upgrades: level 2 only after level 1 (the Armory is asked for level 1)", W1 in done and W2 not in done, names(researched(done)))
+    done = play(mech(banshees=3), race=Zerg, minerals=900, gas=400, frames=2)
+    check("upgrades: ships are not vehicles: three Banshees get armor (it is for both) and no vehicle weapons",
+          A.ARMORYRESEARCH_TERRANVEHICLEANDSHIPPLATINGLEVEL1 in done and W1 not in done, names(researched(done)))
+    done = play(mech(banshees=3), race=Zerg, minerals=900, gas=400, frames=2, upgrades=(UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1,))
+    check("upgrades: ...and then ship weapons", A.ARMORYRESEARCH_TERRANSHIPWEAPONSLEVEL1 in done, names(researched(done)))
+    done = play(mech(hellions=5), race=Zerg, minerals=900, gas=400, frames=2)
+    check("upgrades: Hellions count too (5 x 2 supply)", W1 in done, names(researched(done)))
+
+    # ---- the Armory
+    done = play(mech(tanks=3, armories=0), race=Zerg, minerals=900, gas=400)
+    check("armory: enough mech (9 supply) and two bases: an Armory is built, with no infantry upgrade in sight", A.TERRANBUILD_ARMORY in done, names(done))
+    done = play(mech(tanks=2, armories=0), race=Zerg, minerals=900, gas=400)
+    check("armory: ...not before", A.TERRANBUILD_ARMORY not in done, names(done))
+    done = play(mech(tanks=4, armories=0, bases=1), race=Zerg, minerals=900, gas=400)
+    check("armory: ...nor on one base", A.TERRANBUILD_ARMORY not in done, names(done))
+    done = play(mech(tanks=4, armories=1), race=Zerg, minerals=900, gas=400)
+    check("armory: ...and one is enough while the money is not piling up", A.TERRANBUILD_ARMORY not in done, names(done))
+    done = play(mech(tanks=8, armories=1), race=Zerg, minerals=1500, gas=600)
+    check("armory: a big mech army (24 supply) and the money piling up: a second, for weapons and armor at the same time", A.TERRANBUILD_ARMORY in done, names(done))
+    done = play(mech(tanks=8, armories=2), race=Zerg, minerals=1500, gas=600)
+    check("armory: ...and no third", A.TERRANBUILD_ARMORY not in done, names(done))
+
+
 def main():
     # ---- a Dark Shrine: Raven first
     def starport(shrine):
@@ -273,6 +329,7 @@ def main():
           not ({A.TERRANBUILD_BARRACKS, A.TERRANBUILD_FACTORY, A.TERRANBUILD_STARPORT} & done), str(sorted(a.name for a in done)))
 
     mech()
+    upgrades()
 
     failed = [r for r in RESULTS if not r[1]]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")

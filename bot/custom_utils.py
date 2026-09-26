@@ -4,7 +4,8 @@ from sc2.ids.upgrade_id import UpgradeId
 from sc2.unit import Unit
 from sc2.units import Units
 from sc2.position import Point2, Point3
-from typing import List, Optional, Tuple
+from collections import Counter
+from typing import List, NamedTuple, Optional, Set, Tuple
 from sc2.bot_ai import BotAI
 from sc2.data import Race
 import math
@@ -123,6 +124,79 @@ def handle_depot_status(self : BotAI):
                 depo(AbilityId.MORPH_SUPPLYDEPOT_RAISE)
 
 
+# ---- the vehicle and ship upgrades (Armory) ------------------------------------------------------------------------------------------
+# They are worth their price once enough mech is out to use them: the supply of the units each upgrade makes stronger, and every tier wants more
+# of it than the one before (it costs more): 9 supply is three Tanks or Cyclones, 15 five, 24 eight. Vehicle weapons are for the vehicles
+# (Hellions, Tanks, Cyclones, Thors), ship weapons for the ships (Vikings, Banshees, Liberators, Battlecruisers), the armor for both and for the
+# mines. A bank that is piling up buys a tier at the first threshold: the price is nothing to it.
+VEHICLE_TYPES = frozenset({
+    UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED, UnitTypeId.CYCLONE, UnitTypeId.THOR, UnitTypeId.THORAP, UnitTypeId.HELLION, UnitTypeId.HELLIONTANK,
+})
+SHIP_TYPES = frozenset({UnitTypeId.VIKINGFIGHTER, UnitTypeId.BANSHEE, UnitTypeId.LIBERATOR, UnitTypeId.LIBERATORAG, UnitTypeId.BATTLECRUISER})
+MINE_TYPES = frozenset({UnitTypeId.WIDOWMINE, UnitTypeId.WIDOWMINEBURROWED})
+MECH_SUPPLY_FOR_TIER = (9, 15, 24)
+ARMORY_MECH_SUPPLY = 9           # an Armory is built once this much mech is out (macro.py)
+UPGRADE_BANK_MINERALS = 800      # "piling up": this much unspent...
+UPGRADE_BANK_GAS = 300           # ...and this much gas
+VEHICLE_WEAPONS = (UpgradeId.TERRANVEHICLEWEAPONSLEVEL1, UpgradeId.TERRANVEHICLEWEAPONSLEVEL2, UpgradeId.TERRANVEHICLEWEAPONSLEVEL3)
+VEHICLE_AND_SHIP_ARMOR = (UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1, UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL2, UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL3)
+SHIP_WEAPONS = (UpgradeId.TERRANSHIPWEAPONSLEVEL1, UpgradeId.TERRANSHIPWEAPONSLEVEL2, UpgradeId.TERRANSHIPWEAPONSLEVEL3)
+
+
+class MechSupply(NamedTuple):
+    vehicles: float      # what vehicle weapons make stronger
+    ships: float         # what ship weapons make stronger
+    armor: float         # what the armor does: both, and the mines
+
+
+def mech_supply(self : BotAI) -> MechSupply:
+    """The supply of the mech we have, by what upgrades it."""
+    vehicles = ships = mines = 0.0
+    for type_id, count in Counter(u.type_id for u in self.units.of_type(VEHICLE_TYPES | SHIP_TYPES | MINE_TYPES)).items():
+        supply = self.calculate_supply_cost(type_id) * count
+        if type_id in VEHICLE_TYPES:
+            vehicles += supply
+        elif type_id in SHIP_TYPES:
+            ships += supply
+        else:
+            mines += supply
+    return MechSupply(vehicles, ships, vehicles + ships + mines)
+
+
+def is_banking(self : BotAI) -> bool:
+    """Is the money piling up, so that the price of an upgrade or a building is nothing to it?"""
+    return self.minerals >= UPGRADE_BANK_MINERALS and self.vespene >= UPGRADE_BANK_GAS
+
+
+def next_mech_upgrade(self : BotAI, mech: MechSupply, banking: bool, prioritize_armor: bool, skip=()) -> Optional[UpgradeId]:
+    """The vehicle or ship upgrade to buy next, or None: one that we have enough mech for, can afford, has not started, and whose previous level
+    (of its own line) is done. Weapons before armor, or the other way round when `prioritize_armor`; the ship weapons after the vehicle side."""
+    def enough(supply: float, tier: int) -> bool:
+        return supply >= MECH_SUPPLY_FOR_TIER[0 if banking else tier]
+
+    def buyable(upgrade: UpgradeId, previous: Optional[UpgradeId]) -> bool:
+        return (
+            upgrade not in skip and self.already_pending_upgrade(upgrade) == 0
+            and (previous is None or self.already_pending_upgrade(previous) == 1) and self.can_afford(upgrade)
+        )
+
+    for tier in range(3):
+        wanted = []
+        if enough(mech.vehicles, tier):
+            wanted.append((VEHICLE_WEAPONS[tier], VEHICLE_WEAPONS[tier - 1] if tier else None))
+        if enough(mech.armor, tier):
+            wanted.append((VEHICLE_AND_SHIP_ARMOR[tier], VEHICLE_AND_SHIP_ARMOR[tier - 1] if tier else None))
+        if prioritize_armor:
+            wanted.reverse()
+        for upgrade, previous in wanted:
+            if buyable(upgrade, previous):
+                return upgrade
+    for tier in range(3):
+        if enough(mech.ships, tier) and buyable(SHIP_WEAPONS[tier], SHIP_WEAPONS[tier - 1] if tier else None):
+            return SHIP_WEAPONS[tier]
+    return None
+
+
 def handle_upgrades(self : BotAI):
     # light/swarm-heavy matchups (already reflected in marine_marauder_ratio - more marines wanted
     # means the enemy leans light/numerous) get more value from armor first, since it gives more
@@ -164,37 +238,15 @@ def handle_upgrades(self : BotAI):
             elif self.can_afford(UpgradeId.HISECAUTOTRACKING) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.HISECAUTOTRACKING) == 0:
                 engi.research(UpgradeId.HISECAUTOTRACKING)
 
-    # vehicle/ship upgrades are only worth researching once we actually have mech units to benefit -
-    # a flat mineral/gas bank threshold doesn't track that at all
-    mech_army : Units = self.units.of_type({
-        UnitTypeId.SIEGETANK, UnitTypeId.SIEGETANKSIEGED, UnitTypeId.CYCLONE, UnitTypeId.THOR,
-        UnitTypeId.VIKINGFIGHTER, UnitTypeId.VIKINGASSAULT, UnitTypeId.BANSHEE, UnitTypeId.BATTLECRUISER,
-    })
-    if mech_army.amount < 3:
-        return
-
-    armories = self.structures(UnitTypeId.ARMORY).ready.idle
-    vehicle_tiers = [
-        (UpgradeId.TERRANVEHICLEWEAPONSLEVEL1, UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL1),
-        (UpgradeId.TERRANVEHICLEWEAPONSLEVEL2, UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL2),
-        (UpgradeId.TERRANVEHICLEWEAPONSLEVEL3, UpgradeId.TERRANVEHICLEANDSHIPARMORSLEVEL3),
-    ]
-    for armo in armories:
-        for weapon, armor in vehicle_tiers:
-            first, second = (armor, weapon) if prioritize_armor else (weapon, armor)
-            if self.can_afford(first) and self.already_pending_upgrade(first) == 0:
-                armo.research(first)
-                break
-            if self.can_afford(second) and self.already_pending_upgrade(second) == 0:
-                armo.research(second)
-                break
-        else:
-            if self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL1) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL1) == 0:
-                armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL1)
-            elif self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL2) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL2) == 0:
-                armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL2)
-            elif self.can_afford(UpgradeId.TERRANSHIPWEAPONSLEVEL3) and self.already_pending_upgrade(UpgradeId.TERRANSHIPWEAPONSLEVEL3) == 0:
-                armo.research(UpgradeId.TERRANSHIPWEAPONSLEVEL3)
+    # vehicle/ship upgrades (Armory): bought once enough mech is out to justify them (see MECH_SUPPLY_FOR_TIER), one research per idle Armory
+    mech = mech_supply(self)
+    banking = is_banking(self)
+    ordered: Set[UpgradeId] = set()
+    for armo in self.structures(UnitTypeId.ARMORY).ready.idle:
+        upgrade = next_mech_upgrade(self, mech, banking, prioritize_armor, ordered)
+        if upgrade is not None:
+            armo.research(upgrade)
+            ordered.add(upgrade)
 
     cores = self.structures(UnitTypeId.FUSIONCORE).ready.idle
     for core in cores:

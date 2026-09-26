@@ -9,7 +9,6 @@ from typing import Dict, List, Optional, Tuple
 
 from cython_extensions import cy_attack_ready, cy_closest_to, cy_in_attack_range
 
-from ares.behaviors.combat.individual import StutterUnitForward
 from sc2.ids.ability_id import AbilityId
 from sc2.ids.buff_id import BuffId
 from sc2.position import Point2
@@ -29,8 +28,9 @@ from bot.army.units.common import (
     kite_from_banelings,
     move_to,
     path_move,
-    run,
+    stutter_forward,
 )
+from bot.army.units.repair_retreat import RepairRetreat
 from bot.pathing.order_utils import plain_point
 
 LOCK_ON_TIMEOUT = 15.0   # forget a lock-on after this long - the target is presumably dead or gone
@@ -49,6 +49,8 @@ class CycloneController:
         self.lock_ons: Dict[int, float] = {}   # enemy tag -> time we locked on, so one target is not re-locked every frame
         self.locks: Dict[int, Tuple[int, float]] = {}   # cyclone tag -> (enemy tag, time) of the lock it has running
         self.lockon_range: float = ai.game_data.abilities[AbilityId.LOCKON_LOCKON.value]._proto.cast_range
+        # a hurt Cyclone goes home to be repaired, like a Banshee (units/repair_retreat.py): to the army's hold point, where the SCVs come
+        self.repair = RepairRetreat(ai, lambda unit, orders, ctx: orders.hold_point)
 
     def begin_step(self, units: Units, ctx: ArmyContext) -> None:
         """Forget the locks that are over (also for the raiding Cyclones, cyclone_raid.py, which share this state)."""
@@ -58,6 +60,7 @@ class CycloneController:
         alive = {u.tag for u in self.ai.units}      # this controller runs once per group per step - prune by DEAD units only
         for tag in [t for t in self.locks if t not in alive]:
             del self.locks[tag]
+        self.repair.forget(alive)
         ctx.prefetch_near(units)
 
     def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext) -> None:
@@ -67,7 +70,7 @@ class CycloneController:
 
     # ------------------------------------------------------------------------------------------------------------
     def _control_unit(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext) -> None:
-        if self.handle_running_lock(unit, orders, ctx):
+        if self.handle_running_lock(unit, orders, ctx) or self.repair_trip(unit, orders, ctx):
             return
 
         targets = ctx.targets_near(unit)
@@ -111,9 +114,19 @@ class CycloneController:
                 return
             if kite_away(self.ai, ctx, unit):
                 return
-        if winning and run(self.ai, StutterUnitForward(unit=unit, target=nearest)):
+        if winning and stutter_forward(self.ai, unit, nearest):
             return
         attack_unit(unit, nearest)
+
+    def repair_trip(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext) -> bool:
+        """A Cyclone that is too damaged goes home to be repaired and waits there (also the raiding ones, cyclone_raid.py): True when it is on
+        such a trip, nothing else may be ordered for it. Where it is going to and when it comes back: see RepairRetreat."""
+        home = self.repair.update(unit, orders, ctx)
+        if home is None:
+            return False
+        if unit.distance_to(home) > self.repair.wait_radius:
+            path_move(self.ai, ctx, unit, home)
+        return True
 
     def handle_running_lock(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext) -> bool:
         """A lock-on that is running keeps draining the target without the cyclone having to stay in front of it: it kites (and does not spend

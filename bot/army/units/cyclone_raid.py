@@ -12,12 +12,12 @@ nothing a Protoss has reaches 15. The raid is the rhythm around that:
   weapon range of everything else: an idle Cyclone shoots whatever is within reach (workers, buildings), and only a move order stops that.
 * A lock that is running: the usual lock kiting (cyclones.py) - out of the fire, but not out of the lock's range.
 * Nothing in sight to hit: it walks towards what is known of the enemy (a Cannon or Battery, an army, a Nexus), stopping outside the reach of
-  whatever it sees on the way. One that is hurt goes home to be repaired.
+  whatever it sees on the way. One that is too damaged goes home to be repaired (cyclones.py, RepairRetreat).
 
 Reach is worked out from the enemies' weapons (range, both radii, a margin), not from Ares' danger grid: the grid marks a disk of 4 more around
 everything, and around every worker as well, which would make every mineral line "dangerous" and every cast position too."""
 import math
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -39,8 +39,6 @@ RAID_MARGIN = 1.5             # the Cyclone keeps this far outside the reach of 
 RAID_MELEE_EXTRA = 2.0        # ...and this much farther from what has to be right on it to hit (it closes in while the Cyclone casts)
 RAID_CAST_SLACK = 0.6         # a cast is made this far inside the cast range: the target moves too
 RAID_IDLE_MARGIN = 0.5        # a Cyclone that waits keeps this far outside its own weapon range of everything it could shoot
-RETREAT_BELOW_HEALTH = 0.5    # a hurt Cyclone goes home to be repaired (bot/repair.py repairs what is below 70% near a base)...
-RESUME_ABOVE_HEALTH = 0.9     # ...and goes back once it is
 MEMORY_SECONDS = 30.0         # an enemy army seen this recently is still where the search heads for
 # what a Lock On is worth casting on, best first: units are rank 0, workers WORKER_RANK, everything else is left alone
 RAID_STRUCTURES = {U.SHIELDBATTERY: 1, U.PHOTONCANNON: 2}
@@ -53,11 +51,9 @@ class CycloneRaid:
     def __init__(self, ai, cyclones: CycloneController):
         self.ai = ai
         self.cyclones = cyclones            # the Lock On state (who has locked on to whom) is shared with the Cyclones of the army
-        self.retreating: Set[int] = set()   # raiders that are hurt and on their way home
         self._memo: Dict[int, Tuple[Unit, Optional[int], float]] = {}   # enemy -> (enemy, its rank, its reach), worked out once per step
 
     def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext) -> None:
-        self.retreating &= {u.tag for u in units}
         self._memo = {}
         self.cyclones.begin_step(units, ctx)
         for unit in units:
@@ -68,14 +64,7 @@ class CycloneRaid:
         if self.cyclones.handle_running_lock(unit, orders, ctx):
             return
 
-        health = unit.health_percentage
-        if unit.tag in self.retreating:
-            if health >= RESUME_ABOVE_HEALTH:
-                self.retreating.discard(unit.tag)
-        elif health < RETREAT_BELOW_HEALTH:
-            self.retreating.add(unit.tag)
-        if unit.tag in self.retreating:
-            path_move(self.ai, ctx, unit, orders.hold_point)
+        if self.cyclones.repair_trip(unit, orders, ctx):          # (a hurt raider goes home to be repaired, like any Cyclone)
             return
 
         pool: List[Unit] = list(ctx.enemies_within(unit, RAID_SIGHT))

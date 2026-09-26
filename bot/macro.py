@@ -1,4 +1,4 @@
-from bot.custom_utils import can_build_structure
+from bot.custom_utils import ARMORY_MECH_SUPPLY, MECH_SUPPLY_FOR_TIER, can_build_structure, is_banking, mech_supply
 from bot.custom_utils import get_safest_expansion
 from bot.custom_utils import is_supply_critical
 from bot.custom_utils import update_rally_points
@@ -263,12 +263,19 @@ async def macro(self : BotAI):
     if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.ENGINEERINGBAY, None, 2):
         await smart_build_behind_mineral(self, UnitTypeId.ENGINEERINGBAY)
 
-    # the vehicle upgrades of a mech-led army: an Armory as soon as the Barracks, Factory and Starport stand and a second base is up
+    # the vehicle and ship upgrades: an Armory once enough mech is out to use them (handle_upgrades buys them), whatever the infantry does - and for
+    # a mech-led army as soon as the Barracks, Factory and Starport stand; a second one when the mech is big and the money piling up, so that
+    # weapons and armor are researched at the same time
+    mech = mech_supply(self)
     if (
-        self.army_advisor.mech_focus and self.townhalls.amount >= 2
-        and self.structures(UnitTypeId.STARPORT).amount + self.already_pending(UnitTypeId.STARPORT) >= 1
-        and can_build_structure(self, UnitTypeId.ARMORY, None, 1)
+        self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.ARMORY, None, 1)
+        and (
+            mech.armor >= ARMORY_MECH_SUPPLY
+            or (self.army_advisor.mech_focus and self.structures(UnitTypeId.STARPORT).amount + self.already_pending(UnitTypeId.STARPORT) >= 1)
+        )
     ):
+        await smart_build_behind_mineral(self, UnitTypeId.ARMORY)
+    if mech.armor >= MECH_SUPPLY_FOR_TIER[2] and is_banking(self) and can_build_structure(self, UnitTypeId.ARMORY, None, 2):
         await smart_build_behind_mineral(self, UnitTypeId.ARMORY)
 
     if (self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) > 0.3 or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)) > 0.3 and can_build_structure(self, UnitTypeId.ARMORY, None, 1):

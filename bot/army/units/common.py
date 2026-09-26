@@ -2,11 +2,13 @@
 import math
 from typing import Iterable, Optional, Sequence
 
+from cython_extensions import cy_attack_ready
+
 from ares.behaviors.combat.individual import KeepUnitSafe
 from sc2.position import Point2
 from sc2.unit import Unit
 
-from bot.army.consts import BANELING_RETREAT_DISTANCE, MELEE_RANGE_THRESHOLD
+from bot.army.consts import BANELING_RETREAT_DISTANCE, KITE_IN_STOP_GAP, MELEE_RANGE_THRESHOLD
 from bot.army.context import ArmyContext
 from bot.army.orders import GroupOrders
 from bot.pathing.order_utils import is_already_attack_moving_to, is_already_attacking, is_already_moving_to, segment_walkable
@@ -34,6 +36,19 @@ def attack_move(unit: Unit, point: Point2) -> None:
 def move_to(unit: Unit, point: Point2) -> None:
     if not is_already_moving_to(unit, point):
         unit.move(point)
+
+
+def stutter_forward(ai, unit: Unit, target: Unit) -> bool:
+    """"Kite in": shoot when the weapon is ready, otherwise step towards the target - but only until KITE_IN_STOP_GAP is left between the two
+    (edge to edge). Ares' StutterUnitForward walks onto the target's position, which puts the unit right next to it: in the splash of our own Siege
+    Tanks when they shell it. False when nothing was ordered: the unit is close enough already - the caller keeps the attack order on the target."""
+    if cy_attack_ready(ai, unit, target):
+        attack_unit(unit, target)
+        return True
+    if unit.distance_to(target) - unit.radius - target.radius <= KITE_IN_STOP_GAP:
+        return False
+    move_to(unit, target.position.towards(unit.position, target.radius + unit.radius + KITE_IN_STOP_GAP))
+    return True
 
 
 # ----------------------------------------------------------------------------------------------------------------
