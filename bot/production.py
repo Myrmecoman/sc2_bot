@@ -22,6 +22,12 @@ _PRIORITY_MAKERS = {
 CYCLONES_PER_TANK = 3      # a mech-led army (army_advisor.mech_focus): this many Cyclones for every Siege Tank we have, the first tank after three
 
 
+def idle_producers(self : BotAI, unit_type : UnitTypeId):
+    """The ready, idle buildings of this type that may be given a unit now: not one that was given an add-on (or a lift) to do in this very
+    step - the unit queued on top of that order could keep the game from taking it (see addons.py)."""
+    return self.structures(unit_type).ready.idle.tags_not_in(self.addons.just_ordered)
+
+
 def factory_order(self : BotAI) -> List[UnitTypeId]:
     """What a Factory with a Tech Lab makes, the one wanted most first, leaving out what is at its cap (units in production count).
     Usually the Tanks come first. A mech-led army (army_advisor.mech_focus) is Cyclones first - the tank only when CYCLONES_PER_TANK more
@@ -69,7 +75,7 @@ def priority_reserve(self : BotAI) -> Optional[Tuple[UnitTypeId, int, int]]:
             wanted, have, allowed = advisor.max_vikings, self.units(UnitTypeId.VIKINGFIGHTER).amount, self.produce_from_starports
         if not allowed or have + self.already_pending(unit) >= wanted:
             continue
-        idle = [b for b in self.structures(maker).ready.idle if b.has_techlab or not needs_techlab]
+        idle = [b for b in idle_producers(self, maker) if b.has_techlab or not needs_techlab]
         cost = self.calculate_cost(unit)
         if not idle or self.vespene < cost.vespene or self.supply_left < self.calculate_supply_cost(unit):
             continue
@@ -78,7 +84,7 @@ def priority_reserve(self : BotAI) -> Optional[Tuple[UnitTypeId, int, int]]:
 
 
 def produce_single_type_unit(self : BotAI, structure : UnitTypeId, unit : UnitTypeId, dumpunit : UnitTypeId = None):
-    for s in self.structures(structure).ready.idle:
+    for s in idle_producers(self, structure):
         if s.has_techlab and self.can_afford(unit):
             s.build(unit)
         elif s.has_reactor and self.can_afford(unit):
@@ -117,7 +123,7 @@ def produce(self : BotAI):
     less_reapers = self.units.of_type({UnitTypeId.REAPER}).amount < self.army_advisor.amount_of_enemies_of_type(UnitTypeId.REAPER)
 
     if self.produce_from_starports:
-        for st in self.structures(UnitTypeId.STARPORT).ready.idle:
+        for st in idle_producers(self, UnitTypeId.STARPORT):
 
             # first get a banshee, then a raven, then free to choose - or the raven first, when what we scouted needs a detector (Dark
             # Templar, burrowed Lurkers or mines: army_advisor.raven_first). has_techlab gates the OUTER condition, not just the inner
@@ -198,7 +204,7 @@ def produce(self : BotAI):
                 st.build(UnitTypeId.VIKINGFIGHTER)
     
     if self.produce_from_factories:
-        for fac in self.structures(UnitTypeId.FACTORY).ready.idle:
+        for fac in idle_producers(self, UnitTypeId.FACTORY):
                 if fac.has_techlab:
                     for unit_type in factory_order(self):
                         if afford(unit_type):
@@ -235,7 +241,7 @@ def produce(self : BotAI):
         #if less_reapers: # if we have less reapers than enemy, make more reapers (can also be fixed by rushing cyclone)
         #    produce_single_type_unit(self, UnitTypeId.BARRACKS, UnitTypeId.REAPER, UnitTypeId.MARINE)
         if total_marauders != 0 and total_marines / (total_marines + total_marauders) < self.army_advisor.marine_marauder_ratio: # if not enough marines, make only of them
-            for bar in self.structures(UnitTypeId.BARRACKS).ready.idle:
+            for bar in idle_producers(self, UnitTypeId.BARRACKS):
                 if bar.has_techlab and afford(UnitTypeId.MARINE):
                     bar.build(UnitTypeId.MARINE)
                 elif bar.has_reactor and afford(UnitTypeId.MARINE):
@@ -254,7 +260,7 @@ def produce(self : BotAI):
                     bar.build(UnitTypeId.MARINE)
 
         else:
-            for bar in self.structures(UnitTypeId.BARRACKS).ready.idle:
+            for bar in idle_producers(self, UnitTypeId.BARRACKS):
                 if bar.has_techlab and afford(UnitTypeId.MARAUDER):
                     bar.build(UnitTypeId.MARAUDER)
                 elif bar.has_reactor and afford(UnitTypeId.MARINE):

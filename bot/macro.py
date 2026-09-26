@@ -1,3 +1,4 @@
+from bot.addons import ADDON_OFFSET
 from bot.custom_utils import ARMORY_MECH_SUPPLY, MECH_SUPPLY_FOR_TIER, can_build_structure, is_banking, mech_supply
 from bot.custom_utils import get_safest_expansion
 from bot.custom_utils import is_supply_critical
@@ -10,7 +11,7 @@ from sc2.ids.ability_id import AbilityId
 from sc2.unit import Unit
 from sc2.units import Units
 from sc2.position import Point2, Point3
-from typing import FrozenSet, Set
+from typing import FrozenSet, List, Optional, Set, Tuple
 from sc2.bot_ai import BotAI
 from sc2.data import Race
 import math
@@ -44,15 +45,24 @@ async def build_cc(self : BotAI, build_worker: Unit = None) -> bool:
     return False
 
 
-async def try_build_on_line(self : BotAI, type : UnitTypeId, prod_structures : Units, shift = 0):
-    for i in prod_structures:
-        if await self.can_place_single(type, Point2((i.position.x + shift, i.position.y + 3))) and await self.can_place_single(type, Point2((i.position.x + shift, i.position.y + 6))):
-            await self.build(type, near=Point2((i.position.x + shift, i.position.y + 3)))
-            return True
-        if await self.can_place_single(type, Point2((i.position.x + shift, i.position.y - 3))) and await self.can_place_single(type, Point2((i.position.x + shift, i.position.y - 6))):
-            await self.build(type, near=Point2((i.position.x + shift, i.position.y - 3)))
-            return True
-    return False
+async def find_production_spot(self : BotAI, type : UnitTypeId, lines : List[Tuple[Units, int]]) -> Optional[Point2]:
+    """Where a new production building goes: in line with the ones there are (`lines`: the buildings to go by and the shift sideways, in the
+    order to try them) - above each one and below it, 3 away, with the place after that free as well, so that the column can go on. One with
+    room for its add-on beside it if there is any (a building without room stays bare, or has to lift and land somewhere else: addons.py),
+    else any. The game is asked once about all the places and once about all the add-ons, not once for every place."""
+    places: List[Tuple[Point2, Point2]] = []
+    for structures, shift in lines:
+        for i in structures:
+            for step in (3, -3):
+                places.append((Point2((i.position.x + shift, i.position.y + step)), Point2((i.position.x + shift, i.position.y + 2 * step))))
+    if not places:
+        return None
+    fits = await self.can_place(type, [spot for spot, _ in places] + [beyond for _, beyond in places])
+    fitting = [places[k][0] for k in range(len(places)) if fits[k] and fits[len(places) + k]]
+    if not fitting:
+        return None
+    room = await self.can_place(AbilityId.TERRANBUILD_SUPPLYDEPOT, [spot.offset(ADDON_OFFSET) for spot in fitting])   # (an add-on is as big as a depot)
+    return next((spot for spot, fits_addon in zip(fitting, room) if fits_addon), fitting[0])
 
 
 async def smart_build(self : BotAI, type : UnitTypeId):
@@ -85,22 +95,11 @@ async def smart_build(self : BotAI, type : UnitTypeId):
         lambda s: (wall_pos is None or s.position.distance_to(wall_pos) > 3)
         and (correct_pos is None or s.position.distance_to(correct_pos) > 3)
     )
-    if await try_build_on_line(self, type, non_wall_structures):
-        return True
-
-    # else try to build on right or left alternatively
-    if await try_build_on_line(self, type, prod_structures, -7):
-        return True
-    if await try_build_on_line(self, type, prod_structures, 7):
-        return True
-    
-    # else well try further
-    if await try_build_on_line(self, type, prod_structures, -14):
-        return True
-    if await try_build_on_line(self, type, prod_structures, 14):
-        return True
-    # no place found
-    return False
+    # else try to build on right or left alternatively, and if that is no good well try further
+    spot = await find_production_spot(self, type, [(non_wall_structures, 0), (prod_structures, -7), (prod_structures, 7), (prod_structures, -14), (prod_structures, 14)])
+    if spot is None:
+        return False    # no place found
+    return await self.build(type, near=spot, max_distance=0)
 
 
 HALF_OFFSET = Point2((.5, .5))

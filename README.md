@@ -67,6 +67,17 @@ tests/offline/               checks that need no StarCraft II, see the end of th
 * **Production buildings**: what the number of bases calls for, never more than 6 Barracks, 2 Factories and 2 Starports, and while the bank
   keeps piling up late in the game (1000+ minerals, 100+ supply used; the gas buildings also need 350+ gas) one more at a time up to
   those limits (`production_targets` in `macro.py`).
+* **Add-ons** (`addons.py`): every Barracks, Factory and Starport gets a Reactor or a Tech Lab (half of the Barracks a Reactor, a Tech Lab
+  on `factory_techlab_ratio` of the Factories, the Starports a Tech Lab first - counted on the buildings themselves), and a building that
+  cannot get one is dealt with instead of staying bare. New buildings are placed where the add-on fits (`find_production_spot` in
+  `macro.py`: the game is asked whether a depot-sized 2x2 fits at the add-on's spot, as python-sc2's `find_placement(addon_place=True)`
+  does; where nothing has room, where the building fits). A bare building with no room (terrain, another building) **lifts** - against any
+  race, not only Terran, and not during a worker or Zergling rush; the wall Barracks only once the army is bigger than the enemy army we
+  know of - and lands where it and its add-on fit (the grids first, then the game's own answer; the columns of buildings stay 7 apart,
+  5.5 when nothing else is found; a spot that did not work is not tried again). An add-on order the game did not take is noticed after
+  3 s, asked again twice, and the building then moves; no unit is queued on a building in the step it got such an order (used to be a
+  Cyclone right behind the Tech Lab). A ready building that is still bare after a minute is logged as `[addons] ...` with the reason.
+  All of this waits for the scripted opening to be done, as before.
 * **Against Protoss the army is mech-led** (`army_advisor.mech_focus`): Marines are picked up by almost everything a Protoss has, so the
   scripted opening (Barracks, Refinery, Orbital, Command Center, Factory) is followed by a Starport as soon as the Factory stands and
   ONE Barracks for the first two bases (2 at three bases, 3 at four; a second Factory at three bases; an Armory once the Starport is up).
@@ -115,7 +126,9 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   so such fights fall back to the plain model, and whatever commits units (starting a push, kiting in, sizing a detachment) needs the plain
   model to agree too. Every unit type has its own controller in `units/`; the numbers the previous controllers were tuned with (siege
   range, liberator zones, kiting rules, ...) were kept.
-* **Pre-positioning**: the hold point comes from the rally-point logic in `custom_utils.py`, the fight direction from the enemy's
+* **Pre-positioning**: the hold point comes from the rally-point logic in `custom_utils.py` (the defend point of our newest base - a new
+  Command Center counts from the moment it is **placed**, `register_base` in `bot.py`, not once it is finished - and the production
+  buildings' rally points follow it), the fight direction from the enemy's
   ground path to it, and before a push the tanks creep up to a stand-off point in front of static defense or sieged tanks (`staging`).
 * **Marching**: ground units never hop to a point ahead of them that lies behind terrain they cannot stand on (they go for the far target
   and the engine finds the way), floating enemy buildings are not chased while ground ones exist, and an army that stops getting anywhere

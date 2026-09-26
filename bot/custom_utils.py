@@ -5,9 +5,8 @@ from sc2.unit import Unit
 from sc2.units import Units
 from sc2.position import Point2, Point3
 from collections import Counter
-from typing import List, NamedTuple, Optional, Set, Tuple
+from typing import NamedTuple, Optional, Set
 from sc2.bot_ai import BotAI
-from sc2.data import Race
 import math
 
 
@@ -17,89 +16,7 @@ def can_build_structure(self : BotAI, type, fly_type, amount):
     return self.structures(type).amount + self.already_pending(type) < amount and self.can_afford(type) and self.tech_requirement_progress(type) == 1
 
 
-# Return all points that need to be checked when trying to build an addon. Returns 4 points.
-def points_to_build_addon(u_position: Point2) -> List[Point2]:
-    addon_offset: Point2 = Point2((2.5, -0.5))
-    addon_position: Point2 = u_position + addon_offset
-    addon_points = [(addon_position + Point2((x - 0.5, y - 0.5))).rounded for x in range(0, 2) for y in range(0, 2)]
-    return addon_points
-
-
-def land_structures_for_addons(self : BotAI):
-    # Return all points that need to be checked when trying to land at a location where there is enough space to build an addon. Returns 13 points.
-    def land_positions(u_position: Point2) -> List[Point2]:
-        land_positions = [(u_position + Point2((x, y))).rounded for x in range(-1, 2) for y in range(-1, 2)]
-        return land_positions + points_to_build_addon(u_position)
-
-    # Find a position to land for a flying structure so that it can build an addon
-    for u in self.structures.of_type({UnitTypeId.BARRACKSFLYING, UnitTypeId.FACTORYFLYING, UnitTypeId.STARPORTFLYING}).idle:
-        possible_land_positions_offset = sorted((Point2((x, y)) for x in range(-22, 22) for y in range(-7, 7)), key=lambda point: point.x**2 + point.y**2,)
-        offset_point: Point2 = Point2((-0.5, -0.5))
-        possible_land_positions = (u.position.rounded + offset_point + p for p in possible_land_positions_offset)
-        for target_land_position in possible_land_positions:
-            land_and_addon_points: List[Point2] = land_positions(target_land_position)
-
-            authorized = True
-            for i in self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT}):
-                if abs(i.position.x - target_land_position.position.x) < 7:
-                    authorized = False
-
-            if authorized and all(self.in_map_bounds(land_pos) and self.in_placement_grid(land_pos) and self.in_pathing_grid(land_pos) for land_pos in land_and_addon_points):
-                u(AbilityId.LAND, target_land_position)
-                break
-
-
-def build_add_on(self : BotAI, type, add_on_type):
-    # Build addon or lift if no room to build addon
-    # Only build addon if there are no threats (no ling rush or worker rush)
-    u: Unit
-    for u in self.structures(type).ready.idle:
-        if not u.has_add_on and self.can_afford(add_on_type):
-            addon_points = points_to_build_addon(u.position)
-            if all(self.in_map_bounds(addon_point) and self.in_placement_grid(addon_point) and self.in_pathing_grid(addon_point) for addon_point in addon_points):
-                if self.army_advisor.is_wall_closed() or (not self.worker_rushed and not self.army_advisor.zergling_rushed): # if no need to lift for addon, and walled, build it
-                    u.build(add_on_type)
-            elif self.enemy_race == Race.Terran or (u.position == self.main_base_ramp.barracks_in_middle and self.army_advisor.total_enemy_supply() < self.supply_army and not self.army_advisor.zergling_rushed and not self.worker_rushed):
-                u(AbilityId.LIFT)
-            break
-
-
-def handle_add_ons(self : BotAI):
-    if len(self.build_order) != 0:
-        return
-
-    bars: Units = self.structures(UnitTypeId.BARRACKS)
-    for b in bars.ready.idle:
-        if self.structures(UnitTypeId.BARRACKSREACTOR).amount + self.already_pending(UnitTypeId.BARRACKSREACTOR) < bars.amount/2:
-            if self.can_afford(UnitTypeId.REACTOR):
-                build_add_on(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSREACTOR)
-        elif self.can_afford(UnitTypeId.TECHLAB):
-            build_add_on(self, UnitTypeId.BARRACKS, UnitTypeId.BARRACKSTECHLAB)
-
-    fac: Units = self.structures(UnitTypeId.FACTORY)
-    for f in fac.ready.idle:
-        # (Tech Labs on this share of the Factories, the rest Reactors: half of them, or all of them for a mech-led army - Cyclones,
-        # Tanks and their research need a Tech Lab, see army_advisor.factory_techlab_ratio)
-        if self.structures(UnitTypeId.FACTORYTECHLAB).amount + self.already_pending(UnitTypeId.FACTORYTECHLAB) < fac.amount * self.army_advisor.factory_techlab_ratio:
-            if self.can_afford(UnitTypeId.TECHLAB):
-                build_add_on(self, UnitTypeId.FACTORY, UnitTypeId.FACTORYTECHLAB)
-        elif self.can_afford(UnitTypeId.REACTOR):
-            build_add_on(self, UnitTypeId.FACTORY, UnitTypeId.FACTORYREACTOR)
-
-    sp: Units = self.structures(UnitTypeId.STARPORT)
-    for s in sp.ready.idle:
-        if not self.build_starport_techlab_first:
-            if self.structures(UnitTypeId.STARPORTREACTOR).amount + self.already_pending(UnitTypeId.STARPORTREACTOR) < sp.amount/2:
-                if self.can_afford(UnitTypeId.REACTOR):
-                    build_add_on(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTREACTOR)
-            elif self.can_afford(UnitTypeId.TECHLAB):
-                build_add_on(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTTECHLAB)
-        else:
-            if self.structures(UnitTypeId.STARPORTTECHLAB).amount + self.already_pending(UnitTypeId.STARPORTTECHLAB) < sp.amount/2:
-                if self.can_afford(UnitTypeId.TECHLAB):
-                    build_add_on(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTTECHLAB)
-            elif self.can_afford(UnitTypeId.REACTOR):
-                build_add_on(self, UnitTypeId.STARPORT, UnitTypeId.STARPORTREACTOR)
+# (the add-ons - Reactors and Tech Labs on the Barracks, Factories and Starports - are in addons.py)
 
 
 def handle_depot_status(self : BotAI):

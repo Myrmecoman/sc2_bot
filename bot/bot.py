@@ -1,8 +1,7 @@
 import time
 
-from bot.custom_utils import land_structures_for_addons
+from bot.addons import AddonManager
 from bot.custom_utils import build_worker
-from bot.custom_utils import handle_add_ons
 from bot.custom_utils import handle_depot_status
 from bot.custom_utils import handle_upgrades
 from bot.custom_utils import research_cyclone_upgrade
@@ -69,7 +68,8 @@ class SmoothBrainBot(Sc2Bridge, AresBot):
         self.produce_from_barracks = True
         self.factory_prioritized = False              # tracks whether we've already moved the factory earlier in the build order this game
         self.rally_point = None                        # last Point2 our production rally points were set to (see update_rally_points)
-        self.base_build_order = []                     # tags of Command Centers built from scratch, in completion order - used to find our newest base for rally-point defense (see get_defend_point)
+        self.base_build_order = []                     # tags of our Command Centers, in the order they were placed (the starting one first) - used to find our newest base for rally-point defense (see get_defend_point)
+        self.addons = AddonManager(self)               # Reactors and Tech Labs for the production buildings (see addons.py)
         self.scout_worker_tag = None                  # tag of the worker currently on the early scouting run, if any
         self.enemy_base_scouted = False                # whether we've gotten vision of the enemy's main at least once
         self.scout_attempted = False                   # only ever send one scouting worker per game
@@ -123,15 +123,21 @@ class SmoothBrainBot(Sc2Bridge, AresBot):
         await super().on_building_construction_started(unit)
         if unit.type_id == UnitTypeId.BARRACKS or unit.type_id == UnitTypeId.FACTORY or unit.type_id == UnitTypeId.STARPORT:
             unit(AbilityId.SMART, get_rally_point(self))
+        # a new base counts as our newest from the moment it is PLACED, not once it is finished: the army and the rally points
+        # move to defend it while it is still building, which is when it is at its most vulnerable (see get_defend_point)
+        self.register_base(unit)
 
 
     async def on_building_construction_complete(self, unit: Unit):
         await super().on_building_construction_complete(unit)
-        # only from-scratch Command Centers append here - the starting base was never "built" (no
-        # construction event for it) and an Orbital Command upgrade is a morph of the same tag, not
-        # a new structure, so neither shows up here. That's exactly what we want: this tracks
-        # expansions specifically, oldest to newest
-        if unit.type_id == UnitTypeId.COMMANDCENTER:
+        # the starting base has no construction event, only this one (it appears finished)
+        self.register_base(unit)
+
+
+    def register_base(self, unit: Unit):
+        # only Command Centers made from scratch (or the starting one) - an Orbital Command upgrade is a morph of the same tag, not
+        # a new structure, so it never shows up here. That's exactly what we want: this tracks bases, oldest to newest
+        if unit.type_id == UnitTypeId.COMMANDCENTER and unit.tag not in self.base_build_order:
             self.base_build_order.append(unit.tag)
 
 
@@ -183,8 +189,7 @@ class SmoothBrainBot(Sc2Bridge, AresBot):
 
         await macro(self)
         build_worker(self)
-        land_structures_for_addons(self)
-        handle_add_ons(self)
+        await self.addons.update()
         produce(self)
         handle_upgrades(self)
         await research_cyclone_upgrade(self)
