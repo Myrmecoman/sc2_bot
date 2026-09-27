@@ -3,19 +3,22 @@ jump cliffs), retreats when hurt, and while there is nothing else to do it hunts
 
 A reaper never shoots buildings - they are a waste of its time, and of its life. It is never attack-moved (that shoots whatever stands in
 range, buildings included) and never left standing near them (an idle unit shoots them too): with no enemy unit in sight it TOURS the
-enemy's mineral lines - where the workers are - going on to the next stop the moment it gets close to one."""
+enemy's mineral lines - where the workers are - going on to the next stop the moment it gets close to one.
+
+While it is not actively fighting anything it can see, the way there routes around spots it knows - or very recently knew - to be
+defended (`units/danger_memory.py`), not just the destination itself: a defender that steps out of sight for a while does not make the
+ramp it stands on safe to walk back up."""
 import itertools
 from typing import Dict, List, Optional, Set, Tuple
 
 from cython_extensions import cy_attack_ready, cy_closest_to, cy_in_attack_range, cy_pick_enemy_target
 
 from ares.behaviors.combat.individual import ReaperGrenade
-from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
-from bot.army.consts import ATTACK_TARGET_IGNORE, ENEMY_WORKER_TYPES
+from bot.army.consts import ATTACK_TARGET_IGNORE
 from bot.army.context import ArmyContext
 from bot.army.orders import GroupOrders
 from bot.army.positioning import TOWNHALL_TYPES
@@ -27,6 +30,7 @@ from bot.army.units.common import (
     path_move,
     run,
 )
+from bot.army.units.danger_memory import DangerMemory, ground_defenders
 
 RETREAT_BELOW_HEALTH = 0.5   # pull back to heal below this - reapers regenerate quickly once out of combat
 RESUME_ABOVE_HEALTH = 0.85
@@ -35,8 +39,6 @@ MINERAL_LINE_RADIUS = 10.0   # minerals this close to an enemy townhall are its 
 TOUR_ARRIVED = 3.5           # a reaper this close to a stop of its tour goes on to the next one (a mineral field itself cannot be walked to)
 TOUR_REFRESH = 3.0           # seconds the list of stops is kept
 TOUR_LANE = 2.0              # a stop is the mineral field's end of the mineral line, this far towards the townhall: the lane the workers walk
-DEFENDED_MARGIN = 3.0        # a stop is defended when something that shoots ground units is closer to it than its range plus this
-BUNKER_RANGE = 7.0           # a bunker has no weapon of its own (its marines shoot up to 6, from the bunker's edge)
 
 
 class ReaperHarass:
@@ -49,12 +51,14 @@ class ReaperHarass:
         self._hunt_since: float = 0.0
         self._stop: Dict[int, int] = {}                        # reaper tag -> the stop of the tour it is on
         self._tour_cache: Tuple[float, List[Point2]] = (-1e9, [])
+        self.danger = DangerMemory(ai)      # ramps and mineral lines it has seen defended recently, even once out of sight
 
     def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext) -> None:
         alive = {u.tag for u in units}
         self.retreating &= alive
         self._stop = {tag: stop for tag, stop in self._stop.items() if tag in alive}
         ctx.prefetch_near(units)
+        self.danger.refresh(ground_defenders(self.ai))
         grid = ctx.climber_grid
         for unit in units:
             self._control_unit(unit, orders, ctx, grid)
@@ -104,7 +108,9 @@ class ReaperHarass:
         if target is not None and unit.distance_to(destination) <= 5:
             attack_unit(unit, target)        # (the unit it is after: an attack-move onto the spot would shoot the buildings around it)
         else:
-            path_move(self.ai, ctx, unit, destination, grid=grid, sense_danger=bool(targets))
+            # a target still in weapon range would already have been taken above (cy_attack_ready) - by now there is nothing left to
+            # fight nearby, so the route there avoids what was recently seen defended, not only what still is
+            path_move(self.ai, ctx, unit, destination, grid=self.danger.avoiding_grid(grid), sense_danger=bool(targets))
 
     # ------------------------------------------------------------------------------------------------------------
     def _destination(self, unit: Unit, ctx: ArmyContext, grid) -> Point2:
@@ -138,7 +144,7 @@ class ReaperHarass:
         bases = sorted(
             (s for s in ai.enemy_structures if s.type_id in TOWNHALL_TYPES and not s.is_flying), key=lambda s: s.distance_to(ai.start_location)
         )
-        defenders = self._defenders()
+        defenders = self._defenders() + self.danger.spots()
         for base in bases:
             stops.extend(stop for stop in self._mineral_line(base.position) if not self._defended(stop, defenders))
         if not stops:
@@ -151,17 +157,9 @@ class ReaperHarass:
         return stops
 
     def _defenders(self) -> List[Tuple[Point2, float]]:
-        """What shoots ground units and is known to us (units and buildings, the ghosts of recently seen ones too): its position and how
-        far it is a danger. Workers are left out on purpose: Ares' influence grid counts them like any melee unit (4 in every cell around
-        each), which would make every mineral line in the game a danger zone."""
-        defenders: List[Tuple[Point2, float]] = []
-        for e in itertools.chain(self.ai.enemy_units, self.ai.enemy_structures):
-            if e.type_id in ENEMY_WORKER_TYPES or e.is_hallucination:
-                continue
-            reach = BUNKER_RANGE if e.type_id == U.BUNKER else (e.ground_range if e.can_attack_ground else 0.0)
-            if reach > 0:
-                defenders.append((e.position, reach + e.radius + DEFENDED_MARGIN))
-        return defenders
+        """What shoots ground units and is known to us right now (units and buildings, Ares' recent memory of them too): its position and
+        how far it is a danger. `self.danger` remembers such a spot for longer still - see `_tour` and `_control_unit`."""
+        return ground_defenders(self.ai)
 
     @staticmethod
     def _defended(stop: Point2, defenders: List[Tuple[Point2, float]]) -> bool:

@@ -173,11 +173,23 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   managed to fire at for a few seconds. They never just wait: over a base with nothing to shoot they move on to the next one, and with no
   base worth a visit they rejoin the army for a while; a hurt one waits for its repair on open ground in the lane between a townhall and
   its minerals - where the SCVs are, never over the townhall itself, which they cannot walk through - and goes back to work if nobody
-  comes (the wait starts over each time the repair has got it a little further).
+  comes (the wait starts over each time the repair has got it a little further). **Cloaking waits for a real energy reserve**: turning it
+  on at the bare 25-energy minimum the game requires leaves nothing to stay cloaked WITH, so it drops again almost at once for nothing -
+  `_should_cloak` (`CLOAK_WORTHWHILE_ENERGY`, 50) holds off until there is a real reserve, both for reacting to danger and for treating a
+  defended target as reachable - unless the banshee is already hurt enough to be retreating anyway (below 40%), where even a moment of it
+  is worth having.
 * **Reapers** never shoot buildings: they are never attack-moved (that shoots whatever is in range) and never left standing next to them
   (an idle unit shoots too). With no enemy unit in sight a reaper tours the two ends of the mineral line of each enemy base we know of,
   nearest first - the workers are there - leaving out an end the enemy defends, and goes on to the next stop as soon as it gets close to
   one. Units in reach are still shot first.
+* **Reapers and raiding Cyclones remember a defended spot past what Ares itself does** (`units/danger_memory.py`, `DangerMemory`): a
+  defender that steps out of sight for a while does not make the ramp it stood on safe to walk back up. Whatever currently threatens a
+  ground unit (`ground_defenders`: live units and structures, and Ares' own short-lived memory of them) is kept for REMEMBER_SECONDS (45,
+  well past a scout's own retreat-heal-and-return cycle) whether or not it is still known to Ares, and is given up on the moment the exact
+  spot is seen again and found empty - "the path is cleared" - not just on a timer. While there is nothing to fight nearby, a Reaper's way
+  to its next stop routes around every such spot heavily (`avoiding_grid`: routing around costs far more than any real threat's own grid
+  weight, so a genuine detour wins - but a spot with truly no way round still gets a path, just an expensive one, so a unit is never simply
+  stuck); a raiding Cyclone's search for something to hit is clipped short of one the same way `_search`'s live threats already are.
 * **Bio against sieged tanks** spreads out on the way in (`TANK_SPLIT_*` in `units/bio.py`) until something is in weapon range, so a shell
   hits a few marines instead of a dozen. **Ravens** drop Auto-Turrets in front of themselves, towards the enemy (damage and something to
   shoot at), flying up to do it when the spot is safe - not under themselves.

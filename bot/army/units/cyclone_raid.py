@@ -15,7 +15,11 @@ nothing a Protoss has reaches 15. The raid is the rhythm around that:
   whatever it sees on the way. One that is too damaged goes home to be repaired (cyclones.py, RepairRetreat).
 
 Reach is worked out from the enemies' weapons (range, both radii, a margin), not from Ares' danger grid: the grid marks a disk of 4 more around
-everything, and around every worker as well, which would make every mineral line "dangerous" and every cast position too."""
+everything, and around every worker as well, which would make every mineral line "dangerous" and every cast position too.
+
+Searching for something to hit also avoids spots it knows - or very recently knew - to be defended (`units/danger_memory.py`), even once
+they are out of sight: without this, backing off from a ramp's defenders for a moment and finding it empty on the next look would send it
+straight back up the same ramp."""
 import math
 from typing import Dict, List, Optional, Tuple
 
@@ -32,6 +36,7 @@ from bot.army.context import ArmyContext
 from bot.army.orders import GroupOrders
 from bot.army.units.common import move_to, path_move, step_back_from
 from bot.army.units.cyclones import LOCK_ON_ABILITIES, CycloneController
+from bot.army.units.danger_memory import DangerMemory, ground_defenders
 
 RAID_SIGHT = 28.0             # enemies this close are looked at, for targets and for what can hit the Cyclone
 RAID_ENGAGE_RANGE = 20.0      # a target is gone for when it is at most this far (edge to edge); what is farther is what the search heads for
@@ -52,10 +57,12 @@ class CycloneRaid:
         self.ai = ai
         self.cyclones = cyclones            # the Lock On state (who has locked on to whom) is shared with the Cyclones of the army
         self._memo: Dict[int, Tuple[Unit, Optional[int], float]] = {}   # enemy -> (enemy, its rank, its reach), worked out once per step
+        self.danger = DangerMemory(ai)       # ramps and approaches it has seen defended recently, even once out of sight
 
     def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext) -> None:
         self._memo = {}
         self.cyclones.begin_step(units, ctx)
+        self.danger.refresh(ground_defenders(self.ai))
         for unit in units:
             self._control_unit(unit, orders, ctx)
 
@@ -93,7 +100,12 @@ class CycloneRaid:
             if covering:
                 step_back_from(self.ai, ctx, unit, covering, orders)
             else:
-                self._search(unit, pool, [(Point2((float(x), float(y))), float(r)) for (x, y), r in zip(xy, reach)], orders, ctx)
+                threat_circles = [(Point2((float(x), float(y))), float(r)) for (x, y), r in zip(xy, reach)]
+                # what is remembered but not already precisely accounted for above (still live, or a fresh ghost: `threats` already covers
+                # it, with the raid's own weapon-based reach - adding a second, coarser circle for the very same enemy would only make the
+                # cast/search geometry less precise for no reason)
+                remembered = [(p, r) for p, r in self.danger.spots() if not any(p.distance_to(t) <= 1.0 for t, _ in threat_circles)]
+                self._search(unit, pool, threat_circles + remembered, orders, ctx)
             return
 
         # no Lock On: nothing is attacked. Out of reach of everything, and waiting for it

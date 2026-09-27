@@ -51,7 +51,11 @@ REPAIR_SPOT_REFRESH = 5.0      # seconds a spot chosen at a townhall is kept (bu
 REPAIR_WALK_FACTOR = 2.5       # a spot the SCVs would have to walk more than this many times the straight line (+ REPAIR_WALK_SLACK) to is
 REPAIR_WALK_SLACK = 4.0        # ...not one: there is a cliff or a wall in between
 MIN_CLOAKED_ENERGY = 3.0       # a cloaked banshee with more than this is only in danger where a detector sees it
-CLOAK_START_ENERGY = 25.0      # energy needed to switch the cloak on
+CLOAK_START_ENERGY = 25.0      # energy the game requires on hand to switch the cloak on at all
+CLOAK_WORTHWHILE_ENERGY = 50.0 # ...but cloaking right at that minimum leaves nothing to STAY cloaked with: it costs 25 to turn on, so at
+                                # exactly 25 there is none left, and it drops again almost at once - wasting the surprise for nothing. Wait
+                                # for a real reserve above the minimum, unless the banshee is already in enough trouble to retreat anyway
+                                # (RETREAT_BELOW_HEALTH): then even a moment of it is worth having
 CLOAK_ON = AbilityId.BEHAVIOR_CLOAKON_BANSHEE
 CLOAK_OFF = AbilityId.BEHAVIOR_CLOAKOFF_BANSHEE
 
@@ -228,7 +232,7 @@ class BansheeHarass:
         danger = self._in_danger(unit, ctx)
         if danger:
             # cloak first (a cloaked banshee that is not detected cannot be shot), then get out of the danger zone
-            if not unit.is_cloaked and ctx.cloak_researched and CLOAK_ON in unit.abilities:
+            if not unit.is_cloaked and ctx.cloak_researched and CLOAK_ON in unit.abilities and self._should_cloak(unit):
                 unit(CLOAK_ON)
             if kite_away(self.ai, ctx, unit):
                 return
@@ -271,14 +275,20 @@ class BansheeHarass:
         path_move(self.ai, ctx, unit, self._destination(unit, orders, ctx, now), grid=ctx.air_grid)
 
     @staticmethod
-    def _can_hit_safely(unit: Unit, target: Unit, ctx: ArmyContext) -> bool:
+    def _should_cloak(unit: Unit) -> bool:
+        """Is cloaking worth it right now? Not right at the bare minimum energy the game requires (CLOAK_START_ENERGY): with nothing left
+        over it drops again almost at once, for nothing. Unless the banshee is hurt enough to be retreating anyway (RETREAT_BELOW_HEALTH) -
+        there, even a moment of it, breaking whatever is tracking it, is worth more than saving it for later."""
+        return unit.energy >= CLOAK_WORTHWHILE_ENERGY or unit.health_percentage <= RETREAT_BELOW_HEALTH
+
+    def _can_hit_safely(self, unit: Unit, target: Unit, ctx: ArmyContext) -> bool:
         """Could this banshee shoot `target` without standing inside enemy anti-air range? The spot it would shoot from is
         just inside its weapon range, on the side it comes from. A cloaked banshee - or one that can cloak the moment it
         gets into danger (see _control_unit) - is only ever in danger where a detector sees it (see _in_danger), so for it
         every target counts; a detector that keeps spotting it is what TARGET_PATIENCE is for."""
         if unit.is_cloaked and unit.energy > MIN_CLOAKED_ENERGY:
             return True
-        if ctx.cloak_researched and CLOAK_ON in unit.abilities and unit.energy >= CLOAK_START_ENERGY:
+        if ctx.cloak_researched and CLOAK_ON in unit.abilities and self._should_cloak(unit):
             return True
         reach = max(1.0, unit.ground_range - STANDOFF_MARGIN)
         standoff = target.position.towards(unit.position, reach) if unit.distance_to(target) > reach else unit.position

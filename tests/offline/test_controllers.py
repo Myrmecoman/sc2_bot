@@ -503,6 +503,51 @@ def test_banshee_cloak_and_retreat():
     check("banshee: flies home when badly hurt", any(a == A.MOVE_MOVE and t[0] < 100 for a, t, q in c), str(c))
 
 
+def test_banshee_does_not_cloak_at_the_bare_minimum_energy():
+    import asyncio
+    from bot.ares_compat import refresh_ability_cache
+
+    def scene(energy, hp=140):
+        sc = mk()
+        sc.ai.state.upgrades.add(UpgradeId.BANSHEECLOAK)
+        b = sc.own(U.BANSHEE, (150, 160), energy=energy, hp=hp)
+        sc.ai.ability_grants[b.tag] = {A.BEHAVIOR_CLOAKON_BANSHEE}
+        sc.enemy(U.MARINE, (154, 160))
+        danger(sc, (152, 160), radius=6, air=True)
+        asyncio.run(refresh_ability_cache(sc.ai, sc.ai.units))
+        ctx = begin(sc)
+        sc.manager.banshees.control(sc.world.units([b]), orders(sc), ctx)
+        return cmds(sc, b)
+
+    c = scene(25.0)
+    check("banshee: right at the bare minimum energy (25, what turning cloak on costs) it does not cloak - there would be nothing left to stay cloaked with",
+          not any(a == A.BEHAVIOR_CLOAKON_BANSHEE for a, t, q in c) and any(a == A.MOVE_MOVE for a, t, q in c), str(c))
+    c = scene(50.0)
+    check("banshee: (control) with a real reserve above that it does cloak", any(a == A.BEHAVIOR_CLOAKON_BANSHEE for a, t, q in c), str(c))
+    c = scene(25.0, hp=40)
+    check("banshee: ...unless it is already hurt enough to be retreating anyway - then even a moment of it is worth having",
+          any(a == A.BEHAVIOR_CLOAKON_BANSHEE for a, t, q in c), str(c))
+
+
+def test_banshee_does_not_treat_a_defended_target_as_safe_without_enough_energy_to_cloak():
+    """the mirror of test_banshee_that_can_cloak_still_goes_for_defended_targets: with only the bare minimum energy, cloaking would not
+    last, so a defended target is not "safe" the way it is for a banshee with a real reserve"""
+    import asyncio
+    from bot.ares_compat import refresh_ability_cache
+    sc = mk()
+    sc.ai.state.upgrades.add(UpgradeId.BANSHEECLOAK)
+    b = sc.own(U.BANSHEE, (60, 60), energy=25.0)
+    sc.ai.ability_grants[b.tag] = {A.BEHAVIOR_CLOAKON_BANSHEE}
+    defended = sc.enemy(U.DRONE, (68, 60))
+    danger(sc, (66, 60), radius=5, air=True)
+    asyncio.run(refresh_ability_cache(sc.ai, sc.ai.units))
+    ctx = begin(sc)
+    sc.manager.banshees.control(sc.world.units([b]), orders(sc), ctx)
+    c = cmds(sc, b)
+    check("banshee: with cloak researched but only the bare minimum energy, it leaves the defended worker alone (it cannot count on staying cloaked)",
+          not any(getattr(t, "tag", None) == defended.tag for a, t, q in c), str(c))
+
+
 def test_banshee_prefers_workers():
     sc = mk()
     b = sc.own(U.BANSHEE, (150, 160), cooldown=0.0)
@@ -1327,6 +1372,57 @@ def _reaper_step(sc, r):
     return cmds(sc, r)
 
 
+# ------------------------------------------------------------------------------------------------------------------------------
+# DangerMemory (units/danger_memory.py): a spot known - or known a moment ago - to be defended is remembered past whatever gave it to
+# us in the first place, until it is confirmed clear (seen again, empty) or a good while passes without either
+# ------------------------------------------------------------------------------------------------------------------------------
+def test_danger_memory_remembers_past_its_source_and_clears_on_sight_or_timeout():
+    from bot.army.units.danger_memory import DangerMemory, REMEMBER_SECONDS
+    sc = mk()
+    mem = DangerMemory(sc.ai)
+    spot = Point2((100, 100))
+    mem.refresh([(spot, 6.0)])
+    check("danger memory: a spot just given to it is remembered", mem.spots() == [(spot, 6.0)], str(mem.spots()))
+    mem.refresh([])                                           # (its source is gone from this reading - not seen empty either)
+    check("danger memory: it is still remembered once its source drops out of the current reading", mem.spots() == [(spot, 6.0)], str(mem.spots()))
+    sc.ai._fake_time += REMEMBER_SECONDS - 1
+    mem.refresh([])
+    check("danger memory: ...for a good while", mem.spots() == [(spot, 6.0)], str(mem.spots()))
+    sc.ai._fake_time += 2
+    mem.refresh([])
+    check("danger memory: ...but not forever, without ever seeing it empty", mem.spots() == [], str(mem.spots()))
+
+    mem.refresh([(spot, 6.0)])
+    sc.ai.visible.add(spot)                                   # we get vision of the exact spot again...
+    mem.refresh([])                                           # ...and it is not there any more: the path is cleared
+    check("danger memory: seeing the spot itself empty clears it at once, before the timeout", mem.spots() == [], str(mem.spots()))
+
+    sc.ai.visible.discard(spot)                               # (start the next check without vision of the spot already lingering from above)
+    mem.refresh([(spot, 6.0)])
+    sc.ai.visible.add(Point2((130, 130)))                     # vision elsewhere does not clear it
+    mem.refresh([])
+    check("danger memory: vision somewhere else does not clear a remembered spot", mem.spots() == [(spot, 6.0)], str(mem.spots()))
+
+    mem.refresh([(spot, 6.0)])
+    mem.refresh([(spot, 7.5)])                                # seen again (a different reach): replaces the old reading, not added to it
+    check("danger memory: seeing it again refreshes it (one entry, the new reach)", mem.spots() == [(spot, 7.5)], str(mem.spots()))
+
+
+def test_danger_memory_avoiding_grid():
+    from bot.army.units.danger_memory import DangerMemory, AVOID_EXTRA_COST
+    sc = mk()
+    mem = DangerMemory(sc.ai)
+    grid = np.ones((40, 40), dtype=np.float32)
+    grid[10, 10] = np.inf                                     # a building: must stay impassable, not just "expensive"
+    check("danger memory: nothing remembered - the very same grid, untouched (no needless copy)", mem.avoiding_grid(grid) is grid)
+    mem.refresh([(Point2((20, 20)), 3.0)])
+    avoided = mem.avoiding_grid(grid)
+    check("danger memory: a remembered spot piles a heavy cost on top, in a disk the size of its own reach",
+          avoided[20, 20] == 1.0 + AVOID_EXTRA_COST and avoided[23, 20] == 1.0 + AVOID_EXTRA_COST and avoided[25, 20] == 1.0, str(avoided[18:27, 20]))
+    check("danger memory: a building's cell stays impassable, not merely expensive", avoided[10, 10] == np.inf)
+    check("danger memory: the original grid - shared with everything else this step - is not itself touched", grid[20, 20] == 1.0)
+
+
 def test_reaper_is_never_attack_moved_at_buildings():
     sc = mk()
     r = sc.own(U.REAPER, (177, 179))                                      # right beside the enemy's main, and nothing but buildings in sight
@@ -1379,6 +1475,46 @@ def test_reaper_tour_does_not_take_workers_for_defenders():
     sc.enemy(U.BUNKER, (170, 190))
     reach = {(round(p.x), round(p.y)): r for p, r in sc.manager.reapers._defenders()}
     check("reaper: a marine (5 + 3 + its radius) and a bunker (7 + 3 + its radius) are", set(reach) == {(186, 172), (170, 190)} and 8.3 < reach[(186, 172)] < 8.5 and 10.3 < reach[(170, 190)] < 10.5, str(reach))
+
+
+def test_reaper_route_avoids_a_remembered_danger_spot_when_touring():
+    sc = mk()
+    _enemy_base_with_minerals(sc)
+    marine = sc.enemy(U.MARINE, (170, 150))                                    # stands well short of the mineral line, guarding the way there
+    r = sc.own(U.REAPER, (150, 150))
+    _reaper_step(sc, r)                                                       # sees it: a defender, and now remembered
+    check("reaper: a defender in sight is remembered", sc.manager.reapers.danger.spots() != [], str(sc.manager.reapers.danger.spots()))
+    mx, my = int(marine.position.x), int(marine.position.y)
+    sc.ai._enemies.remove(marine)                                             # gone from sight (and, given enough time, from Ares' own memory too)
+    grids = []
+    real = sc.ai.mediator.find_path_next_point
+    sc.ai.mediator.find_path_next_point = lambda **kw: (grids.append(kw["grid"]), real(**kw))[1]
+    try:
+        _reaper_step(sc, r)
+    finally:
+        sc.ai.mediator.find_path_next_point = real
+    check("reaper: gone from sight, the spot it stood at is still routed around", grids and grids[0][mx, my] > 1.0, str(grids[0][mx, my] if grids else None))
+    check("reaper: (control) the plain grid underneath is not itself changed", sc.ai.mediator.ground[mx, my] == 1.0)
+
+
+def test_reaper_forgets_a_remembered_spot_once_it_sees_it_empty_again():
+    sc = mk()
+    _enemy_base_with_minerals(sc)
+    marine = sc.enemy(U.MARINE, (170, 150))
+    r = sc.own(U.REAPER, (150, 150))
+    _reaper_step(sc, r)
+    mx, my = int(marine.position.x), int(marine.position.y)
+    sc.ai._enemies.remove(marine)
+    sc.ai.visible.add(marine.position)                                        # a fresh look at the exact spot: nothing there any more
+    grids = []
+    real = sc.ai.mediator.find_path_next_point
+    sc.ai.mediator.find_path_next_point = lambda **kw: (grids.append(kw["grid"]), real(**kw))[1]
+    try:
+        _reaper_step(sc, r)
+    finally:
+        sc.ai.mediator.find_path_next_point = real
+    check("reaper: seeing the spot itself empty, the path is cleared at once - not routed around any more",
+          grids and grids[0][mx, my] == 1.0, str(grids[0][mx, my] if grids else None))
 
 
 def test_reaper_still_goes_for_units_first():
@@ -1554,7 +1690,8 @@ def test_raid_goes_looking_and_stops_outside_reach():
     cy = _raider(sc, (100, 100))
     sc.enemy(U.PHOTONCANNON, (140, 100), visible=False)                    # a Cannon we saw before (a snapshot: cannot be locked on to)
     c = _raid_step(sc, cy)
-    check("raid: nothing in sight: it heads for the Cannon it knows of", _no_attack(c) and any(a == A.MOVE_MOVE and t[0] > 130 for a, t, q in c), str(c))
+    check("raid: nothing in sight: it heads for the Cannon it knows of - stopping outside its reach with the wider margin a merely-remembered spot gets",
+          _no_attack(c) and any(a == A.MOVE_MOVE and abs(t[0] - 129.625) < 0.05 for a, t, q in c), str(c))
     sc = mk(enemy_race=Race.Protoss)
     cy = _raider(sc, (100, 100))
     c = _raid_step(sc, cy)
@@ -1565,6 +1702,29 @@ def test_raid_goes_looking_and_stops_outside_reach():
     c = _raid_step(sc, cy)
     moves = [t for a, t, q in c if a == A.MOVE_MOVE]
     check("raid: ...and it stops outside the reach of what it sees on the way (a Stalker's 6 + radii + margin)", moves and 116 < moves[0][0] < 117.5, str(c))
+
+
+def test_raid_route_avoids_a_remembered_danger_spot_when_searching():
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100))
+    stalker = sc.enemy(U.STALKER, (112, 100))                                  # stands on the way to the Nexus beyond it
+    sc.enemy(U.NEXUS, (140, 100))
+    _raid_step(sc, cy)                                                        # sees it: remembered as dangerous
+    remembered = sc.manager.cyclone_raid.danger.spots()
+    check("raid: a threat on the way is remembered", len(remembered) == 1 and abs(remembered[0][0].x - 112) < 0.5, str(remembered))
+    sc.ai._enemies.remove(stalker)                                            # gone from sight (and, given enough time, from Ares' own memory too)
+    c = _raid_step(sc, cy)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    stop_at = 112 - remembered[0][1]
+    check("raid: gone from sight, it still does not walk back through where it stood - it stops short of it, heading for the Nexus beyond",
+          moves and abs(moves[0][0] - stop_at) < 0.5 and moves[0][0] < 108, str((moves, stop_at)))
+
+    sc = mk(enemy_race=Race.Protoss)                                          # (control: the same walk, but the Stalker was never seen - nothing remembered)
+    cy = _raider(sc, (100, 100))
+    sc.enemy(U.NEXUS, (140, 100))
+    c = _raid_step(sc, cy)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("raid: (control) with nothing remembered it walks straight for the Nexus", moves and moves[0][0] > 135, str(c))
 
 
 def test_raid_hurt_cyclone_goes_home_and_comes_back():
