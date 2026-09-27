@@ -574,6 +574,53 @@ def test_reaper_uses_grenade_behavior():
     c = cmds(sc, r)
     print("   reaper commands:", [(a.name, t) for a, t, q in c])
     check("reaper: controller ran with Ares' ReaperGrenade and produced an order", len(c) > 0, str(c))
+    check("reaper: throwing it seeds the hold (it is armed a while, not gone off yet)",
+          sc.manager.reapers._grenade_until.get(r.tag, 0.0) > sc.ai.time, str(sc.manager.reapers._grenade_until))
+
+
+def test_reaper_does_not_advance_towards_a_target_while_its_own_grenade_is_still_armed():
+    """the reported bug: 'the reaper often sends its mine then goes towards it and takes damage as it explodes' - a thrown KD8 Charge
+    does not go off at once, so closing the distance to what it was aimed at (the same nearest enemy ReaperGrenade itself would pick)
+    walks the reaper into its own blast."""
+    sc = mk()
+    r = sc.own(U.REAPER, (150, 160), cooldown=0.0)
+    sc.enemy(U.MARINE, (160, 160))                                            # 10 away: outside its own 5 range, so normally worth closing in on
+    ctx = begin(sc)
+    sc.manager.reapers._grenade_until[r.tag] = sc.ai.time + 1.0               # a grenade it just threw is still armed
+    sc.manager.reapers.control(sc.world.units([r]), orders(sc), ctx)
+    c = cmds(sc, r)
+    check("reaper: does not close in on the target while its own grenade is still armed", not any(a == A.ATTACK for a, t, q in c), str(c))
+
+    sc = mk()   # (control: without the hold, it closes in on a distant target - the exact bug this guards against)
+    r = sc.own(U.REAPER, (150, 160), cooldown=0.0)
+    sc.enemy(U.MARINE, (160, 160))
+    ctx = begin(sc)
+    sc.manager.reapers.control(sc.world.units([r]), orders(sc), ctx)
+    c = cmds(sc, r)
+    check("reaper: (control) without a grenade armed, it does close in on a distant target", any(a == A.ATTACK for a, t, q in c), str(c))
+
+
+def test_reaper_still_fights_something_already_in_range_while_its_grenade_is_armed():
+    sc = mk()
+    r = sc.own(U.REAPER, (150, 160), cooldown=0.0)
+    marine = sc.enemy(U.MARINE, (153, 160))                                   # already within its own 5 ground range: no closer approach needed
+    ctx = begin(sc)
+    sc.manager.reapers._grenade_until[r.tag] = sc.ai.time + 1.0
+    sc.manager.reapers.control(sc.world.units([r]), orders(sc), ctx)
+    c = cmds(sc, r)
+    check("reaper: still attacks a target already in range while its own grenade is armed",
+          any(a == A.ATTACK and getattr(t, "tag", None) == marine.tag for a, t, q in c), str(c))
+
+
+def test_reaper_resumes_chasing_once_its_grenade_has_had_time_to_go_off():
+    sc = mk()
+    r = sc.own(U.REAPER, (150, 160), cooldown=0.0)
+    sc.enemy(U.MARINE, (160, 160))
+    ctx = begin(sc)
+    sc.manager.reapers._grenade_until[r.tag] = sc.ai.time - 0.1               # already expired
+    sc.manager.reapers.control(sc.world.units([r]), orders(sc), ctx)
+    c = cmds(sc, r)
+    check("reaper: once the hold has expired, it goes back to closing in on a target normally", any(a == A.ATTACK for a, t, q in c), str(c))
 
 
 # -------------------------------------------------------------------------------------------------- manager level
@@ -1101,8 +1148,39 @@ def test_locked_cyclone_records_the_lock_and_does_not_recast():
     sc, cy, marine = _locked_cyclone(extra_enemy=(U.MARINE, (65, 61)))
     check("cyclone: the lock is recorded (which unit, when)", sc.manager.cyclones.locks.get(cy.tag, (None,))[0] == marine.tag, str(sc.manager.cyclones.locks))
     c = _next_step(sc, cy)
-    check("cyclone: safe with the target well inside 15, it stays put and does not spend a second lock (which would end the first)",
-          len(c) == 0, str(c))
+    check("cyclone: safe with the target well inside 15, it does not spend a second lock (which would end the first) - only a back-off (5.25 away, under the 6 standoff)",
+          not any(a in (A.LOCKON_LOCKON, A.LOCKONAIR_LOCKONAIR) for a, t, q in c), str(c))
+
+
+def test_locked_cyclone_backs_off_when_locked_too_close():
+    """the lock drains the target from anywhere inside its range (15): a Cyclone that ends up locked on right next to the target (the
+    generic combat path does not know about the cast range, and casts fine from well inside the Cyclone's own 5 weapon range) backs off
+    to the standoff instead of sitting there for the whole duration - see MIN_LOCK_STANDOFF."""
+    sc, cy, marine = _locked_cyclone()
+    marine = _move(sc, marine, 61.0, buffs=[BuffId.LOCKON])              # 0.25 away: about as close as it gets
+    c = _next_step(sc, cy)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("cyclone: locked right next to the target and safe, it backs off - and does not spend a second lock",
+          len(moves) == 1 and not any(a in (A.LOCKON_LOCKON, A.LOCKONAIR_LOCKONAIR) for a, t, q in c), str(c))
+    check("cyclone: ...to exactly the standoff (6 edge to edge), not further", abs(moves[0][0] - 54.25) < 0.05, str(c))
+
+
+def test_locked_cyclone_does_not_move_once_at_the_standoff():
+    sc, cy, marine = _locked_cyclone()
+    marine = _move(sc, marine, 66.75, buffs=[BuffId.LOCKON])             # exactly 6 away (edge to edge): close enough already
+    c = _next_step(sc, cy)
+    check("cyclone: right at the standoff, it does not back off any further", c == [], str(c))
+    sc, cy, marine = _locked_cyclone()
+    marine = _move(sc, marine, 67.25, buffs=[BuffId.LOCKON])             # 6.5 away: comfortably past the standoff, well inside the hold
+    c = _next_step(sc, cy)
+    check("cyclone: (control) past the standoff and well inside the hold, it stays put", c == [], str(c))
+
+
+def test_locked_cyclone_does_not_back_off_into_danger():
+    sc, cy, marine = _locked_cyclone()                                    # 5.25 away: under the standoff, would back off to the west
+    sc.ai.mediator.ground[50:60, 50:70] = 60.0                             # ...but the way west is fire; the cell it stands on is not
+    c = _next_step(sc, cy)
+    check("cyclone: too close but with nowhere safe to back off to, it holds position rather than stepping into fire", c == [], str(c))
 
 
 def test_locked_cyclone_steps_out_of_fire_but_keeps_the_lock():
@@ -1159,7 +1237,8 @@ def test_locked_cyclone_cast_that_never_took_is_tried_again():
     sc, cy, marine = _locked_cyclone()                                    # with the buff on the target
     sc.ai._fake_time += 1.2
     c = _next_step(sc, cy)
-    check("cyclone: ...but a target that carries the lock keeps its lock", cy.tag in sc.manager.cyclones.locks and not c, str((c, sc.manager.cyclones.locks)))
+    check("cyclone: ...but a target that carries the lock keeps its lock (it only backs off - 5.25 away, under the 6 standoff)",
+          cy.tag in sc.manager.cyclones.locks and not any(a in (A.LOCKON_LOCKON, A.LOCKONAIR_LOCKONAIR) for a, t, q in c), str((c, sc.manager.cyclones.locks)))
 
 
 def test_locked_cyclone_retreating_group_keeps_the_lock_while_it_goes_home():

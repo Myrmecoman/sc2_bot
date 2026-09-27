@@ -89,8 +89,10 @@ def test_air_and_the_marine_share():
     check("mutalisk flock: two turrets in every base", advice.turrets_per_base == 2, str(advice.turrets_per_base))
     advice, _ = run(Race.Zerg, units={U.BROODLORD: 2})
     check("brood lords: Vikings first", advice.prioritize_vikings and advice.max_vikings == 10, str(vars(advice)))
-    advice, _ = run(Race.Protoss, structures=[U.STARGATE])
-    check("stargate: a turret in every mineral line", advice.turrets_per_base == 1)
+    advice, fired = run(Race.Protoss, structures=[U.STARGATE])
+    check("stargate: the rule fires and wants a turret in every mineral line - but a Stargate is also skytoss, the last rule, which cancels "
+          "it again (the Cyclones are the answer instead): see test_skytoss_caps_the_tanks_and_stops_turrets",
+          "stargate" in fired and advice.turrets_per_base == 0, str((fired, advice.turrets_per_base)))
     advice, _ = run(Race.Protoss, units={U.COLOSSUS: 1})
     check("colossus: Vikings up to 6, not yet first", advice.max_vikings == 6 and not advice.prioritize_vikings, str(vars(advice)))
     advice, _ = run(Race.Protoss, units={U.COLOSSUS: 3})
@@ -101,19 +103,24 @@ def test_air_and_the_marine_share():
     check("fusion core: Vikings first, Cyclones", advice.prioritize_vikings and advice.max_cyclones == 4 and advice.max_vikings == 10, str(vars(advice)))
 
 
-def test_skytoss_caps_the_tanks():
+def test_skytoss_caps_the_tanks_and_stops_turrets():
     advice, fired = run(Race.Protoss, structures=[U.STARGATE], max_tanks=10)
     check("skytoss: a Stargate scouted -> no more than 2 Siege Tanks (they cannot shoot up)", advice.max_tanks == 2 and "skytoss" in fired, str((advice.max_tanks, fired)))
-    advice, _ = run(Race.Protoss, units={U.VOIDRAY: 1}, max_tanks=6)
-    check("skytoss: so does a Void Ray seen without the Stargate", advice.max_tanks == 2, str(advice.max_tanks))
+    check("skytoss: ...and no turrets either - the Stargate rule wants one (Oracles), but skytoss is the last rule and cancels it: the Cyclones are the answer",
+          advice.turrets_per_base == 0 and "stargate" in fired, str((advice.turrets_per_base, fired)))
+    advice, _ = run(Race.Protoss, units={U.VOIDRAY: 1}, max_tanks=6, turrets_per_base=1)
+    check("skytoss: so does a Void Ray seen without the Stargate (a turret want from an earlier reaction is cancelled too)",
+          advice.max_tanks == 2 and advice.turrets_per_base == 0, str((advice.max_tanks, advice.turrets_per_base)))
     advice, _ = run(Race.Protoss, structures=[U.STARGATE], max_tanks=1)
     check("skytoss: it is a ceiling - fewer tanks than that stay as they are", advice.max_tanks == 1, str(advice.max_tanks))
     advice, _ = run(Race.Protoss, structures=[U.STARGATE, U.ROBOTICSBAY], units={U.COLOSSUS: 4}, max_tanks=10)
     check("skytoss: ...and whatever else the enemy has, nothing raises it again (it is the last rule)", advice.max_tanks == 2, str(advice.max_tanks))
-    advice, _ = run(Race.Protoss, structures=[U.GATEWAY], max_tanks=6)
-    check("skytoss: no air, no cap", advice.max_tanks == 6, str(advice.max_tanks))
-    advice, _ = run(Race.Zerg, structures=[U.SPIRE], max_tanks=8)
-    check("skytoss: (mutalisks are not skytoss: another answer, no cap)", advice.max_tanks == 8, str(advice.max_tanks))
+    advice, _ = run(Race.Protoss, structures=[U.GATEWAY], max_tanks=6, turrets_per_base=1)
+    check("skytoss: no air, no cap - and a turret want from something else (e.g. Dark Templar) is left alone",
+          advice.max_tanks == 6 and advice.turrets_per_base == 1, str((advice.max_tanks, advice.turrets_per_base)))
+    advice, _ = run(Race.Zerg, structures=[U.SPIRE], max_tanks=8, turrets_per_base=1)
+    check("skytoss: (mutalisks are not skytoss: another answer, no cap, its own turret want stays)",
+          advice.max_tanks == 8 and advice.turrets_per_base == 1, str((advice.max_tanks, advice.turrets_per_base)))
 
 
 # ---------------------------------------------------------------------------------------------------------------- the advisor
@@ -148,6 +155,7 @@ def test_advisor_skytoss_tank_ceiling():
     gate = sc.enemy(U.STARGATE, (150, 150))
     advisor.provide_advices()
     check("advisor: a Stargate scouted -> 2 tanks at most, the Cyclones (12) stay and Vikings come", advisor.max_tanks == 2 and advisor.max_cyclones == 12 and advisor.max_vikings == 10 and advisor.prioritize_vikings, str((advisor.max_tanks, advisor.max_cyclones)))
+    check("advisor: ...and no turrets - the Stargate's own want for one is cancelled by the same skytoss reaction", advisor.turrets_per_base == 0, str(advisor.turrets_per_base))
     sc.ai._enemies.remove(gate)
     advisor.provide_advices()
     check("advisor: the Stargate gone, the ceiling goes with it", advisor.max_tanks == 4, str(advisor.max_tanks))

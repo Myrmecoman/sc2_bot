@@ -39,6 +39,9 @@ LOCK_ON_HOLD_RANGE = 15.0     # once locked on, the Cyclone keeps firing at the 
 LOCK_ON_MARGIN = 1.5          # ...and stays this far inside it: the target moves too
 LOCK_ON_STEP = 4.0            # the longest step it takes to follow a target that is walking out of range
 LOCK_ON_MIN_STEP = 1.0        # a retreat that only gains less than this is not one that keeps the lock
+MIN_LOCK_STANDOFF = 6.0        # the lock drains the target from anywhere inside LOCK_ON_HOLD_RANGE: never worth standing closer than this
+                                # (the Cyclone's own weapon only reaches 5 - the generic combat path, or a coincidental close cast, can
+                                # otherwise leave it locked on right next to the target for the whole duration)
 LOCK_ON_CAST_SECONDS = 0.3    # nothing is ordered this soon after the cast: a move order could cancel it before it is through
 LOCK_ON_CONFIRM_SECONDS = 1.5 # a cast has to show by then (the order, the buff on the target, or the ability on cooldown) or it never took
 # The lock ends when the target is out of view - whoever sees it. A Cyclone that backs out of fire keeps it in view when it can, unless something
@@ -223,6 +226,11 @@ class CycloneController:
             if gap > hold:
                 # the target is walking away and the lock ends at 15: follow it - through safe ground only
                 step = unit.position.towards(target.position, min(gap - hold + 2.0, LOCK_ON_STEP))
+                if ctx.mediator.is_position_safe(grid=grid, position=step):
+                    move_to(unit, step)
+            elif gap < MIN_LOCK_STANDOFF:
+                # too close for no reason: the lock does not need it, and it is well inside the Cyclone's own weapon range (5)
+                step = target.position.towards(unit.position, MIN_LOCK_STANDOFF + unit.radius + target.radius)
                 if ctx.mediator.is_position_safe(grid=grid, position=step):
                     move_to(unit, step)
             return                                              # nothing to run from: the lock does the work

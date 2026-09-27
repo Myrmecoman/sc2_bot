@@ -14,7 +14,7 @@ macro read:
                      vehicle upgrades, the Cyclone research, Tech Labs on every Factory (macro.py, production.py, custom_utils.py)
 
 Caps only ever go UP (`raise_to`), so two rules never undo each other - the one exception is the last rule, which puts a ceiling on the
-tanks against skytoss; the marine share goes down for armored armies (more Marauders)
+tanks and the turrets against skytoss; the marine share goes down for armored armies (more Marauders)
 and up against air (Marines shoot up) - where both apply, the later rule in the table wins, and air is listed after the ground armies. The
 advisor resets its knobs to their usual values before every run, so a rule never sticks after its trigger is gone. A rule that is wrong
 costs a few units of the wrong kind - never the whole build - and every rule that fires is logged once ("[react] ...") so a game shows
@@ -166,8 +166,9 @@ REACTIONS: List[Reaction] = [
     # ---- last: a ceiling, so that nothing above can raise it again ----
     Reaction(
         "skytoss", Race.Protoss, lambda s: s.structure(U.STARGATE) > 0 or s.unit(*SKYTOSS_TYPES) > 0,
-        lambda a: lower_to(a, max_tanks=2),
-        "Siege Tanks cannot shoot up: no more than 2 against skytoss (the Factory makes Cyclones instead)",
+        lambda a: lower_to(a, max_tanks=2, turrets_per_base=0),
+        "Siege Tanks cannot shoot up: no more than 2 against skytoss (the Factory makes Cyclones instead). No turrets either: money for "
+        "them keeps coming back every base, and the Cyclones - already the answer to Siege Tanks - are the answer to this too",
     ),
 ]
 

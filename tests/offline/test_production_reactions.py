@@ -7,6 +7,7 @@ building limits: never more than 6 Barracks, 2 Factories and 2 Starports - and m
   turrets    a Dark Shrine scouted: an Engineering Bay, then a missile turret in the mineral line
   starport   ... and the Starport is built now, not once a second base is up
   caps       6 Barracks / 2 Factories / 2 Starports at most, the bank builds one more at a time while it piles up
+  infantry_upgrades  the Engineering Bay's weapon/armor levels wait for the 3rd base
 
 Against Protoss (a mech-led army, army_advisor.mech_focus):
   cyclones   the Factory makes Cyclones first, a Tank once three more Cyclones than 3 x tanks are out; money is held back for them
@@ -228,6 +229,31 @@ def upgrades():
     check("armory: ...and no third", A.TERRANBUILD_ARMORY not in done, names(done))
 
 
+def infantry_upgrades():
+    """The Engineering Bay's weapon/armor upgrades wait for the 3rd base (custom_utils.INFANTRY_UPGRADE_MIN_BASES) - unlike stim or
+    cloak (a one-off buy), these come back every level and compete with actual unit production for money on every single step; a real
+    game was seen where that alone stalled production to nothing."""
+    Zerg = common_pb2.Zerg
+
+    def with_ebay(bases):
+        def setup(game, cx, cy):
+            more_bases(game, bases - 1)
+            game.add(U.ENGINEERINGBAY, (cx - 10, cy - 12), 1)
+        return setup
+
+    def researched(done):
+        return {a for a in done if a.name.startswith("ENGINEERINGBAYRESEARCH_")}
+
+    for bases in (1, 2):
+        done = play(with_ebay(bases), race=Zerg, minerals=900, gas=400, frames=2)
+        check(f"infantry upgrades: {bases} base(s) - not yet (they would compete with unit production every step)",
+              not researched(done), str(sorted(a.name for a in done)))
+    done = play(with_ebay(3), race=Zerg, minerals=900, gas=400, frames=2)
+    check("infantry upgrades: three bases - now they are worth it",
+          A.ENGINEERINGBAYRESEARCH_TERRANINFANTRYWEAPONSLEVEL1 in done or A.ENGINEERINGBAYRESEARCH_TERRANINFANTRYARMORLEVEL1 in done,
+          str(sorted(a.name for a in done)))
+
+
 def main():
     # ---- a Dark Shrine: Raven first
     def starport(shrine):
@@ -330,6 +356,7 @@ def main():
 
     mech()
     upgrades()
+    infantry_upgrades()
 
     failed = [r for r in RESULTS if not r[1]]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")

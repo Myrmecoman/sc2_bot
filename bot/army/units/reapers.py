@@ -7,7 +7,10 @@ enemy's mineral lines - where the workers are - going on to the next stop the mo
 
 While it is not actively fighting anything it can see, the way there routes around spots it knows - or very recently knew - to be
 defended (`units/danger_memory.py`), not just the destination itself: a defender that steps out of sight for a while does not make the
-ramp it stands on safe to walk back up."""
+ramp it stands on safe to walk back up.
+
+A thrown KD8 Charge does not go off at once: for a short while after, the reaper holds where it is (fighting on if something is already
+in range - that needs no closer approach) instead of closing in on the very thing the charge was aimed at."""
 import itertools
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -39,6 +42,9 @@ MINERAL_LINE_RADIUS = 10.0   # minerals this close to an enemy townhall are its 
 TOUR_ARRIVED = 3.5           # a reaper this close to a stop of its tour goes on to the next one (a mineral field itself cannot be walked to)
 TOUR_REFRESH = 3.0           # seconds the list of stops is kept
 TOUR_LANE = 2.0              # a stop is the mineral field's end of the mineral line, this far towards the townhall: the lane the workers walk
+GRENADE_HOLD_SECONDS = 2.0   # a thrown KD8 Charge arms and can go off around this long after (Ares' own PlacePredictiveAoE leads the
+                             # target by 34 game loops, ~1.5s, when it places one ahead of it; a margin on top for the reaper's own
+                             # reaction time) - approximate, not measured against a real game
 
 
 class ReaperHarass:
@@ -52,11 +58,13 @@ class ReaperHarass:
         self._stop: Dict[int, int] = {}                        # reaper tag -> the stop of the tour it is on
         self._tour_cache: Tuple[float, List[Point2]] = (-1e9, [])
         self.danger = DangerMemory(ai)      # ramps and mineral lines it has seen defended recently, even once out of sight
+        self._grenade_until: Dict[int, float] = {}   # reaper tag -> until when a KD8 Charge it just threw may still be armed
 
     def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext) -> None:
         alive = {u.tag for u in units}
         self.retreating &= alive
         self._stop = {tag: stop for tag, stop in self._stop.items() if tag in alive}
+        self._grenade_until = {tag: until for tag, until in self._grenade_until.items() if tag in alive}
         ctx.prefetch_near(units)
         self.danger.refresh(ground_defenders(self.ai))
         grid = ctx.climber_grid
@@ -80,11 +88,28 @@ class ReaperHarass:
 
         if targets and run(self.ai, ReaperGrenade(unit=unit, enemy_units=targets, retreat_target=orders.hold_point,
                                                   grid=grid)):
+            self._grenade_until[unit.tag] = self.ai.time + GRENADE_HOLD_SECONDS
             return
 
         # banelings: always back away, whatever else is true (see kite_from_banelings)
         banelings = ctx.banelings_near(unit)
         close_banelings = ctx.close_banelings(unit)
+
+        # a grenade it just threw is still armed, and it can go off near what it was aimed at (the same nearest enemy ReaperGrenade
+        # itself picks): do not close the distance to it meanwhile. A shot already in range needs no closer approach, and is worth
+        # taking; anything else waits for the fuse instead of walking into it.
+        if targets and self._grenade_until.get(unit.tag, 0.0) > self.ai.time:
+            if close_banelings:
+                kite_from_banelings(self.ai, ctx, unit, close_banelings, orders, grid=grid)
+                return
+            in_range = cy_in_attack_range(unit, targets)
+            if in_range:
+                held_target = cy_pick_enemy_target(in_range)
+                if cy_attack_ready(self.ai, unit, held_target):
+                    attack_unit(unit, held_target)
+                    return
+            kite_away(self.ai, ctx, unit, grid)
+            return
 
         target: Optional[Unit] = None
         if targets:

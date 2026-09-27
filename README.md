@@ -55,8 +55,10 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   let the bank reach 150, so while a Factory stands ready and only the money is missing, production spends only what is left over
   (`priority_reserve` in `production.py`; nothing is held back when the gas or the supply is missing, or enough tanks are out). More rules
   for Lurkers, mines, Banshees, Mutalisks, Brood Lords, Colossi, Banelings, Ultralisks, Hydralisks, Battlecruisers - and against skytoss (a
-  Stargate or an air unit seen) no more than 2 Siege Tanks, since they cannot shoot up (the Factory makes Cyclones instead). Add a rule by
-  adding a `Reaction(...)` to the table; `tests/offline/test_reactions.py` shows how a rule is tested.
+  Stargate or an air unit seen) no more than 2 Siege Tanks, since they cannot shoot up, **and no turrets either** - the Factory's Cyclones
+  are the answer to both, so a turret want an earlier rule raised (a Stargate is also "detected": it wants one for Oracles) is cancelled
+  again by this last rule, same as the tank cap. Add a rule by adding a `Reaction(...)` to the table; `tests/offline/test_reactions.py`
+  shows how a rule is tested.
 * **Vehicle and ship upgrades** (`handle_upgrades`, `next_mech_upgrade` in `custom_utils.py`): bought once enough mech is out to justify them,
   by the supply of what each upgrade makes stronger - vehicle weapons by the vehicles (Hellions, Tanks, Cyclones, Thors), ship weapons by the
   ships (Vikings, Banshees, Liberators, Battlecruisers), the armor by both and the mines - and each level wants more than the one before:
@@ -64,6 +66,11 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   is only asked for once the one before it (of its line) is done. The Armory (`macro()`) is built at two bases as soon as 9 supply of mech
   is out - not, as it used to be, only after an infantry upgrade had started, which needs an Engineering Bay and three bases - and a second
   one when the mech is 24 supply and the bank is piling up, to research weapons and armor at the same time.
+* **Infantry weapon/armor upgrades** (the Engineering Bay, `handle_upgrades` in `custom_utils.py`) wait for the 3rd base
+  (`INFANTRY_UPGRADE_MIN_BASES`): unlike stim or cloak (a one-off buy), these come back every level and, with nothing else gating them,
+  compete with actual unit production for money on every single step from the moment an Engineering Bay exists - a real game was seen
+  where that alone stalled production to nothing. The Engineering Bay itself is unaffected: it still goes up as soon as the scouting
+  calls for a turret or a detector.
 * **Production buildings**: what the number of bases calls for, never more than 6 Barracks, 2 Factories and 2 Starports, and while the bank
   keeps piling up late in the game (1000+ minerals, 100+ supply used; the gas buildings also need 350+ gas) one more at a time up to
   those limits (`production_targets` in `macro.py`).
@@ -146,9 +153,12 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   soon as nothing is inside the zone they were ordered to cover - whatever stands next to them.
 * **Cyclones** kite while a Lock On runs: it keeps firing at the unit up to 15 range for as long as the unit stays in view, so the Cyclone
   steps out of enemy fire - never so far that the target leaves that range - and follows a target that is walking away; it does not spend
-  a second lock while one is running. A lock that ended (the target died or left view, got out of range, the cast never took) hands the
-  Cyclone back to the normal logic. **It keeps the target in view while it backs out**: the lock ends when the target is out of view, so
-  a way out that leads down a ramp or behind a cliff (from a lower level the high ground cannot be seen: `terrain_view` in
+  a second lock while one is running. If the lock started (or the target closed in) from closer than 6 - the Cyclone's own weapon only
+  reaches 5, and the generic combat logic does not know the lock keeps working from farther out - it backs straight off to that distance
+  instead of sitting in its own weapon's range for the whole lock, as long as the way back is safe. A lock that ended (the target died or
+  left view, got out of range, the cast never took) hands the Cyclone back to the normal logic. **It keeps the target in view while it
+  backs out**: the lock ends when the target is out of view, so a way out that leads down a ramp or behind a cliff (from a lower level
+  the high ground cannot be seen: `terrain_view` in
   `pathing/order_utils.py`, heights from `game_info.terrain_height`, tolerance 8; a flying target is never hidden) or beyond the Cyclone's
   own sight (11, while the lock goes on to 15) is only taken when another unit of ours watches the target (inside its own sight range, and
   not behind a cliff unless it flies). Otherwise the Cyclone takes the nearest other safe spot that is inside its sight, sees the target
@@ -186,7 +196,10 @@ tests/offline/               checks that need no StarCraft II, see the end of th
 * **Reapers** never shoot buildings: they are never attack-moved (that shoots whatever is in range) and never left standing next to them
   (an idle unit shoots too). With no enemy unit in sight a reaper tours the two ends of the mineral line of each enemy base we know of,
   nearest first - the workers are there - leaving out an end the enemy defends, and goes on to the next stop as soon as it gets close to
-  one. Units in reach are still shot first.
+  one. Units in reach are still shot first. **A thrown KD8 Charge does not go off at once**: for `GRENADE_HOLD_SECONDS` (2, approximate)
+  after Ares' own `ReaperGrenade` behavior throws one, the reaper holds where it is instead of closing in on the very thing it was aimed
+  at - it used to attack-move straight at it the moment it was still out of weapon range, walking into its own blast. A target already in
+  range is still fought (that needs no closer approach); banelines and its own safety still come first.
 * **Reapers and raiding Cyclones remember a defended spot past what Ares itself does** (`units/danger_memory.py`, `DangerMemory`): a
   defender that steps out of sight for a while does not make the ramp it stood on safe to walk back up. Whatever currently threatens a
   ground unit (`ground_defenders`: live units and structures, and Ares' own short-lived memory of them) is kept for REMEMBER_SECONDS (45,

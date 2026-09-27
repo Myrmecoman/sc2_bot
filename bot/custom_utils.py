@@ -114,6 +114,11 @@ def next_mech_upgrade(self : BotAI, mech: MechSupply, banking: bool, prioritize_
     return None
 
 
+INFANTRY_UPGRADE_MIN_BASES = 3   # the Engineering Bay's weapon/armor levels wait for this many bases: at 1-2 they compete for money
+                                  # with actual unit production every single step (unlike stim/cloak, a one-off buy), and a game was
+                                  # seen where that alone stalled production to nothing
+
+
 def handle_upgrades(self : BotAI):
     # light/swarm-heavy matchups (already reflected in marine_marauder_ratio - more marines wanted
     # means the enemy leans light/numerous) get more value from armor first, since it gives more
@@ -134,26 +139,27 @@ def handle_upgrades(self : BotAI):
         if self.can_afford(UpgradeId.BANSHEECLOAK) and self.already_pending_upgrade(UpgradeId.BANSHEECLOAK) == 0:
             tech.research(UpgradeId.BANSHEECLOAK)
 
-    engis = self.structures(UnitTypeId.ENGINEERINGBAY).ready.idle
-    infantry_tiers = [
-        (UpgradeId.TERRANINFANTRYWEAPONSLEVEL1, UpgradeId.TERRANINFANTRYARMORSLEVEL1),
-        (UpgradeId.TERRANINFANTRYWEAPONSLEVEL2, UpgradeId.TERRANINFANTRYARMORSLEVEL2),
-        (UpgradeId.TERRANINFANTRYWEAPONSLEVEL3, UpgradeId.TERRANINFANTRYARMORSLEVEL3),
-    ]
-    for engi in engis:
-        for weapon, armor in infantry_tiers:
-            first, second = (armor, weapon) if prioritize_armor else (weapon, armor)
-            if self.can_afford(first) and self.already_pending_upgrade(first) == 0:
-                engi.research(first)
-                break
-            if self.can_afford(second) and self.already_pending_upgrade(second) == 0:
-                engi.research(second)
-                break
-        else:
-            if self.can_afford(UpgradeId.TERRANBUILDINGARMOR) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.TERRANBUILDINGARMOR) == 0:
-                engi.research(UpgradeId.TERRANBUILDINGARMOR)
-            elif self.can_afford(UpgradeId.HISECAUTOTRACKING) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.HISECAUTOTRACKING) == 0:
-                engi.research(UpgradeId.HISECAUTOTRACKING)
+    if self.townhalls.amount >= INFANTRY_UPGRADE_MIN_BASES:
+        engis = self.structures(UnitTypeId.ENGINEERINGBAY).ready.idle
+        infantry_tiers = [
+            (UpgradeId.TERRANINFANTRYWEAPONSLEVEL1, UpgradeId.TERRANINFANTRYARMORSLEVEL1),
+            (UpgradeId.TERRANINFANTRYWEAPONSLEVEL2, UpgradeId.TERRANINFANTRYARMORSLEVEL2),
+            (UpgradeId.TERRANINFANTRYWEAPONSLEVEL3, UpgradeId.TERRANINFANTRYARMORSLEVEL3),
+        ]
+        for engi in engis:
+            for weapon, armor in infantry_tiers:
+                first, second = (armor, weapon) if prioritize_armor else (weapon, armor)
+                if self.can_afford(first) and self.already_pending_upgrade(first) == 0:
+                    engi.research(first)
+                    break
+                if self.can_afford(second) and self.already_pending_upgrade(second) == 0:
+                    engi.research(second)
+                    break
+            else:
+                if self.can_afford(UpgradeId.TERRANBUILDINGARMOR) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.TERRANBUILDINGARMOR) == 0:
+                    engi.research(UpgradeId.TERRANBUILDINGARMOR)
+                elif self.can_afford(UpgradeId.HISECAUTOTRACKING) and self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL3) == 1 and self.already_pending_upgrade(UpgradeId.HISECAUTOTRACKING) == 0:
+                    engi.research(UpgradeId.HISECAUTOTRACKING)
 
     # vehicle/ship upgrades (Armory): bought once enough mech is out to justify them (see MECH_SUPPLY_FOR_TIER), one research per idle Armory
     mech = mech_supply(self)
