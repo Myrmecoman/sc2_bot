@@ -151,6 +151,10 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   to centre and still be in range). Liberators are ordered into Defender Mode without waiting for the game to list the morph as usable (an
   order that never takes effect is given up on after a few tries), hold it for a shooting window after it first shows up, and come down as
   soon as nothing is inside the zone they were ordered to cover - whatever stands next to them.
+* **Cyclones never target a cloaked, undetected enemy** (an Observer, most often - permanently cloaked, no detector needed to be seen
+  yet still reported once its position is in vision: `is_visible` is about vision of the position, not about seeing through cloak). Left
+  out of both Lock On candidates and the normal attack logic (`e.can_be_attacked`, i.e. not cloaked or revealed by a detector) - scoped to
+  the Cyclone controller only, not the other unit types.
 * **Cyclones** kite while a Lock On runs: it keeps firing at the unit up to 15 range for as long as the unit stays in view, so the Cyclone
   steps out of enemy fire - never so far that the target leaves that range - and follows a target that is walking away; it does not spend
   a second lock while one is running. If the lock started (or the target closed in) from closer than 6 - the Cyclone's own weapon only

@@ -1108,6 +1108,35 @@ def test_bio_spreads_out_on_the_way_in_to_sieged_tanks():
 
 
 # ------------------------------------------------------------------------------------------------------------------------------
+# a cloaked, undetected enemy (an Observer, most often) is never targeted by a Cyclone - is_visible only means the POSITION is
+# seen, it says nothing about the cloak status (cyclones.py only - not a shared ArmyContext change)
+# ------------------------------------------------------------------------------------------------------------------------------
+def test_cyclone_leaves_an_undetected_observer_alone():
+    """the reported bug: a Cyclone tried to target an Observer, which cannot be locked on to or attacked at all without a detector."""
+    sc = mk()
+    cy = sc.own(U.CYCLONE, (60, 60))
+    sc.ai.ability_grants[cy.tag] = {A.LOCKON_LOCKON, A.LOCKONAIR_LOCKONAIR}
+    obs = sc.enemy(U.OBSERVER, (63, 60), cloaked=True)
+    ctx = begin(sc)
+    sc.manager.cyclones.control(sc.world.units([cy]), orders(sc), ctx)
+    c = cmds(sc, cy)
+    check("cyclone: an undetected Observer is never locked on to or attacked (it just carries on towards the actual objective)",
+          not any(getattr(t, "tag", None) == obs.tag for a, t, q in c), str(c))
+    from bot.ares_compat import refresh_ability_cache
+    sc2 = mk()
+    cy2 = sc2.own(U.CYCLONE, (60, 60))
+    sc2.ai.ability_grants[cy2.tag] = {A.LOCKON_LOCKON, A.LOCKONAIR_LOCKONAIR}
+    obs2 = sc2.enemy(U.OBSERVER, (63, 60), cloaked=True)
+    obs2._proto.cloak = 2                                                 # CloakedDetected: a detector (Raven, turret, ...) sees it now
+    asyncio.run(refresh_ability_cache(sc2.ai, sc2.ai.units))
+    ctx2 = begin(sc2)
+    sc2.manager.cyclones.control(sc2.world.units([cy2]), orders(sc2), ctx2)
+    c2 = cmds(sc2, cy2)
+    check("cyclone: (control) once detected, it is locked on to like any other target",
+          any(a == A.LOCKONAIR_LOCKONAIR and getattr(t, "tag", None) == obs2.tag for a, t, q in c2), str(c2))
+
+
+# ------------------------------------------------------------------------------------------------------------------------------
 # a locked-on cyclone kites: the lock keeps firing up to 15 range, while the target stays in view
 # ------------------------------------------------------------------------------------------------------------------------------
 def _locked_cyclone(buffs=(BuffId.LOCKON,), extra_enemy=None):

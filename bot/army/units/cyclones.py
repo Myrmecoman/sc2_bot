@@ -90,7 +90,9 @@ class CycloneController:
         if self.handle_running_lock(unit, orders, ctx) or self.repair_trip(unit, orders, ctx):
             return
 
-        targets = ctx.targets_near(unit)
+        # is_visible only means the position is in vision, not that the unit can be seen through cloak - a permanently-cloaked one
+        # (an Observer) or a cloaked/burrowed one with no detector over it is reported all the same, just untargetable
+        targets = [e for e in ctx.targets_near(unit) if e.can_be_attacked]
         if self._try_lock_on(unit, targets):
             return
 
