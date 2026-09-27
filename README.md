@@ -87,7 +87,9 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   All of this waits for the scripted opening to be done, as before.
 * **Against Protoss the army is mech-led** (`army_advisor.mech_focus`): Marines are picked up by almost everything a Protoss has, so the
   scripted opening (Barracks, Refinery, Orbital, Command Center, Factory) is followed by a Starport as soon as the Factory stands and
-  ONE Barracks for the first two bases (2 at three bases, 3 at four; a second Factory at three bases; an Armory once the Starport is up).
+  ONE Barracks for the first two bases (2 at three bases, 3 at four; a second Factory at three bases; an Armory once the Starport is up
+  AND the first bio upgrade (+1 armor or +1 attack) is done - the Cyclone's own upgrades need no Armory at all (they are researched at
+  the Factory Tech Lab), so there is no reason to rush one early just because the army is mech-led).
   Every Factory gets a Tech Lab. The
   Factory makes Cyclones first (cap 12), a Siege Tank after each three of them (`factory_order` in `production.py`, cap 4 - 2 against
   skytoss) and Tanks alone once the Cyclones are at their cap; money is held back for the next one (as for the tanks above), so the bio

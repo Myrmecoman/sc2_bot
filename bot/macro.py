@@ -263,14 +263,24 @@ async def macro(self : BotAI):
         await smart_build_behind_mineral(self, UnitTypeId.ENGINEERINGBAY)
 
     # the vehicle and ship upgrades: an Armory once enough mech is out to use them (handle_upgrades buys them), whatever the infantry does - and for
-    # a mech-led army as soon as the Barracks, Factory and Starport stand; a second one when the mech is big and the money piling up, so that
-    # weapons and armor are researched at the same time
+    # a mech-led army once the Starport stands AND the first bio upgrade is done (a sign the economy can afford a second tech structure - the
+    # Cyclone's own upgrades need no Armory at all, they are researched at the Factory Tech Lab, see CYCLONE_UPGRADES in custom_utils.py, so there
+    # is no reason to rush this one early just because the army is mech-led); a second Armory when the mech is big and the money piling up, so
+    # that weapons and armor are researched at the same time
     mech = mech_supply(self)
+    first_bio_upgrade_done = (
+        self.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1) == 1
+        or self.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1) == 1
+    )
     if (
         self.townhalls.amount >= 2 and can_build_structure(self, UnitTypeId.ARMORY, None, 1)
         and (
             mech.armor >= ARMORY_MECH_SUPPLY
-            or (self.army_advisor.mech_focus and self.structures(UnitTypeId.STARPORT).amount + self.already_pending(UnitTypeId.STARPORT) >= 1)
+            or (
+                self.army_advisor.mech_focus
+                and self.structures(UnitTypeId.STARPORT).amount + self.already_pending(UnitTypeId.STARPORT) >= 1
+                and first_bio_upgrade_done
+            )
         )
     ):
         await smart_build_behind_mineral(self, UnitTypeId.ARMORY)

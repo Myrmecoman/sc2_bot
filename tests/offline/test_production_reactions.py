@@ -13,7 +13,7 @@ Against Protoss (a mech-led army, army_advisor.mech_focus):
   cyclones   the Factory makes Cyclones first, a Tank once three more Cyclones than 3 x tanks are out; money is held back for them
              (Marines carry on with what is left); the Cyclone research is ordered once we make Cyclones
   buildings  one Barracks for two bases (two at three), the Starport once the Factory stands, a second Factory at three bases, an
-             Armory once the Starport is up, a Tech Lab on every Factory"""
+             Armory once the Starport is up AND the first bio upgrade is done, a Tech Lab on every Factory"""
 import _bootstrap  # noqa: F401  (repo root on sys.path - keep this first)
 import asyncio
 from loguru import logger
@@ -144,11 +144,15 @@ def mech():
     check("buildings: three bases: a second Factory and a second Barracks", A.TERRANBUILD_FACTORY in done and A.TERRANBUILD_BARRACKS in done, names(done))
     done = play(bases(3, barracks=2, factories=2, starports=1), race=Protoss, minerals=900, gas=300)
     check("buildings: ...and no third Barracks yet", A.TERRANBUILD_BARRACKS not in done, names(done))
+    done = play(bases(2, factories=1, starports=1), race=Protoss, minerals=900, gas=300, upgrades=(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1,))
+    check("armory: against Protoss, two bases, the Starport up, and the first bio upgrade done: an Armory for the vehicle upgrades",
+          A.TERRANBUILD_ARMORY in done, names(done))
     done = play(bases(2, factories=1, starports=1), race=Protoss, minerals=900, gas=300)
-    check("armory: against Protoss, two bases and the Starport up: an Armory for the vehicle upgrades", A.TERRANBUILD_ARMORY in done, names(done))
+    check("armory: ...not before the first bio upgrade completes (the Cyclone's own upgrades need no Armory, so there is no reason to rush it)",
+          A.TERRANBUILD_ARMORY not in done, names(done))
     done = play(bases(2, factories=1), race=Protoss, minerals=900, gas=300)
     check("armory: ...not before the Starport", A.TERRANBUILD_ARMORY not in done, names(done))
-    done = play(bases(2, factories=1, starports=1, armory=True), race=Protoss, minerals=900, gas=300)
+    done = play(bases(2, factories=1, starports=1, armory=True), race=Protoss, minerals=900, gas=300, upgrades=(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1,))
     check("armory: ...and only one", A.TERRANBUILD_ARMORY not in done, names(done))
     done = play(bases(2, factories=1, starports=1), race=Zerg, minerals=900, gas=300)
     check("armory (control): against Zerg nothing calls for one yet", A.TERRANBUILD_ARMORY not in done, names(done))
