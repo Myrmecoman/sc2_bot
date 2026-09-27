@@ -127,6 +127,3 @@ dmypy.json
 
 # ares
 ares-sc2*
-
-# who bot, it's not ours so do not publish it
-training_bots/who/*

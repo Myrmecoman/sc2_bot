@@ -46,9 +46,6 @@ if __name__ == "__main__":
         from training_bots.single_worker_attack import SingleWorker
         from training_bots.resume_building_tester import ResumeBuilding
         from training_bots.MassReaper.main import MassReaper
-        from training_bots.who.bot.why.bot.main import MyBot as WhoTerran
-        from training_bots.who.bot.what.bot.main import MyBot as WhoZerg
-        from training_bots.who.bot.really.bot.main import MyBot as WhoProtoss
 
         # enemy is chosen here, after the imports above, not at module level - each option
         # depends on an import that's deliberately deferred into this block (so a broken
@@ -60,13 +57,12 @@ if __name__ == "__main__":
         #enemy = Computer(Race.Terran, Difficulty.CheatInsane, AIBuild.Macro)
         #enemy = Bot(Race.Terran, SmoothBrainBot(), "SmoothBrainBotEnemy")
         #enemy = Bot(Race.Terran, MassReaper(), "MassReaper")
-        #enemy = Bot(Race.Protoss, WorkerRushBot(), "WorkerRush")
+        enemy = Bot(Race.Protoss, WorkerRushBot(), "WorkerRush")
         #enemy = Bot(Race.Terran, ResumeBuilding(), "ResumeBuilding")
         #enemy = Bot(Race.Terran, SingleWorker(), "SingleWorker")
         #enemy = Bot(Race.Terran, Lift(), "Lift")
         #enemy = Bot(Race.Terran, LiftTopRight(), "LiftTopRight")
         #enemy = Bot(Race.Terran, PFrush(), "PFrush")
-        enemy = Bot(Race.Terran, WhoTerran(), "WhoTerran")
 
         # Local game
         print("Starting local game...")
