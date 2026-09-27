@@ -31,7 +31,7 @@ from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
-from bot.army.consts import ATTACK_TARGET_IGNORE_WITH_WORKERS, ENEMY_WORKER_TYPES, FIGHT_GHOST_MAX_AGE, MELEE_RANGE_THRESHOLD
+from bot.army.consts import ATTACK_TARGET_IGNORE, ATTACK_TARGET_IGNORE_WITH_WORKERS, ENEMY_WORKER_TYPES, FIGHT_GHOST_MAX_AGE, MELEE_RANGE_THRESHOLD
 from bot.army.context import ArmyContext
 from bot.army.orders import GroupOrders
 from bot.army.units.common import move_to, path_move, step_back_from
@@ -105,7 +105,13 @@ class CycloneRaid:
                 # it, with the raid's own weapon-based reach - adding a second, coarser circle for the very same enemy would only make the
                 # cast/search geometry less precise for no reason)
                 remembered = [(p, r) for p, r in self.danger.spots() if not any(p.distance_to(t) <= 1.0 for t, _ in threat_circles)]
-                self._search(unit, pool, threat_circles + remembered, orders, ctx)
+                # and anything else still worth a lock (a worker, most often - nothing else was left to walk towards): stop short of it by
+                # the same margin _pick_target casts from, so the search arrives already standing off instead of walking onto it and only
+                # backing out afterwards. A melee or short-ranged one is already covered above by its own (usually tighter) threat circle;
+                # this only ever matters for what does not otherwise threaten the Cyclone back.
+                cast_standoff = self.cyclones.lockon_range - RAID_CAST_SLACK
+                standoff = [(e.position, cast_standoff) for e, rank in zip(pool, ranks) if rank is not None]
+                self._search(unit, pool, threat_circles + remembered + standoff, orders, ctx)
             return
 
         # no Lock On: nothing is attacked. Out of reach of everything, and waiting for it
@@ -223,7 +229,9 @@ class CycloneRaid:
         points: List[Point2] = [s.position for s in ai.enemy_structures if s.type_id in RAID_STRUCTURES or s.type_id == U.NEXUS]
         points += [
             e.position for e in ai.enemy_units
-            if not e.is_structure and not e.is_hallucination and e.type_id not in ATTACK_TARGET_IGNORE_WITH_WORKERS and e.type_id not in RAID_IGNORE
+            # ATTACK_TARGET_IGNORE, not the WITH_WORKERS version: a worker IS worth walking towards - _pick_target/_rank locks on to one
+            # "when there is nothing else" (WORKER_RANK), which never gets the chance if nothing ever walks close enough to find one
+            if not e.is_structure and not e.is_hallucination and e.type_id not in ATTACK_TARGET_IGNORE and e.type_id not in RAID_IGNORE
             and (not e.is_memory or e.age <= MEMORY_SECONDS)
         ]
         if not points:

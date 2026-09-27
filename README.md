@@ -151,9 +151,11 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   a way out that leads down a ramp or behind a cliff (from a lower level the high ground cannot be seen: `terrain_view` in
   `pathing/order_utils.py`, heights from `game_info.terrain_height`, tolerance 8; a flying target is never hidden) or beyond the Cyclone's
   own sight (11, while the lock goes on to 15) is only taken when another unit of ours watches the target (inside its own sight range, and
-  not behind a cliff unless it flies). Otherwise the Cyclone takes the nearest other safe spot 3 / 5 / 7 away (12 directions) that is inside
-  its sight, sees the target and is no nearer to it than it is now. With no such spot (and for a retreating army, which goes home) the
-  plain way out stays: the Cyclone comes first, the lock is given up.
+  not behind a cliff unless it flies). Otherwise the Cyclone takes the nearest other safe spot that is inside its sight, sees the target
+  and is no nearer to it than it is now - tried at several distances from where it stands, up to its own sight range (not a fixed handful
+  of cells: a single defender's own danger radius, its weapon range plus Ares' own 4-cell buffer, is routinely 9-12, farther than a short
+  fixed search would reach), 12 directions at each. With no such spot (and for a retreating army, which goes home) the plain way out
+  stays: the Cyclone comes first, the lock is given up.
 * **Cyclones raid Protoss** (`units/cyclone_raid.py`): against Protoss a Cyclone does not wait for the army - as long as the army is not
   pushing and nothing threatens home (the manager gives them the `HARASSING` role, and back to `ATTACKING` when a push starts or the base
   defense may need them) it goes out to hurt the enemy: lock on, step back out of reach (the lock keeps working up to 15), again. It
@@ -163,8 +165,11 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   reach safely: nothing else that can hit the Cyclone may cover the spot it casts from or the way there (the target itself may hit back:
   a Cannon reaches 7, a shot or two), so a unit in the middle of a Stalker ball is left alone while a lone one, a Battery or a Cannon is
   not. Reach comes from the enemies' weapons, not from Ares' danger grid (which marks 4 more around everything, workers included). With
-  nothing to hit it walks towards what it knows of the enemy (a Cannon or Battery, an army, a Nexus, else their natural) and stops outside
-  the reach of what it sees.
+  nothing to hit it walks towards what it knows of the enemy (a Cannon or Battery, an army, a Nexus, **or a lone worker - a valid, if
+  low-priority, target and not just the ignore list `_rank` uses for it: without this a raider with nothing else around walked to a
+  filler point instead and just sat there**, else their natural) and stops outside the reach of what it sees - and, once it is close
+  enough to be worth a lock itself, outside the CAST range of it too (the same stand-off `_pick_target` casts from), so it arrives ready
+  to cast instead of walking onto it and only backing out afterwards.
 * **Hurt units go home to be repaired** (`units/repair_retreat.py`, shared by Banshees and Cyclones - the army's and the raiding ones): below
   40% of its health a unit walks to where the SCVs (`repair.py`) can reach it - a Banshee to open ground next to a townhall, a Cyclone to the
   army's hold point - and waits until it is up to 90%. The wait starts over each time the repair has got it a little further; with nothing

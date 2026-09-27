@@ -44,8 +44,11 @@ LOCK_ON_CONFIRM_SECONDS = 1.5 # a cast has to show by then (the order, the buff 
 # The lock ends when the target is out of view - whoever sees it. A Cyclone that backs out of fire keeps it in view when it can, unless something
 # else of ours watches it anyway: the way out must not lead down a ramp or behind a cliff (from a lower level the target cannot be seen), and it
 # must stay inside the Cyclone's own sight (11 - the lock goes on to 15).
-VIEW_RINGS = (3.0, 5.0, 7.0)    # how far from where it stands the other ways out are looked for...
-VIEW_DIRECTIONS = 12            # ...in this many directions
+VIEW_RING_FRACTIONS = (0.3, 0.5, 0.7, 0.85, 1.0)  # how far from where it stands the other ways out are looked for, as a fraction of its
+                                 # own sight range - a fixed distance either falls well short of a single structure's own danger radius
+                                 # (a Cannon's 7 range + Ares' 4-cell buffer is already 11, more than the Cyclone's whole sight) or searches
+                                 # past where a spot could ever pass the sight check below anyway, whatever the actual danger turns out to be
+VIEW_DIRECTIONS = 12            # ...in this many directions, at each
 CYCLONE_SIGHT = 11.0            # (when the game data does not say)
 OTHER_SIGHT = 9.0               # ...nor for the other units of ours
 SIGHT_MARGIN = 0.5
@@ -267,7 +270,7 @@ class CycloneController:
         ai = self.ai
         limit = LOCK_ON_HOLD_RANGE - LOCK_ON_MARGIN + unit.radius + target.radius
         here = unit.position.distance_to(target.position)
-        for reach in VIEW_RINGS:
+        for reach in (self._sight(unit) * f for f in VIEW_RING_FRACTIONS):
             for k in range(VIEW_DIRECTIONS):
                 angle = 2.0 * math.pi * k / VIEW_DIRECTIONS
                 spot = Point2((unit.position.x + reach * math.cos(angle), unit.position.y + reach * math.sin(angle)))

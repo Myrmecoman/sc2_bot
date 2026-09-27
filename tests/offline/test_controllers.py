@@ -1704,6 +1704,31 @@ def test_raid_goes_looking_and_stops_outside_reach():
     check("raid: ...and it stops outside the reach of what it sees on the way (a Stalker's 6 + radii + margin)", moves and 116 < moves[0][0] < 117.5, str(c))
 
 
+def test_raid_walks_towards_a_lone_worker_beyond_engage_range():
+    """with nothing else around, a worker beyond RAID_ENGAGE_RANGE used to be excluded from _destination (ATTACK_TARGET_IGNORE_WITH_WORKERS,
+    meant for _rank/covering, not for "is there anything at all worth walking towards") - the raider went to the enemy's natural instead
+    and then just sat there, even though _pick_target locks on to a worker "when there is nothing else" once close enough."""
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100))
+    probe = sc.enemy(U.PROBE, (125, 100))                                     # 24.25 away: beyond RAID_ENGAGE_RANGE (20), within RAID_SIGHT (28)
+    c = _raid_step(sc, cy)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("raid: with only a distant worker known, it walks towards it (stopping short at the standoff, not overshooting to a filler point like their natural)",
+          _no_attack(c) and moves and 110 < moves[0][0] < 125, str(c))
+
+
+def test_raid_search_stands_off_from_a_lockable_target_instead_of_walking_onto_it():
+    """approaching something worth a lock (a worker, most often - nothing else was left to walk towards) must not walk fully onto it: the
+    search stops short by the same margin _pick_target casts from, exactly like it already does for anything that can hit back."""
+    sc = mk(enemy_race=Race.Protoss)
+    cy = _raider(sc, (100, 100))
+    probe = sc.enemy(U.PROBE, (125, 100))                                     # beyond engage range: _search does the walking, not _pick_target
+    c = _raid_step(sc, cy)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("raid: the search itself already stands off - it does not walk onto the worker just because nothing threatens the way there",
+          moves and moves[0][0] < probe.position.x - 5.0, str(c))
+
+
 def test_raid_route_avoids_a_remembered_danger_spot_when_searching():
     sc = mk(enemy_race=Race.Protoss)
     cy = _raider(sc, (100, 100))
@@ -1867,7 +1892,8 @@ def test_locked_cyclone_backs_out_where_it_keeps_the_target_in_view():
     sc, cy, target = _plateau_lock(plateau=False)
     moves, c = _way_out(sc, cy)
     check("cyclone: (control) on flat ground the way out is the plain one", len(moves) == 1 and 54.5 < moves[0][0] < 55.6, str(c))
-    sc, cy, target = _plateau_lock(fire_y_to=80)                             # no safe ground up there within reach
+    sc, cy, target = _plateau_lock(fire_y_to=80)                             # no safe ground up there within reach...
+    sc.ai.mediator.ground[56:80, 50:80] = 60.0                                # ...nor to the east of it, within its own sight of the target
     moves, c = _way_out(sc, cy)
     check("cyclone: with no way out that keeps the target in view it still backs out (the Cyclone comes first)", len(moves) == 1 and 54.5 < moves[0][0] < 55.6, str(c))
     sc, cy, target = _plateau_lock()
@@ -1902,12 +1928,31 @@ def test_locked_cyclone_prefers_spots_within_its_own_sight():
     grid = sc.ai.mediator.ground
     grid[40:80, 40:80] = 60.0
     grid[57, 60] = 1.0                                                        # safe: 3 to the west, 11 from the target - past the Cyclone's sight (11)
-    grid[60, 65] = 1.0                                                        # safe: 5 to the north, 9.4 from the target - inside it
+    grid[60, 65] = 1.0                                                        # safe: 5.25 to the north (one of the search rings), 9.5 from the target - inside it
     grid[63, 60] = 1.0                                                        # safe: 3 to the east, 5 from the target - the way out would be a step towards it (and it is looked at first)
     ctx = begin(sc)
     spot = sc.manager.cyclones._spot_with_view(sc.world.units([cy])[0], marine, ctx, ctx.ground_grid)
     check("cyclone: of the spots that keep the view it takes one within its own sight, however far it is (the nearer one would be out of it) - and never one nearer the target",
-          spot is not None and abs(spot.x - 60.0) < 0.2 and abs(spot.y - 65.0) < 0.2, str(spot))
+          spot is not None and abs(spot.x - 60.0) < 0.3 and abs(spot.y - 65.25) < 0.3, str(spot))
+
+
+def test_locked_cyclone_view_search_reaches_as_far_as_its_own_sight():
+    """A single defender's own realistic danger radius (its weapon range plus Ares' own 4-cell buffer) is routinely 9-12 - farther than a
+    fixed handful of cells would ever reach (found by search, not guessed - see the session notes): a disk of 10 centred 2 north of the
+    Cyclone is one such case. The plain retreat (the nearest safe cell) heads north-west, well out of the target's view; the search must
+    reach as far as the Cyclone's own sight to find the alternative to the east that keeps it."""
+    sc, cy, marine = _locked_cyclone()
+    marine = _move(sc, marine, 66.0, buffs=[BuffId.LOCKON])
+    grid = sc.ai.mediator.ground
+    cx, cy_, radius = 60.0, 58.0, 10.0
+    for x in range(grid.shape[0]):
+        for y in range(grid.shape[1]):
+            if (x - cx) ** 2 + (y - cy_) ** 2 <= radius ** 2:
+                grid[x, y] = 60.0
+    c = _next_step(sc, cy)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("cyclone: a realistic single-defender danger radius can be farther than a handful of cells - the search still finds a spot that keeps the target in view",
+          len(moves) == 1 and np.hypot(moves[0][0] - 66.0, moves[0][1] - 60.0) <= 10.5 + 1e-6, str(c))
 
 
 def test_terrain_view():
