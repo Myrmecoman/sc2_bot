@@ -20,6 +20,7 @@ from bot.army.units.common import attack_move, follow_point, kite_away, path_mov
 
 MATRIX = AbilityId.EFFECT_INTERFERENCEMATRIX
 TURRET = AbilityId.BUILDAUTOTURRET_AUTOTURRET
+FOLLOW_LEAD = 4.0               # while the army advances a Raven stands this far ahead of its main squad (never running ahead of what it supports)
 MATRIX_FREE_AFTER = 10.0        # a matrixed enemy is left alone this long so two ravens do not both spend one on it
 ENERGY_TO_SPEND = 125           # this much energy and nothing worth matrixing -> spend it on turrets instead of hoarding
 TURRET_STANDOFF = 4.0           # a turret stands this far from the enemy nearest to the Raven: in its own range (6), not on top of them
@@ -43,7 +44,9 @@ class RavenController:
         self.matrix_range: float = ai.game_data.abilities[MATRIX.value]._proto.cast_range
         self.turret_range: float = ai.game_data.abilities[TURRET.value]._proto.cast_range
 
-    async def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext) -> None:
+    async def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext, lead: float = FOLLOW_LEAD) -> None:
+        """`lead`: how far ahead of the group's anchor a Raven stands while it advances (the manager sends the Raven that is with a part of
+        the army of its own - see ArmyManager._share_ravens - with a lead of 0: at the middle of it)."""
         now = self.ai.time
         for tag in [t for t, cast_at in self.matrices.items() if now - cast_at > MATRIX_FREE_AFTER]:
             del self.matrices[tag]
@@ -54,7 +57,7 @@ class RavenController:
             # a Raven cannot fight back - never idle in a dangerous spot
             if kite_away(self.ai, ctx, unit):
                 continue
-            point = follow_point(orders)
+            point = follow_point(orders, lead)
             if orders.aggressive:
                 attack_move(unit, point)
             elif unit.distance_to(point) > orders.hold_radius:

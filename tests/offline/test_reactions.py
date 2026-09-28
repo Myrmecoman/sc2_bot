@@ -175,6 +175,24 @@ def test_advisor_mech_focus_is_a_protoss_thing():
     check("advisor: a Colossus and Immortals: a few more tanks (6), and still the Cyclones", advisor.max_tanks == 6 and advisor.max_cyclones == 12, str((advisor.max_tanks, advisor.max_cyclones)))
 
 
+def test_advisor_second_raven_against_zerg_once_the_army_is_big():
+    sc, advisor = make_advisor(Race.Zerg)
+    sc.ai.supply_army = 20
+    advisor.provide_advices()
+    check("advisor: against Zerg one Raven while the army is small (20 supply)", advisor.max_ravens == 1, str(advisor.max_ravens))
+    sc.ai.supply_army = 30
+    advisor.provide_advices()
+    check("advisor: ...a second one from 30 supply: the Ravens are shared out between the parts of the army (army/manager.py)", advisor.max_ravens == 2, str(advisor.max_ravens))
+    sc.ai.supply_army = 20
+    advisor.provide_advices()
+    check("advisor: ...and it does not stick", advisor.max_ravens == 1, str(advisor.max_ravens))
+    for race, usual in ((Race.Terran, 3), (Race.Protoss, 2)):
+        sc, advisor = make_advisor(race)
+        sc.ai.supply_army = 10
+        advisor.provide_advices()
+        check(f"advisor: (control) against {race.name} the Ravens are what they were ({usual}), whatever the army", advisor.max_ravens == usual, str(advisor.max_ravens))
+
+
 def test_advisor_random_opponent_gets_its_races_numbers_once_seen():
     sc, advisor = make_advisor(Race.Random)
     advisor.provide_advices()

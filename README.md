@@ -48,6 +48,11 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   they keep out of) - instead of running to the townhall like from any other threat, which is where the Oracle follows them to. A worker
   that has fled stays out, not back to mining under the Oracle, until it is more than 10 away or gone. A hallucinated Oracle moves nobody;
   SCVs that are repairing or constructing are left alone.
+* **SCVs are not afraid of what cannot hurt them** (`HARMLESS_TO_WORKERS` in `pathing/consts.py`): changelings, Observers (and larva and
+  eggs) never send a worker to the townhall (`flee_worker_threats`), hold an SCV back from resuming an unattended building
+  (`resume_building_construction`) or turn the scouting SCV back - they walk and float through the mineral line for minutes, and the
+  workers just carry on mining. It goes by what the unit is, not by `can_attack_ground`: a disguised changeling may be listed with the
+  weapon of what it looks like.
 * **Reactions to the scouting** (`reactions.py`): a table of rules, "we have seen X -> change Y", applied on top of the advisor's usual
   per-race numbers every step (so nothing sticks once its trigger is gone) and logged once each as `[react] ...`. A Dark Shrine (or Dark
   Templar): the Starport makes a Raven before a Banshee, is built at once, a missile turret goes into every mineral line. A Roach Warren:
@@ -159,7 +164,11 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   the Cyclone controller only, not the other unit types.
 * **Cyclones** kite while a Lock On runs: it keeps firing at the unit up to 15 range for as long as the unit stays in view, so the Cyclone
   steps out of enemy fire - never so far that the target leaves that range - and follows a target that is walking away; it does not spend
-  a second lock while one is running. If the lock started (or the target closed in) from closer than 6 - the Cyclone's own weapon only
+  a second lock while one is running. **The Cyclone comes first, the lock is a bonus**: in enemy fire it keeps the lock only by a way
+  out that is itself safe (inside the lock's range, the target in view - see below - and no more than 3 longer than the plain way out,
+  `LOCK_DETOUR`); it never stops short of safe ground just because the target would leave the lock's range there, and never takes a long
+  way through the fire to keep the view. Otherwise it goes all the way out and the lock may end. If the lock started (or the target
+  closed in) from closer than 6 - the Cyclone's own weapon only
   reaches 5, and the generic combat logic does not know the lock keeps working from farther out - it backs straight off to that distance
   instead of sitting in its own weapon's range for the whole lock, as long as the way back is safe. A lock that ended (the target died or
   left view, got out of range, the cast never took) hands the Cyclone back to the normal logic. **It keeps the target in view while it
@@ -217,6 +226,13 @@ tests/offline/               checks that need no StarCraft II, see the end of th
 * **Bio against sieged tanks** spreads out on the way in (`TANK_SPLIT_*` in `units/bio.py`) until something is in weapon range, so a shell
   hits a few marines instead of a dozen. **Ravens** drop Auto-Turrets in front of themselves, towards the enemy (damage and something to
   shoot at), flying up to do it when the spot is safe - not under themselves.
+* **Against Zerg the Ravens are shared out between the parts of the army** (`ArmyManager._share_ravens`, `RAVEN_ESCORT_*` in
+  `army/manager.py`): creep tumors and burrowed units are only seen - and shot - where a Raven's detection reaches, and the army is often
+  in more than one place. The Raven nearest to the main army stays with it; each other part of at least 3 units (a base-defense
+  detachment, the diversion squad), the biggest first, gets the nearest of the Ravens that are left (within 60), which stands in the middle
+  of it (the main army's Ravens stand 4 ahead of it) until the part is gone - then it goes back to the main army. A single Raven stays with
+  the main army, and against Terran and Protoss nothing is shared. Against Zerg a second Raven is made once the army is 30 supply
+  (`SECOND_RAVEN_ARMY_SUPPLY`): earlier the gas is better spent elsewhere.
 * **Speed**: a step with a maxed army in contact takes about 45 ms offline, and the combat simulator is only ~5% of that (a few calls per
   step, cached); the rest is python-sc2/Ares bookkeeping and per-unit Python. What the army code does per unit is therefore worked out once
   per step where it can be (enemy classification in `ArmyContext`, neighbour search in `Crowd`, the workers' flee check in one distance

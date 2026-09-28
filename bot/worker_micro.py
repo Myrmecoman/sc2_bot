@@ -16,6 +16,7 @@ from sc2.position import Point2
 from sc2.unit import Unit
 from sc2.units import Units
 
+from bot.pathing.consts import HARMLESS_TO_WORKERS
 from bot.pathing.order_utils import is_already_moving_to, segment_walkable
 
 WORKER_FLEE_RANGE = 7.0   # start pulling workers back before a fast threat like a reaper is already on top of them
@@ -174,9 +175,11 @@ def flee_worker_threats(self: BotAI, skip: Set[int] = frozenset()):
     if self.worker_rushed:
         return  # worker_rush_defense already has its own dedicated worker-combat logic for that case
 
-    # (Oracles are dodged, not run away from to the townhall: see avoid_oracles)
+    # (Oracles are dodged, not run away from to the townhall: see avoid_oracles; changelings and Observers hurt nobody: they walk and fly
+    # through the mineral line for minutes at a time, and the workers just carry on)
     threats: Units = self.visible_enemy_units.filter(
         lambda u: u.can_attack_ground and u.type_id not in {UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE, UnitTypeId.ORACLE}
+        and u.type_id not in HARMLESS_TO_WORKERS
     )
     if threats.amount == 0:
         return

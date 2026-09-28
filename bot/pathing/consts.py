@@ -12,6 +12,10 @@ ATTACK_TARGET_IGNORE: Set[UnitTypeId] = {
     UnitTypeId.CHANGELINGZERGLINGWINGS,
 }
 
+# enemy units no worker has any reason to run from or to hold back for: they never attack (a disguised changeling only "carries" whatever
+# the game data lists for what it looks like, an Observer is a detector) - `can_attack_ground` alone is not to be trusted for these
+HARMLESS_TO_WORKERS: Set[UnitTypeId] = ATTACK_TARGET_IGNORE | {UnitTypeId.OBSERVER, UnitTypeId.OBSERVERSIEGEMODE}
+
 ATTACK_TARGET_IGNORE_WITH_WORKERS: Set[UnitTypeId] = {
     UnitTypeId.LARVA,
     UnitTypeId.EGG,

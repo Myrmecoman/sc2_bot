@@ -1232,6 +1232,25 @@ def test_locked_cyclone_at_the_edge_of_the_lock_leaves_it_rather_than_die():
     check("cyclone: in fire with no way out that keeps the lock, the cyclone still comes first (all the way to the safe spot)", moves and moves[0][0] < 55, str(c))
 
 
+def test_locked_cyclone_never_stops_short_of_safety_to_keep_the_lock():
+    """The way out is cut where the target would leave the lock's range - but a cut that still ends in the fire is only more time in it, for
+    a lock that is about to end anyway. The lock is kept by ways out that are safe; otherwise the Cyclone goes all the way out."""
+    for target_x, gap in ((69.0, 9), (72.0, 12)):
+        sc, cy, marine = _locked_cyclone()
+        marine = _move(sc, marine, target_x, buffs=[BuffId.LOCKON])
+        sc.ai.mediator.ground[52:80, 50:70] = 60.0                            # fire from 52 on (safe ground 9 back, at 51): the cut ends in it
+        c = _next_step(sc, cy)
+        moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+        check(f"cyclone: in fire with the target {gap} away, the lock's range cuts the way out short of safe ground: all the way out, not partway",
+              len(moves) == 1 and moves[0][0] < 52, str(c))
+    sc, cy, marine = _locked_cyclone()
+    marine = _move(sc, marine, 69.0, buffs=[BuffId.LOCKON])
+    sc.ai.mediator.ground[55:80, 50:70] = 60.0                                # (safe ground at 54: the cut - 54.75 - is on it)
+    c = _next_step(sc, cy)
+    moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+    check("cyclone: (control) a cut that reaches safe ground is still taken: the lock is kept", len(moves) == 1 and 54.3 < moves[0][0] < 55.3, str(c))
+
+
 def test_locked_cyclone_follows_a_target_that_walks_away():
     sc, cy, marine = _locked_cyclone()
     marine = _move(sc, marine, 75.5, buffs=[BuffId.LOCKON])              # 14.75 from the cyclone's edge: the lock ends at 15
@@ -2008,6 +2027,17 @@ def test_locked_cyclone_backs_out_where_it_keeps_the_target_in_view():
     moves, c = _way_out(sc, cy, mode=Mode.HOLD, retreating=True)
     check("cyclone: a retreating group's Cyclone goes home (it stands on the hold point here), not to a spot that keeps the view",
           len(moves) == 1 and abs(moves[0][0] - 60) < 1 and abs(moves[0][1] - 60) < 1, str(c))
+
+
+def test_locked_cyclone_view_is_only_worth_a_short_detour():
+    sc, cy, target = _plateau_lock(fire_y_to=68)                              # the only way out that keeps the view is 9 away, the plain one (down the cliff) 5
+    moves, c = _way_out(sc, cy)
+    check("cyclone: a way out that keeps the target in view but is far longer than the plain one is a walk through the fire: not taken",
+          len(moves) == 1 and 54.5 < moves[0][0] < 55.6, str(c))
+    sc, cy, target = _plateau_lock()                                          # (here it is 5.25 away: 5.25 more than the plain one is not)
+    moves, c = _way_out(sc, cy)
+    check("cyclone: (control) one that is only a little longer is worth it: it goes along the top",
+          len(moves) == 1 and abs(moves[0][0] - 60) < 0.6 and abs(moves[0][1] - 65) < 0.6, str(c))
 
 
 def test_locked_cyclone_out_of_its_own_sight_is_fine_when_something_else_sees_the_target():

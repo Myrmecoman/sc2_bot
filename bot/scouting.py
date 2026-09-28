@@ -2,6 +2,7 @@ from sc2.bot_ai import BotAI
 from sc2.unit import Unit
 from sc2.units import Units
 from sc2.ids.unit_typeid import UnitTypeId
+from bot.pathing.consts import HARMLESS_TO_WORKERS
 from bot.pathing.order_utils import is_already_moving_to
 
 SCOUT_DANGER_RANGE = 10.0    # abort if a combat unit gets this close - not worth losing the worker for a few more seconds of vision
@@ -44,7 +45,9 @@ async def scout(self : BotAI) -> None:
         self.scout_worker_tag = None
         return
 
-    danger : Units = self.visible_enemy_units.filter(lambda u: u.type_id not in {UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE} and u.can_attack_ground)
+    danger : Units = self.visible_enemy_units.filter(
+        lambda u: u.type_id not in {UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE} and u.type_id not in HARMLESS_TO_WORKERS and u.can_attack_ground
+    )
     if danger.amount > 0 and danger.closest_distance_to(worker) < SCOUT_DANGER_RANGE:
         self.scout_worker_tag = None # abandon the run, let it path home and rejoin mining on its own
         worker.move(self.start_location)

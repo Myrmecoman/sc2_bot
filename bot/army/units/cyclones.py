@@ -1,8 +1,9 @@
 """Cyclones: Lock-On (worth spending on real targets, skytoss first), otherwise kite like the rest of the army.
 
 A locked-on Cyclone keeps firing at the unit up to LOCK_ON_HOLD_RANGE (15), for as long as it stays in view - it does not have to stand
-in front of it. So while a lock runs it KITES: it steps out of whatever enemy fire it is standing in, but never so far that the target
-leaves the lock's range (that would end it), and it follows a target that is walking away for the same reason. A lock that ended (the
+in front of it. So while a lock runs it KITES: it steps out of whatever enemy fire it is standing in - the Cyclone comes first, the lock is a
+bonus: it is kept only by a way out that is itself safe (inside the lock's range, with the target in view, and not much longer than the
+plain one), never by stopping short of safety - and it follows a target that is walking away, to keep it in range. A lock that ended (the
 target died, left view, got out of range, or the cast never took) hands the Cyclone back to the normal logic below."""
 import math
 from typing import Dict, List, Optional, Set, Tuple
@@ -52,6 +53,8 @@ VIEW_RING_FRACTIONS = (0.3, 0.5, 0.7, 0.85, 1.0)  # how far from where it stands
                                  # (a Cannon's 7 range + Ares' 4-cell buffer is already 11, more than the Cyclone's whole sight) or searches
                                  # past where a spot could ever pass the sight check below anyway, whatever the actual danger turns out to be
 VIEW_DIRECTIONS = 12            # ...in this many directions, at each
+LOCK_DETOUR = 3.0               # a way out of the fire that keeps the lock may be this much longer than the plain way out (about 3/4 of a
+                                # second more under fire) - never more: the Cyclone is worth more than the rest of the lock
 CYCLONE_SIGHT = 11.0            # (when the game data does not say)
 OTHER_SIGHT = 9.0               # ...nor for the other units of ours
 SIGHT_MARGIN = 0.5
@@ -236,21 +239,35 @@ class CycloneController:
                 if ctx.mediator.is_position_safe(grid=grid, position=step):
                     move_to(unit, step)
             return                                              # nothing to run from: the lock does the work
-        # in enemy fire: get out of it, but not so far that the target leaves the lock's range
+        # in enemy fire: get out of it. The Cyclone comes first, the lock is only kept where that costs nothing in safety
+        limit = hold + unit.radius + target.radius
         if orders.retreating:
             want = plain_point(self.ai.mediator.find_path_next_point(start=unit.position, target=orders.hold_point, grid=grid, sense_danger=True))
+            step = farthest_within(unit.position, want, target.position, limit)           # (as far as the lock allows: then it goes home)
         else:
             want = plain_point(ctx.mediator.find_closest_safe_spot(from_pos=unit.position, grid=grid, radius=11))
-        step = farthest_within(unit.position, want, target.position, hold + unit.radius + target.radius)
-        if step is not None and not orders.retreating and not self._keeps_view(unit, step, target):
-            # the plain way out loses the target (down a ramp, behind a cliff, out of sight): another that is safe and keeps it in view, if any
-            step = self._spot_with_view(unit, target, ctx, grid) or step
+            step = self._way_out_keeping_the_lock(unit, target, want, farthest_within(unit.position, want, target.position, limit), ctx, grid)
         if step is not None:
             move_to(unit, step)
         elif orders.retreating:
             path_move(self.ai, ctx, unit, orders.hold_point)
         else:
-            kite_away(self.ai, ctx, unit)                       # no way out that keeps the lock: the Cyclone comes first
+            kite_away(self.ai, ctx, unit)                       # no way out that keeps the lock: all the way out, the lock may end
+
+    def _way_out_keeping_the_lock(self, unit: Unit, target: Unit, want: Point2, cut: Optional[Point2], ctx: ArmyContext, grid) -> Optional[Point2]:
+        """Where a Cyclone in fire goes to keep its lock, or None when there is no such place and it has to get out the plain way. `want` is the
+        nearest safe ground, `cut` the way there cut where the target would leave the lock's range. Every place that keeps the lock is SAFE:
+        a retreat that stops short of safe ground is only more time in the fire, for a lock that is about to end anyway. So `cut` counts
+        only when it reaches safe ground (or is all of `want`), and a place that keeps the target in view instead is not much farther than
+        `want` either (LOCK_DETOUR): the lock is worth a short detour, not a walk through the fire."""
+        safe_cut = cut is not None and (cut.distance_to(want) < 0.01 or ctx.mediator.is_position_safe(grid=grid, position=cut))
+        if safe_cut and self._keeps_view(unit, cut, target):
+            return cut
+        # the plain way out loses the target (down a ramp, behind a cliff, out of sight) or ends in the fire: another that is safe and keeps it
+        spot = self._spot_with_view(unit, target, ctx, grid, max_reach=unit.position.distance_to(want) + LOCK_DETOUR)
+        if spot is not None:
+            return spot
+        return cut if safe_cut else None
 
     def _sees(self, spot: Point2, target: Unit) -> bool:
         """Would a unit at `spot` see the target past the terrain? (Flying units are seen over every cliff.)"""
@@ -273,14 +290,16 @@ class CycloneController:
             }
         return bool(watchers - {unit.tag})
 
-    def _spot_with_view(self, unit: Unit, target: Unit, ctx: ArmyContext, grid) -> Optional[Point2]:
+    def _spot_with_view(self, unit: Unit, target: Unit, ctx: ArmyContext, grid, max_reach: float = math.inf) -> Optional[Point2]:
         """The nearest spot a Cyclone in fire can back out to - safe, inside the lock's range, on the ground it can walk, and not nearer to the
-        target than it is - from which it sees the target itself: inside its sight (11, the lock goes on to 15) and not hidden by the terrain.
-        None when there is no such spot (then it backs out the plain way and gives the lock up)."""
+        target than it is - from which it sees the target itself: inside its sight (11, the lock goes on to 15) and not hidden by the terrain,
+        and not farther from the Cyclone than `max_reach`. None when there is no such spot (then it backs out the plain way and gives the lock up)."""
         ai = self.ai
         limit = LOCK_ON_HOLD_RANGE - LOCK_ON_MARGIN + unit.radius + target.radius
         here = unit.position.distance_to(target.position)
         for reach in (self._sight(unit) * f for f in VIEW_RING_FRACTIONS):
+            if reach > max_reach:
+                break                                                  # (the rings come nearest first: none of the rest is near enough either)
             for k in range(VIEW_DIRECTIONS):
                 angle = 2.0 * math.pi * k / VIEW_DIRECTIONS
                 spot = Point2((unit.position.x + reach * math.cos(angle), unit.position.y + reach * math.sin(angle)))

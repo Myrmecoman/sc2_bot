@@ -3,6 +3,7 @@ from bot.custom_utils import ARMORY_MECH_SUPPLY, MECH_SUPPLY_FOR_TIER, can_build
 from bot.custom_utils import get_safest_expansion
 from bot.custom_utils import is_supply_critical
 from bot.custom_utils import update_rally_points
+from bot.pathing.consts import HARMLESS_TO_WORKERS
 from bot.repair import manage_repairs
 
 from sc2.ids.unit_typeid import UnitTypeId
@@ -138,9 +139,10 @@ def cancel_building(self : BotAI):
 
 
 def resume_building_construction(self : BotAI):
-    # checking if it is actually safe to resume construction
+    # checking if it is actually safe to resume construction (a changeling or an Observer next to it is no reason to wait)
+    enemies: Units = self.visible_enemy_units.exclude_type(HARMLESS_TO_WORKERS)
     for i in self.structures_without_construction_SCVs:
-        if (self.visible_enemy_units.amount != 0 and self.visible_enemy_units.closest_distance_to(i) < 8) or (not self.army_advisor.is_wall_closed() and (self.worker_rushed or self.army_advisor.zergling_rushed)):
+        if (enemies.amount != 0 and enemies.closest_distance_to(i) < 8) or (not self.army_advisor.is_wall_closed() and (self.worker_rushed or self.army_advisor.zergling_rushed)):
             return
     
     # update dictionary if building or worker died

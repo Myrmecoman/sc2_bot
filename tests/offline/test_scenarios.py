@@ -487,6 +487,77 @@ def test_cyclones_raid_against_protoss_until_the_army_pushes():
     check("raid: ...and it is called back when something threatens home", _cyclone_role(sc, cy) == "ATTACKING", str(_cyclone_role(sc, cy)))
 
 
+def test_ravens_are_shared_between_the_parts_of_the_army_against_zerg():
+    """the main army far out (30 marines), 8 marines at home that answer a threat there (a detachment): one Raven stays with the main
+    army, the spare one goes to the detachment and stands in the middle of it - against Zerg, where creep and burrowed units are the reason"""
+    def scene(race=Race.Zerg, ravens=((108, 108), (55, 50)), threat=True):
+        sc = scene_basic(enemy_race=race)
+        sc.own_many(U.MARINE, 30, (110, 110), role=UnitRole.ATTACKING)
+        home = sc.own_many(U.MARINE, 8, (45, 40), role=UnitRole.ATTACKING)
+        made = [sc.own(U.RAVEN, p, role=UnitRole.ATTACKING) for p in ravens]
+        if threat:
+            sc.enemy_many(U.ZERGLING, 6, (32, 26))
+        sc.step()
+        defenders = [u for u in home if u.tag in sc.ai.mediator.roles[UnitRole.BASE_DEFENDER]]
+        centre = Point2((sum(u.position.x for u in defenders) / max(1, len(defenders)), sum(u.position.y for u in defenders) / max(1, len(defenders))))
+        return sc, made, defenders, centre
+
+    def stands_at(sc, raven, centre):
+        points = _ordered_points(sc, [raven]) + _ordered_points(sc, [raven], AbilityId.MOVE_MOVE)
+        return bool(points) and all(p.distance_to(centre) < 1.0 for p in points)
+
+    sc, (with_main, spare), defenders, centre = scene()
+    check("ravens: a threat at home is answered by a detachment (the premise)", 3 <= len(defenders) <= 8, str(len(defenders)))
+    check("ravens: against Zerg the spare Raven goes to the detachment and stands in the middle of it (an attack-move to its centre)",
+          stands_at(sc, spare, centre) and _ordered_points(sc, [spare]), str([(c.ability.name, c.target) for c in sc.commands_for(spare)]))
+    check("ravens: ...while the one with the main army stays with it", not stands_at(sc, with_main, centre) and sc.commands_for(with_main), str([(c.ability.name, c.target) for c in sc.commands_for(with_main)]))
+    sc.ai._enemies.clear()                                                  # the threat is gone: the detachment is released after a while...
+    sc.step(dt=6.0)
+    sc.step()
+    check("ravens: ...and the spare Raven follows the main army again", not stands_at(sc, spare, centre) and sc.commands_for(spare), str([(c.ability.name, c.target) for c in sc.commands_for(spare)]))
+
+    sc, (with_main, spare), defenders, centre = scene(race=Race.Terran)
+    check("ravens: (control) against Terran nobody is shared out", not stands_at(sc, spare, centre) and sc.commands_for(spare), str([(c.ability.name, c.target) for c in sc.commands_for(spare)]))
+    sc, (only_one,), defenders, centre = scene(ravens=((108, 108),))
+    check("ravens: (control) a single Raven stays with the main army", not stands_at(sc, only_one, centre) and sc.commands_for(only_one), str([(c.ability.name, c.target) for c in sc.commands_for(only_one)]))
+    sc, (with_main, spare), defenders, centre = scene(threat=False)
+    check("ravens: (control) with the army in one part nobody is shared out", not stands_at(sc, spare, centre) and sc.commands_for(spare), str([(c.ability.name, c.target) for c in sc.commands_for(spare)]))
+    sc, (with_main, far), defenders, centre = scene(ravens=((108, 108), (105, 105)))
+    check("ravens: (control) a spare Raven that is too far from the detachment (100+) does not go to it", not stands_at(sc, far, centre) and sc.commands_for(far), str([(c.ability.name, c.target) for c in sc.commands_for(far)]))
+
+
+def test_share_ravens_between_all_the_parts():
+    """_share_ravens on groups made by hand: the main army keeps the Raven nearest to it, the biggest other part takes the nearest of the
+    rest, then the next one; a part of fewer than three units gets none, and nothing is lost or doubled"""
+    from bot.army.orders import GroupOrders, Mode
+    sc = scene_basic(enemy_race=Race.Zerg)
+    ai = sc.ai
+    main_marines = sc.own_many(U.MARINE, 10, (110, 110))
+    r_main, r_a, r_b = (sc.own(U.RAVEN, p) for p in ((108, 108), (60, 60), (100, 100)))
+    defense = sc.own_many(U.MARINE, 5, (50, 50))
+    diversion = sc.own_many(U.MARINE, 3, (130, 130))
+    tiny = sc.own_many(U.MARINE, 2, (30, 30))
+
+    def orders(label, anchor):
+        return GroupOrders(label=label, mode=Mode.ATTACK, target=Point2((180, 180)), hold_point=Point2((60, 60)), anchor=Point2(anchor))
+    world = sc.world
+    groups = [("main", world.units(main_marines + [r_main, r_a, r_b]), orders("main", (110, 110))),
+              ("defense", world.units(defense), orders("defense", (50, 50))), ("diversion", world.units(diversion), orders("diversion", (130, 130))),
+              ("defense", world.units(tiny), orders("defense", (30, 30)))]
+    shared = sc.manager._share_ravens(groups)
+    escorts = [(orders.anchor, [r.tag for r in units]) for name, units, orders in shared if name == "escort"]
+    check("ravens: two parts are big enough for one: two escorts (not the part of two)", len(escorts) == 2, str(escorts))
+    to = lambda point: next((tags for anchor, tags in escorts if anchor.distance_to(Point2(point)) < 3.0), None)
+    check("ravens: ...the biggest part (5, at 50, 50) takes the nearest spare Raven (the one at 60, 60), the other one (3, at 130, 130) the next",
+          to((50, 50)) == [r_a.tag] and to((130, 130)) == [r_b.tag], str(escorts))
+    check("ravens: ...the main army keeps its own (nearest) Raven and loses the other two", [r.tag for name, units, _ in shared if name == "main" for r in units.of_type({U.RAVEN})] == [r_main.tag],
+          str([(name, [u.tag for u in units.of_type({U.RAVEN})]) for name, units, _ in shared]))
+    every = [u.tag for name, units, _ in shared for u in units]
+    check("ravens: ...and every unit is in exactly one group", len(every) == len(set(every)) == sum(units.amount for _, units, _ in groups), f"{len(every)} {len(set(every))}")
+    one = [("main", world.units(main_marines + [r_main]), orders("main", (110, 110))), groups[1]]
+    check("ravens: (control) with a single Raven the groups come back as they were", sc.manager._share_ravens(one) is one)
+
+
 def main():
     tests = [v for k, v in globals().items() if k.startswith("test_")]
     only = sys.argv[1:]

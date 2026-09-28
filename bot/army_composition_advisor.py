@@ -18,6 +18,11 @@ from bot.reactions import KNOBS, REACTIONS, Scouted, react
 # what the enemy has - these don't have a supply cost but are still a real reason not to walk in
 DANGEROUS_STRUCTURE_THREAT = 5
 
+# against Zerg a second Raven once the army is this big: an army that size is in more than one place (the main army, a detachment at
+# home, a diversion squad) and the Ravens are shared out between those parts (bot/army/manager.py, _share_ravens) - each part then
+# sees the creep tumors and burrowed units around it. Earlier the gas is better spent elsewhere.
+SECOND_RAVEN_ARMY_SUPPLY = 30
+
 
 # What to BUILD, based on what the enemy has shown us.
 #
@@ -323,6 +328,9 @@ class ArmyCompositionAdvisor():
                 if detected_anti_banshee
                 else 2
             )
+
+            if self.bot.supply_army >= SECOND_RAVEN_ARMY_SUPPLY:
+                self.max_ravens = max(self.max_ravens, 2)
 
         # ---------------------------------------------------------
         # Protoss

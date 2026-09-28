@@ -108,11 +108,24 @@ REINFORCE_RELEASE_SECONDS = 20.0      # a wave that has been sent is not held ba
 DIVERSION_SQUAD_SIZE = 3
 DIVERSION_MIN_MAIN_ARMY = 10          # only split one off if the main bio force can spare it
 DIVERSION_ARRIVAL_RANGE = 10.0        # arrived at the target and nothing there -> done
+# ---- ravens ---------------------------------------------------------------------------------------------------------
+# Against Zerg the army is often in more than one place (the main army, a detachment answering a threat at home, a diversion squad), and a
+# Raven's detection - creep tumors, burrowed units - only helps the part it stands with. The Ravens are shared out: one stays with the main
+# army, a spare one goes to each of the other parts that is big enough, and stands in the middle of it.
+RAVEN_ESCORT_PARTS = ("defense", "diversion")     # the parts of the army, besides the main one, that a spare Raven goes to
+RAVEN_ESCORT_MIN_UNITS = 3                        # a part of fewer units is not worth a Raven of its own
+RAVEN_ESCORT_RANGE = 60.0                         # a spare Raven farther than this from a part does not go to it
+RAVEN_ESCORT_LEAD = 0.0                           # an escort stands in the middle of its part (with the main army a Raven stands 4 ahead of it)
 # ---- roles ----------------------------------------------------------------------------------------------------------
 MANAGED_ROLES = (
     UnitRole.ATTACKING, UnitRole.BASE_DEFENDER, UnitRole.CONTROL_GROUP_ONE, UnitRole.SCOUTING,
     UnitRole.HARASSING_BANSHEE, UnitRole.HARASSING_REAPER, UnitRole.HARASSING,
 )
+
+
+def _centre(units: Iterable[Unit]) -> Point2:
+    units = list(units)
+    return Point2((sum(u.position.x for u in units) / len(units), sum(u.position.y for u in units) / len(units)))
 
 
 class MainPlan(NamedTuple):
@@ -234,8 +247,13 @@ class ArmyManager:
             groups.append(("defense", units, orders))
         if diversion is not None:
             groups.append(("diversion", diversion[0], diversion[1]))
+        if ai.enemy_race == Race.Zerg:
+            groups = self._share_ravens(groups)
         for name, units, orders in groups:
-            await self._aguard(name, self._dispatch, units, orders, ctx)
+            if name == "escort":
+                await self._aguard(name, self.ravens.control, units, orders, ctx, RAVEN_ESCORT_LEAD)
+            else:
+                await self._aguard(name, self._dispatch, units, orders, ctx)
 
         # a unit whose special role lost its controller this step (the code that owns BASE_DEFENDER / diversion units
         # failed, or an old task is gone) must not idle: hand it back to the main army and order it like the rest
@@ -724,6 +742,38 @@ class ArmyManager:
                                  front=ctx.front, bio_position=ctx.bio_position, anchor=center, local_result=local,
                                  unit_results=unit_results)
         return squad, orders
+
+    # ================================================================================================================
+    # ravens
+    # ================================================================================================================
+    def _share_ravens(self, groups: List[Tuple[str, Units, GroupOrders]]) -> List[Tuple[str, Units, GroupOrders]]:
+        """The groups with the Ravens shared out between the parts of the army (see RAVEN_ESCORT_PARTS): the Raven nearest to the main army
+        stays with it, and each of the other parts, the biggest first, gets the nearest of the Ravens that are left - as a group of its own
+        ("escort") that stands at the middle of the part it goes with. Nothing changes with a single Raven, or when the army is in one part."""
+        ravens: List[Unit] = [raven for _, units, _ in groups for raven in units.of_type(RAVEN_TYPES)]
+        parts = [
+            (units, orders) for name, units, orders in groups
+            if name in RAVEN_ESCORT_PARTS and units.amount >= RAVEN_ESCORT_MIN_UNITS
+        ]
+        if len(ravens) < 2 or not parts:
+            return groups
+        main = next(((units, orders) for name, units, orders in groups if name == "main" and units.of_type(RAVEN_TYPES)), None)
+        if main is not None:
+            centre = main[1].anchor if main[1].anchor is not None else _centre(main[0])
+            ravens.remove(min(main[0].of_type(RAVEN_TYPES), key=lambda raven: raven.distance_to(centre)))       # (this one stays with the main army)
+        escorts: List[Tuple[str, Units, GroupOrders]] = []
+        for units, orders in sorted(parts, key=lambda part: -part[0].amount):
+            centre = _centre(units)
+            near = [raven for raven in ravens if raven.distance_to(centre) <= RAVEN_ESCORT_RANGE]
+            if not near:
+                continue
+            raven = min(near, key=lambda r: r.distance_to(centre))
+            ravens.remove(raven)
+            escorts.append(("escort", Units([raven], self.ai), replace(orders, label="escort", anchor=centre)))
+        if not escorts:
+            return groups
+        gone = {raven.tag for _, units, _ in escorts for raven in units}
+        return [(name, units.tags_not_in(gone), orders) for name, units, orders in groups] + escorts
 
     # ================================================================================================================
     # dispatch
