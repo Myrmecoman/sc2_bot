@@ -314,6 +314,16 @@ class CycloneController:
         return None
 
     def _no_fight(self, unit: Unit, orders: GroupOrders, ctx: ArmyContext) -> None:
+        """Nothing in `targets_near` at all - most often because the enemy holds higher ground the Cyclone has no vision onto, while Ares'
+        grid still marks the spot dangerous from earlier vision (its own or another unit's). Get out of it first: standing at the foot of a
+        ramp attack-moving into a wall it cannot see over, or simply doing nothing because it is already at its hold spot, is the "idle and
+        an easy target" case - every other branch of _control_unit checks ctx.is_safe before it ever considers standing still."""
+        if not ctx.is_safe(unit):
+            if orders.retreating:
+                path_move(self.ai, ctx, unit, orders.hold_point)
+                return
+            if kite_away(self.ai, ctx, unit):
+                return
         point = follow_point(orders, walkable=self.ai.in_pathing_grid)
         if orders.aggressive:
             attack_move(unit, point)

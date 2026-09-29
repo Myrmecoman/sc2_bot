@@ -1136,6 +1136,34 @@ def test_cyclone_leaves_an_undetected_observer_alone():
           any(a == A.LOCKONAIR_LOCKONAIR and getattr(t, "tag", None) == obs2.tag for a, t, q in c2), str(c2))
 
 
+def test_cyclone_backs_off_instead_of_idling_or_walking_blind_into_danger():
+    """reported bug: a Cyclone stood below a ramp doing nothing while enemies above shot it - idle and an easy target. With no visible
+    target at all (the usual reason: the enemy holds higher ground the Cyclone has no vision onto, while Ares' grid still knows the spot
+    is dangerous from earlier vision) _control_unit takes the _no_fight branch, which used to never check ctx.is_safe - every OTHER branch
+    does. HOLD stood there doing nothing at all; ATTACK attack-moved straight through the danger it could not even see."""
+    sc = mk()
+    cy = sc.own(U.CYCLONE, (60, 60))
+    sc.ai.mediator.ground[55:66, 55:66] = 60.0                            # in danger, nothing visible to fight
+    ctx = begin(sc)
+    sc.manager.cyclones.control(sc.world.units([cy]), orders(sc), ctx)    # Mode.ATTACK: aggressive
+    c = cmds(sc, cy)
+    check("cyclone: no target and in danger while attacking - it backs off instead of attack-moving blind through the danger",
+          any(a == A.MOVE_MOVE for a, t, q in c) and not any(a in (A.ATTACK, A.ATTACK_ATTACK) for a, t, q in c), str(c))
+    sc2 = mk()
+    cy2 = sc2.own(U.CYCLONE, (60, 60))
+    sc2.ai.mediator.ground[55:66, 55:66] = 60.0
+    ctx2 = begin(sc2)
+    sc2.manager.cyclones.control(sc2.world.units([cy2]), orders(sc2, mode=Mode.HOLD), ctx2)
+    check("cyclone: (HOLD, already at its spot) it still backs off rather than standing in the danger doing nothing",
+          any(a == A.MOVE_MOVE for a, t, q in cmds(sc2, cy2)), str(cmds(sc2, cy2)))
+    sc3 = mk()
+    cy3 = sc3.own(U.CYCLONE, (60, 60))
+    ctx3 = begin(sc3)
+    sc3.manager.cyclones.control(sc3.world.units([cy3]), orders(sc3), ctx3)
+    check("cyclone: (control) with nothing dangerous nearby it carries on as usual (attack-moves towards the objective)",
+          any(a == A.ATTACK for a, t, q in cmds(sc3, cy3)), str(cmds(sc3, cy3)))
+
+
 # ------------------------------------------------------------------------------------------------------------------------------
 # a locked-on cyclone kites: the lock keeps firing up to 15 range, while the target stays in view
 # ------------------------------------------------------------------------------------------------------------------------------
@@ -1877,6 +1905,31 @@ def test_raid_route_avoids_a_remembered_danger_spot_when_searching():
     c = _raid_step(sc, cy)
     moves = [t for a, t, q in c if a == A.MOVE_MOVE]
     check("raid: (control) with nothing remembered it walks straight for the Nexus", moves and moves[0][0] > 135, str(c))
+
+
+def test_raid_keeps_backing_off_a_remembered_spot_once_the_threat_is_a_stale_ghost():
+    """reported bug: a Cyclone stood below a ramp doing nothing while enemies above shot it. FIGHT_GHOST_MAX_AGE (12s) is short, tuned for
+    the whole army's fight decisions: once a threat's own ghost is older than that, `covering` (the live reach check `_info`/`_threatens`
+    uses) stops seeing it - but the Cyclone may still be standing exactly where it was shot from, and `danger.spots()` (DangerMemory, up to
+    45s) still does. Without also checking that here, a Cyclone waiting out Lock On's cooldown (or with nothing worth casting on) simply
+    stopped reacting once the ghost aged out - not searching (nothing new to search for), not stepping back (`covering` empty), sitting at
+    the foot of the exact ramp it was shot from."""
+    def scene(lock_available):
+        sc = mk(enemy_race=Race.Protoss)
+        cy = _raider(sc, (100, 100), lock=lock_available, air_lock=lock_available)
+        stalker = sc.enemy(U.STALKER, (106, 100))
+        _raid_step(sc, cy)                                                    # step 1: reacts to the live Stalker (locks on to it, or backs off)
+        sc.ai._enemies.remove(stalker)
+        ghost = sc.enemy(stalker.type_id, (106.0, 100.0), tag=stalker.tag)
+        ghost._ghost = True
+        ghost.game_loop = 1
+        sc.ai.state.game_loop = 300                                          # the next step's begin() pushes its age well past FIGHT_GHOST_MAX_AGE (12s)
+        return _raid_step(sc, cy)
+    for label, lock in (("Lock On available", True), ("Lock On on cooldown", False)):
+        c = scene(lock)
+        moves = [t for a, t, q in c if a == A.MOVE_MOVE]
+        check(f"raid ({label}): a stale ghost past FIGHT_GHOST_MAX_AGE still remembered by DangerMemory keeps the Cyclone backing out, not idle",
+              len(moves) == 1 and moves[0][0] < 100, str(c))
 
 
 def test_raid_hurt_cyclone_goes_home_and_comes_back():

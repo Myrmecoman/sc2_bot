@@ -162,6 +162,15 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   yet still reported once its position is in vision: `is_visible` is about vision of the position, not about seeing through cloak). Left
   out of both Lock On candidates and the normal attack logic (`e.can_be_attacked`, i.e. not cloaked or revealed by a detector) - scoped to
   the Cyclone controller only, not the other unit types.
+* **A Cyclone with nothing to fight is never assumed to be safe**: below a ramp with the enemy on top - no vision up there, so no target
+  at all - it used to just attack-move blindly forward (ATTACK) or, worse, do nothing at all while already at its spot (HOLD): standing
+  still and taking free fire, the exact "idle and an easy target" report. `_no_fight` (`units/cyclones.py`) now checks `ctx.is_safe`
+  first and backs off, same as every other branch of the controller already did with a target in sight. The raiding Cyclones have their
+  own version of the same gap: `covering` (the precise, weapon-range-based check `_info`/`_threatens` do) only trusts a ghost for
+  `FIGHT_GHOST_MAX_AGE` (12s), short and tuned for the whole army's fight decisions - `danger.spots()` (`DangerMemory`, up to 45s)
+  remembers a defended spot for longer, but was only ever used to avoid walking back INTO one while searching. Now it also counts towards
+  `covering` itself, so a Cyclone standing right where it was shot from keeps backing out once the live ghost ages past 12s, instead of
+  going quiet (not searching - nothing new to look for; not stepping back - `covering` was empty) at the foot of the same ramp.
 * **Cyclones** kite while a Lock On runs: it keeps firing at the unit up to 15 range for as long as the unit stays in view, so the Cyclone
   steps out of enemy fire - never so far that the target leaves that range - and follows a target that is walking away; it does not spend
   a second lock while one is running. **The Cyclone comes first, the lock is a bonus**: in enemy fire it keeps the lock only by a way

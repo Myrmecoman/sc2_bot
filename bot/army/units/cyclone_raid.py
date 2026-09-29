@@ -19,8 +19,13 @@ everything, and around every worker as well, which would make every mineral line
 
 Searching for something to hit also avoids spots it knows - or very recently knew - to be defended (`units/danger_memory.py`), even once
 they are out of sight: without this, backing off from a ramp's defenders for a moment and finding it empty on the next look would send it
-straight back up the same ramp."""
+straight back up the same ramp. The same memory also covers standing IN one: a ghost only counts as a live threat (`covering`, below) for
+FIGHT_GHOST_MAX_AGE (12s) - short, tuned for the whole army's fight decisions - while `danger.spots()` holds a spot for up to 45s on its
+own. Without also checking it here, a Cyclone that took a hit, backed off only partway, and then found itself waiting out Lock On's
+cooldown (or standing right where a fresh cast would want to be) would just sit there once the ghost aged out - not searching (there is
+nothing new to search for), not stepping back (`covering` is now empty), doing nothing at the foot of the exact ramp it was shot from."""
 import math
+from types import SimpleNamespace
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -86,6 +91,9 @@ class CycloneRaid:
         reach = np.array([self._info(e, unit)[1] for e in threats], dtype=float)           # its reach, and who it is
         tags = np.array([e.tag for e in threats], dtype=np.int64)
         covering = [threats[k] for k in np.nonzero(np.hypot(xy[:, 0] - unit.position.x, xy[:, 1] - unit.position.y) <= reach)[0]]
+        # standing inside a spot remembered (not just currently) defended, with nothing precise enough left in `covering` to explain it -
+        # a real Unit's .position is all step_back_from reads, so a plain stand-in does the same job for a remembered spot
+        covering = covering + [SimpleNamespace(position=p) for p, r in self.danger.spots() if unit.position.distance_to(p) <= r]
 
         if any(ability in unit.abilities for ability in LOCK_ON_ABILITIES):
             picked = self._pick_target(unit, pool, ranks, xy, reach, tags)
