@@ -115,6 +115,19 @@ tests/offline/               checks that need no StarCraft II, see the end of th
 | `HARASSING` | Cyclones on a raid against Protoss (`units/cyclone_raid.py`) |
 | `SCOUTING` | a hidden-base sweep, protected from the rest of the army manager (`scouting.py`) |
 
+* **Base defense holds the base's own ramp against a ground threat, rather than marching down to meet it** (`defense.py`'s
+  `_hold_target`/`Positioning.hold_at_ramp`): a detachment (or, escalated, the whole army) used to be ordered straight at a threat's own
+  position, whatever the terrain in between - a ground rush spotted below a base's ramp had our defenders walk down PAST the choke to
+  meet it, giving up the one advantage (a narrow, single-file approach) holding there is for. Now, when the nearest base to the threat
+  has its own ramp and the threat is on lower ground than it, the defenders' target is clamped to the ramp's mouth instead - they hold
+  there and let it come to them. Only for a threat with a ground component: one that is purely flying (it ignores the ramp completely)
+  is still met exactly where it is.
+* **Workers are not sent to mine at a base under threat** (`worker_micro.base_is_threatened`, used by `speedmining.py`'s `micro_worker`
+  and `dispatch_workers`): an idle worker used to be sent to whichever ready base was nearest, and an oversaturated base's extra workers
+  to whichever undersaturated one had room, neither checking whether a visible hostile ground unit (not a worker, not one of
+  `HARMLESS_TO_WORKERS`) was standing right next to the destination. Both now skip a threatened base - an idle worker goes to the
+  nearest SAFE one instead (mining somewhere beats mining nowhere if every base happens to be threatened at once), and rebalancing
+  simply does not unload onto one under threat until it clears.
 * **Push or hold** is decided by the combat simulator (`fight.py`) run on our whole army against everything we know of theirs
   (`enemy_tracker.py`, which never forgets what it saw), plus the old "attack at full supply" rule. Thresholds are in `consts.py`. Once a
   push is on and the army is fighting, it is judged on the fight it is in (next bullet), not on the whole matchup; a push called off that
@@ -142,7 +155,9 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   range, liberator zones, kiting rules, ...) were kept.
 * **Pre-positioning**: the hold point comes from the rally-point logic in `custom_utils.py` (the defend point of our newest base - a new
   Command Center counts from the moment it is **placed**, `register_base` in `bot.py`, not once it is finished - and the production
-  buildings' rally points follow it), the fight direction from the enemy's
+  buildings' rally points follow it: the main defends at its wall tile; a natural/third close enough to a real ramp of its own
+  (`closest_ramp_point`) defends there too, instead of a blind "N cells towards the enemy" guess that has no idea whether that spot is
+  even on the same plateau as the base), the fight direction from the enemy's
   ground path to it, and before a push the tanks creep up to a stand-off point in front of static defense or sieged tanks (`staging`).
   Bio holds a couple of cells ahead of the hold point, towards the enemy - but never a step LOWER than it (`Positioning.bio_position`):
   the hold point is routinely the main's wall tile, right at the ramp's mouth, so the plain forward offset could otherwise land bio a

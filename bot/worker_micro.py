@@ -20,6 +20,17 @@ from bot.pathing.consts import HARMLESS_TO_WORKERS
 from bot.pathing.order_utils import is_already_moving_to, segment_walkable
 
 WORKER_FLEE_RANGE = 7.0   # start pulling workers back before a fast threat like a reaper is already on top of them
+BASE_DANGER_RANGE = 10.0  # a visible hostile ground unit this close to a base means "do not send (more) workers there yet"
+_ENEMY_WORKER_TYPES = frozenset({UnitTypeId.SCV, UnitTypeId.PROBE, UnitTypeId.DRONE, UnitTypeId.MULE})
+
+
+def base_is_threatened(self: BotAI, position: Point2, radius: float = BASE_DANGER_RANGE) -> bool:
+    """Is a visible hostile ground unit (not a worker, not one of HARMLESS_TO_WORKERS - a changeling or an Observer scares nobody)
+    close enough to `position` that sending (more) workers there right now would just feed them to it? Used to hold off assigning or
+    rebalancing workers onto a base under a ground rush, not to pull the ones already mining there - that is flee_worker_threats' job."""
+    return self.visible_enemy_units.filter(
+        lambda u: u.can_attack_ground and u.type_id not in _ENEMY_WORKER_TYPES and u.type_id not in HARMLESS_TO_WORKERS
+    ).closer_than(radius, position).exists
 
 # Oracles: the Pulsar Beam reaches 4 (and there are the two radii), and an Oracle is faster than a worker, so a worker that waits until it is
 # in range is already being shot at. Workers move straight away from it (not to the townhall, which is where it follows them to) as soon as

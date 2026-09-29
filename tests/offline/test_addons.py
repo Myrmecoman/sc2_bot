@@ -380,6 +380,24 @@ def test_rally_at_placement():
     check("rally: (the new base destroyed) the rally point goes back to the main's", get_rally_point(run.bot).distance_to(main_point) < 0.5, str(get_rally_point(run.bot)))
 
 
+def test_rally_uses_the_bases_own_ramp_when_it_has_one():
+    """A natural/third close enough to a real ramp of its own (this map has one at (65, 63.5) - see the probe referenced in
+    project_sc2_bot_bio_ramp_rally.md) defends there instead of a blind "10 cells towards the enemy" guess, which has no idea whether
+    that spot is even on the same plateau as the base - the same class of bug as bio's forward nudge landing it below the main's ramp
+    (Positioning.bio_position), just for the rally point of a base that is not the main."""
+    from bot.custom_utils import get_rally_point
+    run = Run(lambda game: {}, race=Zerg)
+    main = run.bot.townhalls.closest_to(run.bot.start_location)
+    asyncio.run(run.bot.on_building_construction_complete(main))
+    run.frames(2)
+    near_ramp = (70.0, 63.5)                                            # 5 from the ramp's top_center (65.0, 63.5)
+    run.game.add(U.COMMANDCENTER, near_ramp, 1, build_progress=0.05)    # just placed, like the natural in test_rally_at_placement
+    run.frames(2)
+    rally = get_rally_point(run.bot)
+    check("rally: a base close enough to a real ramp defends there instead of a blind directional point",
+          rally.distance_to(Point2((65.0, 63.5))) < 1.0, str(rally))
+
+
 def test_warning_for_a_bare_building():
     run = Run(factory(with_room=False), race=Zerg)
     run.bot.army_advisor.zergling_rushed = True         # (no room, and it must not lift: it stays bare)

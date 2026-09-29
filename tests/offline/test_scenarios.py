@@ -91,6 +91,84 @@ def test_big_threat_escalates():
           str(len(sc.ai.mediator.roles[UnitRole.BASE_DEFENDER])))
 
 
+def _mock_ramp(sc, top_center):
+    """A ramp the fake harness does not otherwise have: game_info.map_ramps is missing entirely by default
+    (bot.custom_utils.closest_ramp_point guards against that), so a real-shaped test needs one supplied."""
+    from types import SimpleNamespace
+    sc.ai.game_info.map_ramps = [SimpleNamespace(top_center=Point2(top_center))]
+
+
+def test_defenders_hold_the_ramp_against_a_ground_rush_instead_of_marching_down_to_it():
+    """reported bug, from a real zergling-rush game: "units are still being rallied below the ramp despite zerglings being directly in
+    sight near the second base... remain above the ramp while we are threatened". Confirmed by direct probe before fixing: BaseDefense
+    sent detachments straight at a threat's own position, whatever the terrain between - a rush approaching from below a base's ramp had
+    our own units march down past the choke to meet it, trading away the one advantage (a narrow, single-file approach) defending there
+    is supposed to have."""
+    sc = scene_basic()
+    sc.own(U.COMMANDCENTER, (26.0, 26.0))                                  # the "second base"
+    sc.ai.game_info.terrain_height.data_numpy[:, :] = 130
+    sc.ai.game_info.terrain_height.data_numpy[:, 40:] = 100                # low ground starts at x=40
+    _mock_ramp(sc, (38.0, 26.0))
+    sc.own_many(U.MARINE, 30, (24, 24), role=UnitRole.ATTACKING)
+    sc.enemy_many(U.ZERGLING, 6, (55.0, 26.0))                             # directly in sight, well below the ramp
+    sc.step()
+    defenders = sc.ai.mediator.roles[UnitRole.BASE_DEFENDER]
+    check("defense: a detachment answers the ground rush", 3 <= len(defenders) < 30, str(len(defenders)))
+    # bio spreads its attack-move points out a little around the raw target (bio.py: _split_point) rather than stacking everyone on the
+    # exact same tile, so this checks the commands land well clear of the zerglings (55, 26) rather than requiring the literal ramp
+    # coordinate - test_escalated_defense_also_holds_the_ramp checks the precise value the manager actually computed
+    dcmds = [c for c in sc.ai.actions if c.unit.tag in defenders and c.ability == AbilityId.ATTACK]
+    check("defense: it holds near the ramp rather than marching down to the zerglings' own position (~55, 26)",
+          dcmds and all(c.target.x < 45.0 for c in dcmds), str([(c.target.x, c.target.y) for c in dcmds][:3]))
+
+
+def test_defenders_ignore_the_ramp_against_a_purely_flying_threat():
+    sc = scene_basic()
+    sc.own(U.COMMANDCENTER, (26.0, 26.0))
+    sc.ai.game_info.terrain_height.data_numpy[:, :] = 130
+    sc.ai.game_info.terrain_height.data_numpy[:, 40:] = 100
+    _mock_ramp(sc, (38.0, 26.0))
+    sc.own_many(U.MARINE, 20, (24, 24), role=UnitRole.ATTACKING)
+    sc.own_many(U.VIKINGFIGHTER, 4, (24, 26), role=UnitRole.ATTACKING)
+    sc.enemy_many(U.MUTALISK, 6, (55.0, 26.0))                             # a threat with no ground component
+    sc.step()
+    defenders = sc.ai.mediator.roles[UnitRole.BASE_DEFENDER]
+    check("defense: (control) a purely flying threat is still answered", len(defenders) >= 1, str(len(defenders)))
+    dcmds = [c for c in sc.ai.actions if c.unit.tag in defenders and c.ability in (AbilityId.ATTACK, AbilityId.MOVE_MOVE)]
+    check("defense: ...met where it actually is (a ramp means nothing to it), not held back at the ramp",
+          dcmds and any(c.target.x > 45.0 for c in dcmds), str([(c.target.x, c.target.y) for c in dcmds][:3]))
+
+
+def test_escalated_defense_also_holds_the_ramp():
+    """the whole-army escalation path (a threat too big for any detachment) must hold the ramp just as much as a small detachment does -
+    it shares the same clamp (BaseDefense._hold_target, threaded through escalate_to). Calls BaseDefense.update directly: the whole-army
+    controller (bio.py) spreads its attack-move points out around the raw target, which would make asserting on the exact coordinate
+    downstream of that noisy - this checks the thing that actually changed."""
+    from bot.army.context import ArmyContext
+
+    def begin(sc):
+        sc.ai._fake_time += 0.5
+        sc.ai.state.game_loop += 11
+        for u in sc.world.all_units:
+            u.game_loop = sc.ai.state.game_loop
+        if hasattr(sc.ai.mediator, "refresh"):
+            sc.ai.mediator.refresh()
+        return ArmyContext(sc.ai, sc.manager.positioning)
+
+    sc = scene_basic()
+    sc.own(U.COMMANDCENTER, (26.0, 26.0))
+    sc.ai.game_info.terrain_height.data_numpy[:, :] = 130
+    sc.ai.game_info.terrain_height.data_numpy[:, 40:] = 100
+    _mock_ramp(sc, (38.0, 26.0))
+    main = sc.own_many(U.MARINE, 10, (24, 24), role=UnitRole.ATTACKING)
+    sc.enemy_many(U.ROACH, 24, (55.0, 26.0))                               # far too much for a small detachment
+    ctx = begin(sc)
+    groups, escalate_to = sc.manager.defense.update(ctx, sc.world.units(main), sc.world.units([]))
+    check("defense: no detachment sacrificed vs a much bigger force (the premise)", not groups, str(len(groups)))
+    check("defense: escalate_to holds at the ramp (38, 26) rather than the roaches' own position (~55, 26)",
+          escalate_to is not None and abs(escalate_to.x - 38.0) < 1.0 and abs(escalate_to.y - 26.0) < 1.0, str(escalate_to))
+
+
 def test_attack_decision():
     sc = scene_basic()
     sc.own_many(U.MARINE, 50, (40, 40), role=UnitRole.ATTACKING)

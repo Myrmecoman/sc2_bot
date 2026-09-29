@@ -318,11 +318,11 @@ async def get_safest_expansion(self : BotAI):
     return location
 
 
-def _closest_ramp_point(self : BotAI, position: Point2, max_distance: float = 15.0) -> Optional[Point2]:
+def closest_ramp_point(self : BotAI, position: Point2, max_distance: float = 15.0) -> Optional[Point2]:
     """The top (base-facing side) of the ramp nearest position, or None if nothing map-wide is
     close enough to actually be *this* base's ramp - some expansions are open ground with no
     distinct chokepoint at all."""
-    ramps = self.game_info.map_ramps
+    ramps = getattr(self.game_info, "map_ramps", None)
     if not ramps:
         return None
     closest = min(ramps, key=lambda r: r.top_center.distance_to(position))
@@ -358,6 +358,13 @@ def get_defend_point(self : BotAI) -> Point2:
         # below, which only finds the general area of a ramp, not the specific wall tile
         return self.main_base_ramp.barracks_in_middle
 
+    # a natural/third's own ramp, if it is close enough to be genuinely its ramp (not the map's nearest one, which could belong to a
+    # different base entirely) - defending at the choke beats a blind "N cells towards the enemy" point, which has no idea whether
+    # that spot is even on the same plateau as the base (a rush was seen using it to walk our rally point below its own ramp)
+    ramp_point = closest_ramp_point(self, base.position)
+    if ramp_point is not None:
+        return ramp_point
+
     enemy_base = self.enemy_start_locations[0]
     direction = enemy_base - base.position
     direction = direction.normalized
@@ -367,8 +374,6 @@ def get_defend_point(self : BotAI) -> Point2:
     elif townhalls.amount >= 4:
         distanceModifier = 20
     return base.position + direction * distanceModifier
-    #ramp_point: Optional[Point2] = _closest_ramp_point(self, base.position)
-    #return ramp_point if ramp_point is not None else base.position
 
 
 def get_rally_point(self : BotAI) -> Point2:

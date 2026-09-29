@@ -8,6 +8,7 @@ from sc2.position import Point2
 from sc2.bot_ai import BotAI
 from typing import Dict, Iterable, List, Optional, Set
 
+from bot.worker_micro import base_is_threatened
 
 SPEEDMINING_DISTANCE = 1.8
 
@@ -51,9 +52,14 @@ def micro_worker(self : BotAI) -> None:
     if self.townhalls.ready.amount <= 0:
         return
 
+    # an idle worker (freshly made, or just finished a repair/build job) goes to the nearest SAFE base - not one a ground rush is
+    # currently standing next to, or it just walks straight into it. Every base under threat at once (a full invasion) is the one
+    # case worth ignoring this for: mining somewhere beats mining nowhere
+    safe_townhalls = self.townhalls.ready.filter(lambda t: not base_is_threatened(self, t.position))
+    idle_pool = safe_townhalls if safe_townhalls else self.townhalls.ready
     for unit in self.workers:
         if unit.is_idle and unit.tag not in self.oracle_fleeing:       # (one that is keeping out of an Oracle's way stays where it is: worker_micro.py)
-            townhall = self.townhalls.ready.closest_to(unit)
+            townhall = idle_pool.closest_to(unit)
             patch = self.mineral_field.closest_to(townhall)
             unit.gather(patch)
         if len(unit.orders) == 1: # speedmine
@@ -135,7 +141,8 @@ def dispatch_workers(self : BotAI):
                 if key2 == key:
                     continue
                 cc2 = self.townhalls.ready.find_by_tag(key2)
-                if maxes[key2] + 1 < cc2.ideal_harvesters: # get workers gathering mineral from cc1 and move them to cc2
+                # not one under threat right now - a rush arriving at the second base is no reason to walk more workers into it
+                if maxes[key2] + 1 < cc2.ideal_harvesters and not base_is_threatened(self, cc2.position): # get workers gathering mineral from cc1 and move them to cc2
                     for w in self.workers.closer_than(10, cc1).gathering:
                         if self.mineral_field.closer_than(10, cc1).find_by_tag(w.order_target) is not None:
                             w.gather(w.position.closest(self.mineral_field.closer_than(10, cc2)))

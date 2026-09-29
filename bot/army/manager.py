@@ -143,7 +143,7 @@ class ArmyManager:
         self.tracker = EnemyTracker(ai)
         self.fight = FightEvaluator(ai)
         self.positioning = Positioning(ai)
-        self.defense = BaseDefense(ai, self.fight)
+        self.defense = BaseDefense(ai, self.fight, self.positioning)
         self.scouting = HiddenBaseScouting(ai)
 
         self.bio = BioController(ai)
@@ -394,6 +394,8 @@ class ArmyManager:
             # judged here on purpose (it is the one that would go), against the enemy at the threat, as us defending our own ground
             local = self.fight.evaluate(fighters, self._enemy_units_near(ctx, escalate_to, 25.0), stance=Stance.DEFENDING)
             if local >= EngagementResult.TIE:
+                # escalate_to is already clamped to the defended base's own ramp when the threat has a ground component
+                # (BaseDefense._hold_target) - a whole-army response should not march past it either
                 defend_target = escalate_to
 
         anchor = self.anchor if self.anchor is not None else hold

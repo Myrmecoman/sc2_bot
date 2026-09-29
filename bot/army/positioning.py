@@ -12,7 +12,7 @@ from bot.army.consts import (
     STAGING_STANDOFF,
     STAGING_TRIGGER_RANGE,
 )
-from bot.custom_utils import get_rally_point
+from bot.custom_utils import closest_ramp_point, get_rally_point
 from bot.pathing.order_utils import plain_point
 
 TANK_SPACING = 3.0            # lateral gap between two tanks' siege slots (splash radius) - same value the tanks were tuned with
@@ -102,6 +102,21 @@ class Positioning:
             return int(heights[int(position.y), int(position.x)])
         except Exception:  # noqa: BLE001 - positioning must never take a step down (in the other sense: never raise)
             return 0
+
+    def hold_at_ramp(self, threat_position: Point2) -> Point2:
+        """Never march past a base's own ramp to meet a threat below it - hold at the ramp's mouth instead and let it come up, where the
+        choke works for us instead of against us (a rush seen walking straight up to meet zerglings at the natural, right past its own
+        ramp, while "defending" it). `threat_position` is checked against whichever of our townhalls is nearest to it - that is the one
+        actually under threat. A threat already on the same level as that base (it is past the ramp already, or there never was one) or
+        a flying one (a ramp means nothing to it) is met exactly where it stands - there is nothing to hold against for those."""
+        townhalls = self.ai.townhalls
+        if not townhalls:
+            return threat_position
+        base_position = townhalls.closest_to(threat_position).position
+        if self._height_at(threat_position) >= self._height_at(base_position):
+            return threat_position
+        ramp_point = closest_ramp_point(self.ai, base_position)
+        return threat_position if ramp_point is None else ramp_point
 
     def tank_slots(self, hold_point: Point2, count: int, front: Optional[Point2] = None) -> List[Point2]:
         """Siege positions in a shallow line behind the hold point, perpendicular to the approach direction:

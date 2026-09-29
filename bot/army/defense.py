@@ -49,6 +49,7 @@ class DefenseTask:
     defender_tags: Set[int] = field(default_factory=set)
     last_threat_time: float = 0.0
     escalated: bool = False
+    has_ground: bool = True   # does the threat have a non-flying unit in it? (a ramp means nothing to a purely flying one)
 
 
 def can_hit(unit: Unit, enemy: Unit) -> bool:
@@ -84,10 +85,16 @@ def cluster_units(units: List[Unit], radius: float) -> List[List[Unit]]:
 
 
 class BaseDefense:
-    def __init__(self, ai, fight: FightEvaluator):
+    def __init__(self, ai, fight: FightEvaluator, positioning):
         self.ai = ai
         self.fight = fight
+        self.positioning = positioning
         self.tasks: List[DefenseTask] = []
+
+    def _hold_target(self, position: Point2, has_ground: bool) -> Point2:
+        """Where a defending group actually goes for a threat at `position`: not past its own base's ramp, when the threat has a ground
+        component to hold a chokepoint against at all - a purely flying one is met exactly where it stands, ramp or not."""
+        return self.positioning.hold_at_ramp(position) if has_ground else position
 
     # ------------------------------------------------------------------------------------------------------------
     def find_threats(self, ctx: ArmyContext) -> List[Threat]:
@@ -144,6 +151,7 @@ class BaseDefense:
                 unmatched.remove(task)
             task.center = threat.center
             task.threat_tags = {u.tag for u in threat.units}
+            task.has_ground = any(not u.is_flying for u in threat.units)
             task.last_threat_time = now
             active.append((task, threat))
 
@@ -166,7 +174,7 @@ class BaseDefense:
                 # nobody can answer it with a detachment - the whole army has to
                 task.escalated = True
                 if escalate_to is None:
-                    escalate_to = threat.center
+                    escalate_to = self._hold_target(threat.center, task.has_ground)
                 continue
 
             # sending units at a threat is a commitment, and the detachment walks up to the raiders (they do not walk into it): judged
@@ -177,7 +185,7 @@ class BaseDefense:
             if subset is None or len(subset) > ESCALATE_FRACTION * len(mobile_pool + list(defender_units)):
                 task.escalated = True
                 if escalate_to is None:
-                    escalate_to = threat.center
+                    escalate_to = self._hold_target(threat.center, task.has_ground)
                 # keep what is already detached fighting rather than yanking them back mid-fight
                 chosen = current
             else:
@@ -192,10 +200,13 @@ class BaseDefense:
 
             if chosen:
                 units = Units(chosen, self.ai)
+                # never past the defended base's own ramp (see Positioning.hold_at_ramp) - a detachment that walks down to meet a ground
+                # rush trades the choke away for nothing; a purely flying threat ignores the ramp completely, so it is met where it is
+                point = self._hold_target(threat.center, task.has_ground)
                 # how their fights go is filled in by the army manager, from the fights it found (ArmyManager._fight_view)
                 groups.append((units, GroupOrders(
-                    label="defense", mode=Mode.DEFEND, target=threat.center, hold_point=ctx.hold_point,
-                    front=ctx.front, bio_position=ctx.bio_position, anchor=threat.center,
+                    label="defense", mode=Mode.DEFEND, target=point, hold_point=ctx.hold_point,
+                    front=ctx.front, bio_position=ctx.bio_position, anchor=point,
                 )))
 
         # release the defenders of threats that are gone
@@ -211,9 +222,10 @@ class BaseDefense:
                 # threat just left vision: keep them where they are for a moment (they keep fighting what they see)
                 current = [alive_defenders[t] for t in task.defender_tags if t in alive_defenders]
                 if current:
+                    point = self._hold_target(task.center, task.has_ground)
                     groups.append((Units(current, self.ai), GroupOrders(
-                        label="defense", mode=Mode.DEFEND, target=task.center, hold_point=ctx.hold_point,
-                        front=ctx.front, bio_position=ctx.bio_position, anchor=task.center, local_result=None,
+                        label="defense", mode=Mode.DEFEND, target=point, hold_point=ctx.hold_point,
+                        front=ctx.front, bio_position=ctx.bio_position, anchor=point, local_result=None,
                     )))
 
         # forget tasks whose defenders all died
