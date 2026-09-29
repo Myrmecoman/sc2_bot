@@ -262,6 +262,33 @@ def test_scouting_sweep():
     check("scouts return to the army afterwards", len(sc.ai.mediator.roles[UnitRole.SCOUTING]) == 0)
 
 
+def test_scouting_sweep_falls_back_when_the_army_has_no_fast_units_left():
+    """reported bug: late game, the enemy's main conquered, no building spotted anywhere and the game still going - "it seems like we do
+    not scout anymore". Root cause found by direct probe: a late-game army can easily have none of SCOUT_TYPES left (a tank/support
+    deathball once the bio/hellion/cyclone part of it did the dying in the earlier assault) - the sweep "ran" (consuming its own 90s
+    cooldown) but picked from an EMPTY list every single time, silently sending nobody, forever."""
+    sc = scene_basic()
+    sc.own_many(U.SIEGETANK, 6, (40, 40), role=UnitRole.ATTACKING)          # no SCOUT_TYPES unit anywhere in the army
+    sc.own_many(U.RAVEN, 2, (42, 42), role=UnitRole.ATTACKING)
+    sc.own_many(U.MEDIVAC, 2, (44, 44), role=UnitRole.ATTACKING)
+    sc.ai.supply_left = 0
+    sc.step()
+    scouts = sc.ai.mediator.roles[UnitRole.SCOUTING]
+    check("scouting: with no fast unit left, it falls back to whatever else is spare (a Raven or a Medivac) rather than sending nobody",
+          len(scouts) >= 1 and all(u.type_id in (U.RAVEN, U.MEDIVAC) for u in sc.ai.units if u.tag in scouts), str(len(scouts)))
+    check("scouting: ...and never a Siege Tank (too valuable, may be sieged)",
+          not any(u.type_id == U.SIEGETANK for u in sc.ai.units if u.tag in scouts))
+
+    sc2 = scene_basic()                                                    # (control: truly nothing spare at all - not even a fallback)
+    sc2.own_many(U.SIEGETANK, 6, (40, 40), role=UnitRole.ATTACKING)
+    sc2.ai.supply_left = 0
+    before = sc2.manager.scouting.last_sweep
+    sc2.step()
+    check("scouting: (control) with nothing eligible at all, no sweep is started", len(sc2.ai.mediator.roles[UnitRole.SCOUTING]) == 0)
+    check("scouting: ...and the cooldown is not spent on it either - so it can try again the moment something is spare",
+          sc2.manager.scouting.last_sweep == before, str((sc2.manager.scouting.last_sweep, before)))
+
+
 def test_liberator_and_tanks():
     sc = scene_basic()
     lib = sc.own(U.LIBERATOR, (60, 60), role=UnitRole.ATTACKING)

@@ -23,9 +23,17 @@ MAX_SCOUT_FRACTION = 0.25      # ...nor more than this share of the ground army
 IDLE_AT_ENEMY_BASE_MIN_TIME = 300.0   # before this, an empty-looking enemy main is almost always just "haven't looked yet"
 BEHIND_BASE_OFFSET = 9.0       # scouts continue this far past a base, away from the map centre, to see its back side
 
-# fast, expendable units make the best scouts - tanks, medivacs, liberators, ravens never do
+# fast, expendable units make the best scouts
 SCOUT_TYPES = (U.HELLION, U.HELLIONTANK, U.CYCLONE, U.MARINE, U.MARAUDER, U.THOR)
+# a late-game army can easily have none of the above left (a tank/support deathball after the bio/hellion/cyclone part did the dying) -
+# rather than the sweep silently finding nobody to send and quietly doing nothing every 90s forever, fall back to whatever else is
+# spare: fliers that ignore the terrain a hidden base might be tucked behind, worst first. Never a Siege Tank (may be sieged, and is too
+# valuable/slow to spare) and never a Viking (it already has its own dedicated corner sweep, right below - picking it here too would
+# double-assign it). Ships have no ground weapon of their own (a Raven or Medivac), which is fine: an Attack order with nothing to shoot
+# at just walks them there, same as a Move would.
+FALLBACK_SCOUT_TYPES = (U.BATTLECRUISER, U.LIBERATOR, U.BANSHEE, U.RAVEN, U.MEDIVAC)
 _SPEED_ORDER = {t: i for i, t in enumerate(SCOUT_TYPES)}
+_FALLBACK_ORDER = {t: i for i, t in enumerate(FALLBACK_SCOUT_TYPES)}
 
 
 class HiddenBaseScouting:
@@ -64,14 +72,29 @@ class HiddenBaseScouting:
             result.append(loc)
         return result
 
+    def _scout_pool(self, army_pool: Units) -> List[Unit]:
+        """Fast, expendable units first; if none are left, whatever else is spare (see FALLBACK_SCOUT_TYPES) rather than sending nobody."""
+        preferred = sorted(
+            (u for u in army_pool if u.type_id in _SPEED_ORDER and u.can_attack_ground), key=lambda u: (_SPEED_ORDER[u.type_id], u.tag)
+        )
+        if preferred:
+            return preferred
+        return sorted((u for u in army_pool if u.type_id in FALLBACK_SCOUT_TYPES), key=lambda u: (_FALLBACK_ORDER[u.type_id], u.tag))
+
     # ------------------------------------------------------------------------------------------------------------
     def start_sweep(self, ctx: ArmyContext, army_pool: Units) -> None:
         ai = self.ai
         bases = self.unscouted_bases(ctx)
-        ground = [u for u in army_pool if u.type_id in _SPEED_ORDER and u.can_attack_ground]
-        ground.sort(key=lambda u: (_SPEED_ORDER[u.type_id], u.tag))
+        ground = self._scout_pool(army_pool)
         max_scouts = max(1, min(MAX_SCOUTS, int(len(ground) * MAX_SCOUT_FRACTION), len(bases) or MAX_SCOUTS))
         chosen = ground[:max_scouts]
+        vikings = [u for u in army_pool if u.type_id == U.VIKINGFIGHTER][:2]
+        corners = getattr(ai, "map_corners", [])
+        if not (chosen and bases) and not (vikings and corners):
+            # nothing would actually be sent anywhere this time (no eligible unit - every fallback tier came up empty too - or nowhere
+            # left unscouted for one to go) - do not spend the cooldown on a sweep that sent nobody, or the next real attempt (once,
+            # say, a Marine finally rolls off the line, or a new expansion comes into memory as no longer visible) waits for nothing
+            return
         self.last_sweep = ai.time
         self.started_at = ai.time
         self.scout_tags = set()
@@ -83,11 +106,7 @@ class HiddenBaseScouting:
             self.scout_tags.add(unit.tag)
 
         # Vikings sweep the map corners, splitting the four corners between them (lifted buildings)
-        vikings = [u for u in army_pool if u.type_id == U.VIKINGFIGHTER]
-        corners = getattr(ai, "map_corners", [])
-        for i, viking in enumerate(vikings[:2]):
-            if not corners:
-                break
+        for i, viking in enumerate(vikings):
             ctx.mediator.assign_role(tag=viking.tag, role=UnitRole.SCOUTING)
             first = True
             for k in range(len(corners)):

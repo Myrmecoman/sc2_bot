@@ -150,6 +150,15 @@ tests/offline/               checks that need no StarCraft II, see the end of th
 * **Marching**: ground units never hop to a point ahead of them that lies behind terrain they cannot stand on (they go for the far target
   and the engine finds the way), floating enemy buildings are not chased while ground ones exist, and an army that stops getting anywhere
   without fighting gives its target up for a while and goes for the next one (`progress.py`).
+* **Hidden-base hunting** (`army/scouting.py`, `SCOUTING` role): once no enemy structure at all is known, a handful of units fan out to
+  every base location we have not seen yet - triggered by standing at the (Zerg/Protoss) enemy's empty start location for a while, or
+  simply by having nothing better to spend supply on. Fast, expendable units (Hellions, Cyclones, bio, Thors) go first; **if none of
+  those are left - a late-game tank/support deathball once the earlier assault used up the fast part of the army - it falls back to
+  whatever else is spare** (a Battlecruiser, a Liberator, a Banshee, a Raven, a Medivac; never a Siege Tank, and never a Viking, which
+  already sweeps the map corners on its own) rather than the sweep silently finding nobody to send and doing nothing, forever, every 90
+  seconds - the reported "the enemy's main is gone, the game isn't over, and we don't scout for the rest of it" bug. Nor does it spend
+  its own cooldown on an attempt that could not send anyone anywhere (nothing eligible, or nowhere left unscouted for them to go), so the
+  next real attempt does not have to wait out a wasted cycle.
 * **Massing** (`manager.py`, the `MIN_PUSH_SUPPLY_VS_PROTOSS` ... `REINFORCE_*` constants): Stalkers blink and kite whatever runs ahead of the
   army and skytoss out-trades bio, so against Protoss a push starts later - 60+ army supply, 90% of the ground army together (75% against the
   others) and the simulator (which knows nothing of blink) at "overwhelming", not just "decisive". Against everyone: a push that has got
