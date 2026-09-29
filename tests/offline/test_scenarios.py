@@ -331,6 +331,26 @@ def test_numpy_points_from_ares():
     check("attacking on a numpy-typed approach path: no stage errored", sc.manager.attacking and not sc.manager._errors, str(sc.manager._errors))
 
 
+def test_bio_never_holds_lower_than_the_hold_point():
+    """reported: rallying at the main's wall tile ("the ramp"), bio's usual small forward nudge (BIO_FRONT_OFFSET, so it screens slightly
+    ahead of the rest while holding) could land it a step down the ramp itself - out in the open, no wall behind it, no room to spread out,
+    exactly where a rush arrives first ("trapped outside and killed"). bio_position must never be on lower ground than the hold point it
+    is offset from."""
+    sc = scene_basic()                                                    # front_vector is pinned to +x (east) here
+    positioning = sc.manager.positioning
+    hold = Point2((60.0, 60.0))
+    sc.ai.game_info.terrain_height.data_numpy[:, :] = 130
+    check("bio_position: (control) on flat ground it is the usual 2 cells forward",
+          positioning.bio_position(hold) == Point2((62.0, 60.0)), str(positioning.bio_position(hold)))
+    sc.ai.game_info.terrain_height.data_numpy[:, 62:] = 100               # the ramp starts right where the offset would land
+    check("bio_position: a ramp starting within the offset - it holds exactly at the hold point instead of a step down it",
+          positioning.bio_position(hold) == hold, str(positioning.bio_position(hold)))
+    sc.ai.game_info.terrain_height.data_numpy[:, :] = 130
+    sc.ai.game_info.terrain_height.data_numpy[:, 65:] = 100               # the ramp is farther out: the offset is still safely short of it
+    check("bio_position: (control) a ramp farther away than the offset reaches - the usual forward nudge stands",
+          positioning.bio_position(hold) == Point2((62.0, 60.0)), str(positioning.bio_position(hold)))
+
+
 # ------------------------------------------------------------------------------------------------------------------------------
 # massing: the army fights as one (a bigger, tighter push against Protoss; waiting for the tail; reinforcement waves; stragglers rushing in)
 # ------------------------------------------------------------------------------------------------------------------------------

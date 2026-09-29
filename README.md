@@ -144,6 +144,9 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   Command Center counts from the moment it is **placed**, `register_base` in `bot.py`, not once it is finished - and the production
   buildings' rally points follow it), the fight direction from the enemy's
   ground path to it, and before a push the tanks creep up to a stand-off point in front of static defense or sieged tanks (`staging`).
+  Bio holds a couple of cells ahead of the hold point, towards the enemy - but never a step LOWER than it (`Positioning.bio_position`):
+  the hold point is routinely the main's wall tile, right at the ramp's mouth, so the plain forward offset could otherwise land bio a
+  step down the ramp itself, in the open with no wall behind it - exactly where a rush arrives first.
 * **Marching**: ground units never hop to a point ahead of them that lies behind terrain they cannot stand on (they go for the far target
   and the engine finds the way), floating enemy buildings are not chased while ground ones exist, and an army that stops getting anywhere
   without fighting gives its target up for a while and goes for the next one (`progress.py`).

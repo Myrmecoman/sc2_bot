@@ -87,7 +87,21 @@ class Positioning:
         return toward.normalized if toward.length > 0.01 else Point2((1.0, 0.0))
 
     def bio_position(self, hold_point: Point2) -> Point2:
-        return self._pathable(hold_point + self.front_vector(hold_point) * BIO_FRONT_OFFSET, hold_point)
+        """A little ahead of the hold point, towards where the enemy comes from - unless that is a step down (a ramp: the hold point is
+        routinely the main's wall tile, right at its mouth), in which case bio holds exactly at the hold point instead. A rush that arrives
+        while bio is standing part way down the ramp meets it there - funnelled the wrong way round, with no room to spread out and no
+        wall behind it - rather than at the top, where the choke works for us instead of against us."""
+        forward = hold_point + self.front_vector(hold_point) * BIO_FRONT_OFFSET
+        if self._height_at(forward) < self._height_at(hold_point):
+            forward = hold_point
+        return self._pathable(forward, hold_point)
+
+    def _height_at(self, position: Point2) -> int:
+        try:
+            heights = self.ai.game_info.terrain_height.data_numpy      # [y, x], same convention as pathing/order_utils.terrain_view
+            return int(heights[int(position.y), int(position.x)])
+        except Exception:  # noqa: BLE001 - positioning must never take a step down (in the other sense: never raise)
+            return 0
 
     def tank_slots(self, hold_point: Point2, count: int, front: Optional[Point2] = None) -> List[Point2]:
         """Siege positions in a shallow line behind the hold point, perpendicular to the approach direction:
