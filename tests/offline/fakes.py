@@ -322,7 +322,7 @@ class Scene:
         ai.config = {}
         ai.mediator = RealishMediator(ai) if real_managers else FakeMediator(ai)
         ai.manager_hub = SimpleNamespace(combat_sim_manager=ai.mediator.sim_manager)
-        ai.army_advisor = SimpleNamespace(is_wall_closed=lambda: True)
+        ai.army_advisor = SimpleNamespace(is_wall_closed=lambda: True, zergling_rushed=False)
         ai.supply_army = 60
         ai.supply_cap = 120
         ai.supply_left = 30

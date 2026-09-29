@@ -87,6 +87,9 @@ KEEP_ATTACK_SUPPLY_FRACTION = 0.5     # a push that has lost half its supply is 
 MIN_ARMY_TO_KEEP_ATTACKING = 12       # ...and so is one that has shrunk below this many supply
 RECALL_RADIUS = 80.0                  # the army only comes home to defend if it is at most this far from the threat
 GIVE_UP_SECONDS = 180.0               # a target the army got stuck on (see ProgressWatch) is left alone this long
+# a zergling rush wants nothing more than to lure the army out of position and pick it off piece by piece - do not take that bait: no new
+# push starts this early, whatever the sim says (DEFEND is untouched - coming home to fight at a base is never "pushing out")
+ZERGLING_RUSH_STAY_DEFENSIVE_UNTIL = 240.0
 # ---- massing: the army fights as one -------------------------------------------------------------------------------------
 # Against Protoss - Stalkers blink and kite whatever runs ahead, and skytoss trades better than bio does - a push starts later: with more
 # army, more tightly grouped, and with the simulator (which knows nothing of blink or micro) surer of the fight
@@ -575,6 +578,8 @@ class ArmyManager:
             start = False
             if maxed:
                 start = True
+            elif ai.army_advisor.zergling_rushed and now < ZERGLING_RUSH_STAY_DEFENSIVE_UNTIL:
+                pass    # lured out early is exactly what the rush wants - hold at the rally point until it is over
             elif (
                 escalate_to is None and grouped and army_supply >= (MIN_PUSH_SUPPLY_VS_PROTOSS if protoss else MIN_PUSH_SUPPLY)
                 and result is not None and now >= self.retreating_until

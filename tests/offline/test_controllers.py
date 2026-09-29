@@ -263,15 +263,19 @@ def test_bio_ignores_remembered_and_hallucinated_banelings():
 
 def test_context_targets_are_worked_out_per_shooter():
     """ArmyContext classifies each enemy once per step (see ArmyContext._kind); what a unit is offered must still be exactly what it can
-    shoot: no ghosts, no ignored types (eggs, larvae, changelings...), nothing it cannot hit (a marauder cannot shoot air)."""
+    shoot: no ghosts, no genuinely-ignored types (eggs, larvae), nothing it cannot hit (a marauder cannot shoot air) - but a changeling IS
+    offered like any other ground unit: it is the enemy's free vision into us until it dies, and dies to one hit (see CHANGELING_TYPES,
+    bot/pathing/consts.py - only HARMLESS_TO_WORKERS, a separate list, still exempts it from worker flee logic)."""
     import gamefix
-    gamefix.STATS.setdefault(U.CHANGELING, (5, 0, 0, 3.15, [], [gamefix.LIGHT, gamefix.BIO], 0, 0, 0))      # (an ignored type the fixture lacks)
+    gamefix.STATS.setdefault(U.CHANGELING, (5, 0, 0, 3.15, [], [gamefix.LIGHT, gamefix.BIO], 0, 0, 0))      # (exotic types the fixture lacks)
+    gamefix.STATS.setdefault(U.EGG, (200, 0, 1, 0.0, [], [gamefix.BIO], 0, 0, 0))
     sc = mk()
     marauder = sc.own(U.MARAUDER, (60, 60))
     marine = sc.own(U.MARINE, (60, 61))
     zergling = sc.enemy(U.ZERGLING, (63, 60))
     muta = sc.enemy(U.MUTALISK, (63, 62))
-    sc.enemy(U.CHANGELING, (62, 60))
+    changeling = sc.enemy(U.CHANGELING, (62, 60))
+    egg = sc.enemy(U.EGG, (61, 60))
     ghost = sc.enemy(U.ROACH, (64, 60))
     ghost._ghost = True
     ghost.game_loop = 1
@@ -279,9 +283,12 @@ def test_context_targets_are_worked_out_per_shooter():
     ctx = begin(sc)
     ctx.prefetch_near([marauder, marine])
     tags = lambda units: {u.tag for u in units}
-    check("context: a marauder is offered ground units only - no air, no eggs, no ghosts",
-          tags(ctx.targets_near(marauder)) == {zergling.tag, bane.tag}, str(tags(ctx.targets_near(marauder))))
-    check("context: a marine is offered air units too", tags(ctx.targets_near(marine)) == {zergling.tag, muta.tag, bane.tag}, str(tags(ctx.targets_near(marine))))
+    check("context: a marauder is offered ground units only - no air, no eggs, no ghosts, but the changeling counts",
+          tags(ctx.targets_near(marauder)) == {zergling.tag, bane.tag, changeling.tag}, str(tags(ctx.targets_near(marauder))))
+    check("context: a marine is offered air units too, and the changeling",
+          tags(ctx.targets_near(marine)) == {zergling.tag, muta.tag, bane.tag, changeling.tag}, str(tags(ctx.targets_near(marine))))
+    check("context: the egg is never offered to anyone",
+          egg.tag not in tags(ctx.targets_near(marauder)) | tags(ctx.targets_near(marine)))
     check("context: the baneling is found (and only it) - however many times it is asked", tags(ctx.banelings_near(marine)) == {bane.tag} == tags(ctx.banelings_near(marine)))
     sc2 = mk()
     m = sc2.own(U.MARINE, (60, 60))

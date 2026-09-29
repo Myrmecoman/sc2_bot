@@ -14,6 +14,7 @@ from sc2.ids.unit_typeid import UnitTypeId as U
 from bot.pathing.consts import (  # noqa: F401  (re-exported)
     ATTACK_TARGET_IGNORE,
     ATTACK_TARGET_IGNORE_WITH_WORKERS,
+    CHANGELING_TYPES,
     DANGEROUS_STRUCTURES,
     SKYTOSS_TYPES,
 )
@@ -48,7 +49,8 @@ BANELING_TYPES: FrozenSet[U] = frozenset({U.BANELING, U.BANELINGBURROWED})
 # enemy units that are not part of "their army" when sizing up a fight or tracking what we've seen
 ENEMY_WORKER_TYPES: FrozenSet[U] = frozenset({U.SCV, U.PROBE, U.DRONE, U.DRONEBURROWED, U.MULE})
 ENEMY_NON_ARMY_TYPES: FrozenSet[U] = frozenset(
-    ENEMY_WORKER_TYPES | ATTACK_TARGET_IGNORE | {U.OVERLORD, U.OVERLORDTRANSPORT, U.OBSERVER, U.OBSERVERSIEGEMODE}
+    ENEMY_WORKER_TYPES | ATTACK_TARGET_IGNORE | CHANGELING_TYPES
+    | {U.OVERLORD, U.OVERLORDTRANSPORT, U.OBSERVER, U.OBSERVERSIEGEMODE}
 )
 
 # static defenses that can only shoot AIR: the combat simulator is known to have them shoot ground units too,

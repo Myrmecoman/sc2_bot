@@ -1,9 +1,7 @@
 from typing import Set
 from sc2.ids.unit_typeid import UnitTypeId
 
-ATTACK_TARGET_IGNORE: Set[UnitTypeId] = {
-    UnitTypeId.LARVA,
-    UnitTypeId.EGG,
+CHANGELING_TYPES: Set[UnitTypeId] = {
     UnitTypeId.CHANGELING,
     UnitTypeId.CHANGELINGMARINE,
     UnitTypeId.CHANGELINGMARINESHIELD,
@@ -12,19 +10,19 @@ ATTACK_TARGET_IGNORE: Set[UnitTypeId] = {
     UnitTypeId.CHANGELINGZERGLINGWINGS,
 }
 
-# enemy units no worker has any reason to run from or to hold back for: they never attack (a disguised changeling only "carries" whatever
-# the game data lists for what it looks like, an Observer is a detector) - `can_attack_ground` alone is not to be trusted for these
-HARMLESS_TO_WORKERS: Set[UnitTypeId] = ATTACK_TARGET_IGNORE | {UnitTypeId.OBSERVER, UnitTypeId.OBSERVERSIEGEMODE}
-
-ATTACK_TARGET_IGNORE_WITH_WORKERS: Set[UnitTypeId] = {
+# genuinely never worth attacking (unlike a changeling - see CHANGELING_TYPES above - these do not even provide the enemy with vision)
+ATTACK_TARGET_IGNORE: Set[UnitTypeId] = {
     UnitTypeId.LARVA,
     UnitTypeId.EGG,
-    UnitTypeId.CHANGELING,
-    UnitTypeId.CHANGELINGMARINE,
-    UnitTypeId.CHANGELINGMARINESHIELD,
-    UnitTypeId.CHANGELINGZEALOT,
-    UnitTypeId.CHANGELINGZERGLING,
-    UnitTypeId.CHANGELINGZERGLINGWINGS,
+}
+
+# enemy units no worker has any reason to run from or to hold back for: they never attack (a disguised changeling only "carries" whatever
+# the game data lists for what it looks like, an Observer is a detector) - `can_attack_ground` alone is not to be trusted for these.
+# Changelings are still worth OUR OWN weapons attacking on sight (one hit kills one, and it is the enemy's free vision into us until it
+# dies) - this is only about what scares no worker, not about what our own targeting should ignore.
+HARMLESS_TO_WORKERS: Set[UnitTypeId] = ATTACK_TARGET_IGNORE | CHANGELING_TYPES | {UnitTypeId.OBSERVER, UnitTypeId.OBSERVERSIEGEMODE}
+
+ATTACK_TARGET_IGNORE_WITH_WORKERS: Set[UnitTypeId] = ATTACK_TARGET_IGNORE | CHANGELING_TYPES | {
     UnitTypeId.SCV,
     UnitTypeId.PROBE,
     UnitTypeId.DRONE,

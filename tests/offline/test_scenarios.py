@@ -189,6 +189,23 @@ def test_attack_decision():
           str(sc.manager.global_result))
 
 
+def test_zergling_rush_stays_defensive_before_4_minutes():
+    """A zergling rush wants nothing more than to lure the army out of position - no new push should start that early,
+    however good the sim thinks it looks (ArmyManager.ZERGLING_RUSH_STAY_DEFENSIVE_UNTIL)."""
+    sc = scene_basic()                                  # scene_basic() starts at t=200s, inside the 4-minute window
+    sc.ai.army_advisor.zergling_rushed = True
+    sc.own_many(U.MARINE, 50, (40, 40), role=UnitRole.ATTACKING)
+    sc.own_many(U.MARAUDER, 10, (44, 44), role=UnitRole.ATTACKING)
+    sc.ai.supply_army = 50
+    sc.enemy_many(U.ZERGLING, 50, (150, 150))           # a beatable known army - would normally start a push (see test_attack_decision)
+    sc.step()
+    check("a zergling rush holds the army back before 4min despite a beatable army in sight", sc.manager.attacking is False,
+          str(sc.manager.global_result))
+    sc.ai._fake_time = 245.0                             # past the 4-minute mark, rush flag still set
+    sc.step()
+    check("...but the same army is free to push once 4min has passed", sc.manager.attacking is True, str(sc.manager.global_result))
+
+
 def test_maxed_attacks():
     sc = scene_basic()
     sc.own_many(U.MARINE, 30, (40, 40), role=UnitRole.ATTACKING)

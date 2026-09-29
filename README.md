@@ -52,7 +52,10 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   eggs) never send a worker to the townhall (`flee_worker_threats`), hold an SCV back from resuming an unattended building
   (`resume_building_construction`) or turn the scouting SCV back - they walk and float through the mineral line for minutes, and the
   workers just carry on mining. It goes by what the unit is, not by `can_attack_ground`: a disguised changeling may be listed with the
-  weapon of what it looks like.
+  weapon of what it looks like. The **army** is a separate matter: changelings used to be excluded from targeting entirely
+  (`ATTACK_TARGET_IGNORE`), so combat units walked past one sitting in range the same way workers correctly do - now `CHANGELING_TYPES` is
+  its own list and only `HARMLESS_TO_WORKERS` keeps it; our own units treat a changeling as a normal (if low-priority) target and kill it
+  in one hit, removing the free vision it gives the enemy into our army. Eggs and larva are still never worth attacking either way.
 * **Reactions to the scouting** (`reactions.py`): a table of rules, "we have seen X -> change Y", applied on top of the advisor's usual
   per-race numbers every step (so nothing sticks once its trigger is gone) and logged once each as `[react] ...`. A Dark Shrine (or Dark
   Templar): the Starport makes a Raven before a Banshee, is built at once, a missile turret goes into every mineral line. A Roach Warren:
@@ -132,6 +135,11 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   (`enemy_tracker.py`, which never forgets what it saw), plus the old "attack at full supply" rule. Thresholds are in `consts.py`. Once a
   push is on and the army is fighting, it is judged on the fight it is in (next bullet), not on the whole matchup; a push called off that
   way waits out the retreat before the whole-army verdict may start it again.
+* **A zergling rush holds the army back from pushing out before 4 minutes** (`manager.py`'s `ZERGLING_RUSH_STAY_DEFENSIVE_UNTIL`, gating
+  `_update_push_state`): the whole point of a rush like this is to lure the defender out of position and pick it off away from home -
+  so while `army_advisor.zergling_rushed` is set and the game clock is still under 4:00, no new push starts, however good the simulator
+  says it looks. This only blocks *starting an attack*; coming home to fight a threat at one of our bases (`Mode.DEFEND`) is untouched -
+  it is checked first and does not go through this gate at all.
 * **Fights** (`local_fight.py`). The simulator ignores where units stand - the same marines beat the same roaches whether they are 2 or
   110 cells apart - so the units it is handed ARE the fight. A unit is in a fight when it could get a weapon on the other side within
   4 seconds (in range now, or able to walk there; a sieged tank has to be in range already). Units still on their way and farther off, on
