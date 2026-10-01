@@ -14,6 +14,14 @@ ground they cannot cross. So:
   where the SCV stops at the edge, out of repair range (the banshees' repair spot is open ground for that reason, units/banshees.py).
 
 Only SCVs that are mining (or idle) are sent, never one that has a job of its own (building, scouting, walking to an expansion).
+
+An SCV repairing a BUILDING is fearless: it holds its ground against a threat instead of fleeing (worker_micro.py's
+flee_worker_threats/avoid_oracles exempt it via structure_repairers below, not just the live `is_repairing` the
+instant it is sent - see that function's docstring for why). Repairing a turret, bunker, depot or command center
+under fire IS the defense; the building cannot run from the threat, so an SCV bailing out defeats the entire point
+of sending it. A repair on a damaged MECHANICAL ARMY UNIT (a tank, a Cyclone) is not covered by this - a unit out in
+the field can retreat under its own orders, and an SCV standing next to one that is actively under fire gains
+nothing by staying, so it still flees like any other worker.
 """
 import math
 from dataclasses import dataclass
@@ -42,6 +50,7 @@ _NOT_REPAIRED = {UnitTypeId.SCV, UnitTypeId.MULE, UnitTypeId.AUTOTURRET}
 @dataclass
 class RepairJob:
     target: int                # tag of what the SCV was sent to repair
+    is_structure: bool         # a building (fearless - see structure_repairers) or a mechanical army unit (still flees)
     since: float               # game time it was sent
     last: Tuple[float, float]  # where it was when last looked at
     walked: float = 0.0        # how far it has walked on this job so far
@@ -49,6 +58,17 @@ class RepairJob:
 
 def _home_distance(bases: Units, unit: Unit) -> float:
     return bases.closest_distance_to(unit)
+
+
+def structure_repairers(self: BotAI) -> Set[int]:
+    """Tags of SCVs assigned to repair a BUILDING right now - including the single step between being sent
+    (self.repair_jobs is set the instant manage_repairs issues the order) and the order actually showing up in the
+    observation (is_repairing itself lags a step behind). Without that same-step coverage, a worker sent to repair a
+    structure that is under fire - the normal case, since that is usually why it needs repairing - got its brand
+    new repair order immediately overridden by flee_worker_threats later the same step (macro() runs before
+    worker_micro()), so it fled instead of ever landing a single repair tick, on every reassignment, for as long as
+    the threat stayed close: the whole point of repairing a defensive structure, defeated."""
+    return {tag for tag, job in self.repair_jobs.items() if job.is_structure}
 
 
 def _release(self: BotAI, worker: Unit, bases: Units) -> None:
@@ -180,7 +200,9 @@ def manage_repairs(self: BotAI) -> None:
             if walk is None or walk > MAX_TRAVEL:
                 continue
             worker(AbilityId.EFFECT_REPAIR_SCV, target)
-            self.repair_jobs[worker.tag] = RepairJob(target=target.tag, since=now, last=worker.position_tuple)
+            self.repair_jobs[worker.tag] = RepairJob(
+                target=target.tag, is_structure=target.is_structure, since=now, last=worker.position_tuple
+            )
             crews.setdefault(target.tag, []).append(worker)
             pool.remove(worker)
             sent += 1

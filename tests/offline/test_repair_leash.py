@@ -93,7 +93,9 @@ def run(layout, rules=True, frames=8):
             worker = game.add(U.SCV, (cx + 11, cy + 11), 1)
             repair_order(worker, tank.tag)
             job_workers.append(worker)
-            bot.repair_jobs[worker.tag] = repair.RepairJob(target=tank.tag, since=0.0, last=(worker.pos.x, worker.pos.y), walked=66.0)
+            bot.repair_jobs[worker.tag] = repair.RepairJob(
+                target=tank.tag, is_structure=False, since=0.0, last=(worker.pos.x, worker.pos.y), walked=66.0
+            )
         repairs, called_off, distinct = set(), set(), set()
         job_tags = {w.tag for w in job_workers}
         for i in range(frames):

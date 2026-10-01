@@ -132,10 +132,23 @@ async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId, townhalls 
         print("Could not place tech building behind mineral lines")
 
 
+CLEAR_OF_MINERALS = 6.0  # a candidate this close to any ACTUAL mineral patch is rejected outright, however it was reached
+                          # (UNVERIFIED - reasoned against the ~7-unit mineral-to-townhall distance already used elsewhere
+                          # in this file, not measured on a real ladder map)
+
+
 async def smart_build_in_front_of_base(self : BotAI, type : UnitTypeId, townhalls : Units = None, near_distance: float = 8, far_distance: float = 10):
     """Like smart_build_behind_mineral, but on the OPPOSITE side of the townhall from its mineral line - the open,
     outward-facing side a Bunker actually needs to stand on to block an approach, rather than the side already safely
-    tucked away with the workers."""
+    tucked away with the workers.
+
+    Reflecting the AVERAGE of the minerals within 10 of the townhall is only correct if that average actually
+    represents the whole mineral line - a real base's mineral line can fan out across a wide arc (the geyser/mineral
+    layout is not always a tight point), so an uneven spread can skew the average enough that its exact opposite
+    still ends up close to one of the real patches at the edge of that spread, even though it is on the correct side
+    of the average itself. So every candidate is ALSO checked directly against the real mineral fields (a wider net
+    than the 10 used for the average, so a patch just past that radius cannot be missed by this check too) before it
+    is accepted - "in front of the base" has to mean clear of the minerals, not just technically outward-facing."""
     for cc in (self.townhalls.ready if townhalls is None else townhalls):
         mfs: Units = self.mineral_field.closer_than(10, cc)
         if mfs.amount == 0:
@@ -148,16 +161,17 @@ async def smart_build_in_front_of_base(self : BotAI, type : UnitTypeId, townhall
         x = x // mfs.amount
         y = y // mfs.amount
         away = Point2((2 * cc.position.x - x, 2 * cc.position.y - y))   # the mineral average, reflected through the townhall
+        nearby_minerals: Units = self.mineral_field.closer_than(14, cc)
         for i in range(20):
             position = cc.position.towards_with_random_angle(away, near_distance, (math.pi / 3))
             position_further = cc.position.towards_with_random_angle(away, far_distance, (math.pi / 3))
             position = position.rounded.offset(HALF_OFFSET)
             position_further = position_further.rounded.offset(HALF_OFFSET)
-            if await self.can_place_single(type, position):
-                await self.build(type, near=position, max_distance=4)
+            if not nearby_minerals.closer_than(CLEAR_OF_MINERALS, position).exists and await self.can_place_single(type, position):
+                await self.build(type, near=position, max_distance=4, random_alternative=False)
                 return
-            if await self.can_place_single(type, position_further):
-                await self.build(type, near=position_further, max_distance=4)
+            if not nearby_minerals.closer_than(CLEAR_OF_MINERALS, position_further).exists and await self.can_place_single(type, position_further):
+                await self.build(type, near=position_further, max_distance=4, random_alternative=False)
                 return
         print("Could not place a building in front of the base")
 

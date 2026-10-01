@@ -20,12 +20,15 @@ Against Protoss (a mech-led army, army_advisor.mech_focus):
              Armory once the Starport is up AND the first bio upgrade is done, a Tech Lab on every Factory"""
 import _bootstrap  # noqa: F401  (repo root on sys.path - keep this first)
 import asyncio
+import math
+import random as random_module
 from loguru import logger
 from s2clientprotocol import common_pb2
 from sc2.ids.ability_id import AbilityId as A
 from sc2.ids.unit_typeid import UnitTypeId as U
 from sc2.ids.upgrade_id import UpgradeId
 
+import bot.macro as macro
 import bot.production as production
 import gamefix_more  # noqa: F401
 from dynamic import BASES, run_frame, start_game
@@ -316,6 +319,48 @@ def placement():
         dist = ((turret_cmd.target.x - cc.position.x) ** 2 + (turret_cmd.target.y - cc.position.y) ** 2) ** 0.5
         check("placement: the turret lands close to the townhall (<= 7.5) - tighter than the old 9/12",
               dist <= 7.5, str(dist))
+
+    def with_wraparound_minerals(game, cx, cy):
+        # a natural whose mineral line is NOT one tidy point: seven patches tightly clustered on one side, plus a
+        # single patch almost exactly opposite them - an uneven spread a real base's mineral line can have. The
+        # AVERAGE of all eight still points "away" back at the big cluster's own far side, which is exactly where
+        # the lone patch sits - the premise this check exists to catch (see smart_build_in_front_of_base's docstring).
+        more_bases(game, 1)
+        nx, ny = BASES["our_nat"]
+        # build_game() already seeded every named base (including this one) with its own standard, symmetric ring -
+        # strip that out so this closure's deliberately uneven one is the only mineral line near this base
+        game.units_raw = [
+            p for p in game.units_raw
+            if not (p.unit_type == U.MINERALFIELD.value and math.hypot(p.pos.x - nx, p.pos.y - ny) < 10)
+        ]
+        for deg in (-6, -4, -2, 0, 2, 4, 6):
+            rad = math.radians(deg)
+            game.add(U.MINERALFIELD, (nx + 7 * math.cos(rad), ny + 7 * math.sin(rad)), 3, mineral_contents=1800)
+        game.add(U.MINERALFIELD, (nx - 7, ny), 3, mineral_contents=1800)   # the lone, far-side outlier
+
+    # dead centre of the +-60 degree cone (worst case, right on the outlier) for the first try's 2 draws (position,
+    # position_further), then a draw that lands at the cone's edge - clear of every patch - for every try after
+    calls = [0]
+
+    def rigged_random():
+        calls[0] += 1
+        return 0.5 if calls[0] <= 2 else 0.0
+
+    original_random = random_module.random
+    try:
+        random_module.random = rigged_random
+        bot, actions = run(with_wraparound_minerals, minerals=600, gas=300)
+    finally:
+        random_module.random = original_random
+    bunker_cmd = next((a for a in actions if a.ability == A.TERRANBUILD_BUNKER), None)
+    check("placement: (premise) a bunker is still built with an uneven, wraparound mineral line", bunker_cmd is not None,
+          str(sorted(a.ability.name for a in actions)))
+    if bunker_cmd is not None:
+        cc = bot.townhalls.furthest_to(bot.start_location)
+        nearby = bot.mineral_field.closer_than(14, cc)
+        closest = min(mf.position.distance_to((bunker_cmd.target.x, bunker_cmd.target.y)) for mf in nearby)
+        check("placement: ...and still lands clear of every real mineral patch, not just on the correct side of their average",
+              closest >= macro.CLEAR_OF_MINERALS, f"closest={closest}")
 
 
 def one_base_all_in():

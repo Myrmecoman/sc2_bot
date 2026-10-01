@@ -18,6 +18,7 @@ from sc2.units import Units
 
 from bot.pathing.consts import HARMLESS_TO_WORKERS
 from bot.pathing.order_utils import is_already_moving_to, segment_walkable
+from bot.repair import structure_repairers
 
 WORKER_FLEE_RANGE = 7.0   # start pulling workers back before a fast threat like a reaper is already on top of them
 WORKER_FLEE_STEP = 6.0    # how far a fleeing worker steps away from the threat(s) each time it is sent
@@ -151,7 +152,8 @@ def avoid_oracles(self: BotAI) -> Set[int]:
         return handled
     fleeing &= {w.tag for w in self.workers}
     # workers already committed to a specific, actively-managed task elsewhere are left alone (as in flee_worker_threats)
-    workers = [w for w in self.workers if not (w.is_repairing or w.is_constructing_scv)]
+    fearless = structure_repairers(self)
+    workers = [w for w in self.workers if not (w.is_repairing or w.is_constructing_scv or w.tag in fearless)]
     if not workers:
         return handled
     positions = [o.position for o in oracles]
@@ -219,7 +221,8 @@ def flee_worker_threats(self: BotAI, skip: Set[int] = frozenset()):
     # Exempting it from fleeing too would leave a worker walking to a build site defenseless against anything
     # that wanders close during the walk)
     # workers already committed to a specific, actively-managed task elsewhere are left alone
-    workers = [w for w in self.workers if not (w.is_repairing or w.is_constructing_scv or w.tag in skip)]
+    fearless = structure_repairers(self)
+    workers = [w for w in self.workers if not (w.is_repairing or w.is_constructing_scv or w.tag in skip or w.tag in fearless)]
     if not workers:
         return
     positions = [t.position for t in threats]
