@@ -38,6 +38,14 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   SCVs that are mining or idle are sent, never the scout or the scripted build order's builder. A flying unit is only repaired where an
   SCV can stand under it: over the middle of a townhall (a 5x5 block, checked on Ares' clean ground grid) the SCV stops at the edge, out
   of repair range.
+* **An SCV repairing a BUILDING is fearless** (`repair.structure_repairers`, read by `worker_micro.py`'s `avoid_oracles`/
+  `flee_worker_threats`): repairing a turret, bunker, depot or command center under fire IS the defense, so it holds its ground instead
+  of fleeing - the building cannot run from the threat it is being repaired against, and an SCV bailing out defeats the entire point of
+  sending it there. This covers the single step between being sent and `is_repairing` itself catching up in the observation (`macro()`
+  runs before `worker_micro()` in the same step) - without that, a worker freshly assigned to repair something under attack, the normal
+  reason it needs repairing, got its brand new order overridden by a flee move the same step, on every reassignment, for as long as the
+  threat stayed close. A repair on a damaged MECHANICAL ARMY UNIT (a tank, a Cyclone) is not covered - it can retreat under its own
+  orders, so an SCV patching one still flees like any other worker.
 * **The worker-rush defense** (`worker_rush_defense.py`) pulls workers (the rushers' number + 1) only against enemy workers within 10 of
   a structure of ours that stands at home - within 30 of one of our townhalls - and sends them to the closest of those. A structure of
   ours anywhere else (a Raven's Auto-Turret next to the enemy's mineral line) does not count: it used to, and 14 enemy drones around one
@@ -156,7 +164,11 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   one - needing only a Barracks. Unlike a missile
   turret it is built in FRONT of the townhall - the open side, away from the mineral line (`smart_build_in_front_of_base`: the
   mineral-field average reflected through the townhall, so it stands roughly where it can actually block an approach, not
-  tucked away safely with the workers). It stands empty until its base is under ground threat (`worker_micro.base_is_threatened`,
+  tucked away safely with the workers). A candidate spot is also checked directly against every real mineral patch nearby
+  (`CLEAR_OF_MINERALS`), not just which side of the AVERAGE it is on - a mineral line that fans out across a wide arc can skew
+  that average enough that its exact opposite still lands close to a real patch at the edge of the spread, which (confirmed
+  against the test map's own mineral layout, which spans a 162-degree arc) is a real risk on a base whose mineral line is not
+  one tidy point. It stands empty until its base is under ground threat (`worker_micro.base_is_threatened`,
   the same check that holds workers back from a threatened base) - or, proactively, once a one-base all-in is suspected
   (`army_advisor.enemy_likely_one_base`, no need to wait for their army to actually show up first): then the nearest free
   Marines/Marauders within 20 - from the main army OR any base-defense detachment already heading the same way (a detachment
