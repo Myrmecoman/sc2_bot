@@ -10,6 +10,7 @@ building limits: never more than 8 Barracks, 2 Factories and 2 Starports - and m
   caps       8 Barracks / 2 Factories / 2 Starports at most, the bank builds one more at a time while it piles up
   infantry_upgrades  the Engineering Bay's weapon/armor levels wait for the 3rd base
   mineral_banking    minerals growing faster than we can spend them calls for another Barracks, not only late-game
+  bunkers    one Bunker each at our closest two bases to home (main, natural) - never a third, however many bases we take
 
 Against Protoss (a mech-led army, army_advisor.mech_focus):
   cyclones   the Factory makes Cyclones first, a Tank once three more Cyclones than 3 x tanks are out; money is held back for them
@@ -361,6 +362,40 @@ def mineral_banking():
     check("mineral banking (control): not enough history yet to call it banking", A.TERRANBUILD_BARRACKS not in done, names(done))
 
 
+def bunkers():
+    """One Bunker each at our closest two bases to home (main, natural) - build_bunkers in macro.py. Needs only a
+    Barracks; never a third one, however many bases we have or how much money is sitting around."""
+    Zerg = common_pb2.Zerg
+
+    def names(done):
+        return str(sorted(a.name for a in done))
+
+    done = play(lambda g, cx, cy: None, race=Zerg, minerals=200)
+    check("bunkers: one base, a Barracks up, enough minerals -> a Bunker is started",
+          A.TERRANBUILD_BUNKER in done, names(done))
+    done = play(lambda g, cx, cy: None, race=Zerg, minerals=50)
+    check("bunkers (control): not without enough minerals", A.TERRANBUILD_BUNKER not in done, names(done))
+
+    def with_natural(game, cx, cy):
+        more_bases(game, 1)                                               # our own natural
+        game.add_base_resources("our_nat")                                 # smart_build_behind_mineral needs minerals
+        game.add(U.BUNKER, (cx + 2, cy + 2), 1)                            # the main already has one (close - not also
+    done = play(with_natural, race=Zerg, minerals=600, gas=300)            # within TURRET_BASE_RADIUS of the natural)
+                                                                            # (600: two bases also want a 2nd Barracks/Factory this step)
+    check("bunkers: the main already has one -> the natural gets one next",
+          A.TERRANBUILD_BUNKER in done, names(done))
+
+    def both_bases_done(game, cx, cy):
+        more_bases(game, 3)                                               # natural AND a third base
+        game.add_base_resources("our_nat")
+        game.add(U.BUNKER, (cx + 2, cy + 2), 1)                           # main
+        nx, ny = BASES["our_nat"]
+        game.add(U.BUNKER, (nx + 2, ny + 2), 1)                           # natural
+    done = play(both_bases_done, race=Zerg, minerals=2000)
+    check("bunkers: main and natural both have one -> no third, whatever the bank or the base count",
+          A.TERRANBUILD_BUNKER not in done, names(done))
+
+
 def main():
     # ---- a Dark Shrine: Raven first
     def starport(shrine):
@@ -468,6 +503,7 @@ def main():
     infantry_upgrades()
     one_base_all_in()
     mineral_banking()
+    bunkers()
 
     failed = [r for r in RESULTS if not r[1]]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")

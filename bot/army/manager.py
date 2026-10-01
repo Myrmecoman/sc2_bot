@@ -6,6 +6,7 @@ Units live in one role at a time, each with its own controller and orders:
     ATTACKING           the main army - HOLD (pre-positioned at the hold point), ATTACK (push) or DEFEND (a threat at home)
     BASE_DEFENDER       a detachment split off to answer a specific enemy group near one of our bases (defense.py)
     CONTROL_GROUP_ONE   a small diversion squad sent at a different enemy base to split their defense
+    CONTROL_GROUP_TWO   crewing a Bunker, or walking over to (bunkers.py)
     HARASSING_BANSHEE / HARASSING_REAPER   harassers with their own targeting (units/banshees.py, units/reapers.py)
     HARASSING           Cyclones on a raid against Protoss - lock on, step back, again - while the army is not pushing (units/cyclone_raid.py)
     SCOUTING            a hidden-base sweep, protected from everything else (scouting.py)
@@ -55,6 +56,7 @@ from bot.army.consts import (
     VIKING_TYPES,
 )
 from bot.army.context import ArmyContext
+from bot.army.bunkers import BunkerDefense
 from bot.army.defense import BaseDefense
 from bot.army.enemy_tracker import EnemyTracker
 from bot.army.fight import FightEvaluator, Stance
@@ -121,7 +123,7 @@ RAVEN_ESCORT_RANGE = 60.0                         # a spare Raven farther than t
 RAVEN_ESCORT_LEAD = 0.0                           # an escort stands in the middle of its part (with the main army a Raven stands 4 ahead of it)
 # ---- roles ----------------------------------------------------------------------------------------------------------
 MANAGED_ROLES = (
-    UnitRole.ATTACKING, UnitRole.BASE_DEFENDER, UnitRole.CONTROL_GROUP_ONE, UnitRole.SCOUTING,
+    UnitRole.ATTACKING, UnitRole.BASE_DEFENDER, UnitRole.CONTROL_GROUP_ONE, UnitRole.CONTROL_GROUP_TWO, UnitRole.SCOUTING,
     UnitRole.HARASSING_BANSHEE, UnitRole.HARASSING_REAPER, UnitRole.HARASSING,
 )
 
@@ -148,6 +150,7 @@ class ArmyManager:
         self.positioning = Positioning(ai)
         self.defense = BaseDefense(ai, self.fight, self.positioning)
         self.scouting = HiddenBaseScouting(ai)
+        self.bunkers = BunkerDefense(ai)
 
         self.bio = BioController(ai)
         self.tanks = TankController(ai, self.positioning)
@@ -219,6 +222,7 @@ class ArmyManager:
 
         role = ctx.mediator.get_units_from_role
         self._guard("scouting", self.scouting.update, ctx, role(role=UnitRole.ATTACKING))
+        self._guard("bunkers", self.bunkers.update, ctx, role(role=UnitRole.ATTACKING))
         defense_groups, escalate_to = self._guard(
             "defense", self.defense.update, ctx, role(role=UnitRole.ATTACKING), role(role=UnitRole.BASE_DEFENDER)
         ) or ([], None)

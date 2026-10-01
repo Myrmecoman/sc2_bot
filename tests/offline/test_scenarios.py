@@ -700,6 +700,82 @@ def test_share_ravens_between_all_the_parts():
     check("ravens: (control) with a single Raven the groups come back as they were", sc.manager._share_ravens(one) is one)
 
 
+def _begin(sc):
+    """Refreshes the real Ares mediator's own bookkeeping for units created directly on the Scene (not through a
+    real sc.step()) - needed before assign_role/get_units_from_role behave correctly under REAL managers."""
+    from bot.army.context import ArmyContext
+    sc.ai._fake_time += 0.5
+    sc.ai.state.game_loop += 11
+    for u in sc.world.all_units:
+        u.game_loop = sc.ai.state.game_loop
+    if hasattr(sc.ai.mediator, "refresh"):
+        sc.ai.mediator.refresh()
+    return ArmyContext(sc.ai, sc.manager.positioning)
+
+
+def test_bunker_crews_nearby_bio_when_the_base_is_threatened():
+    """BunkerDefense (army/bunkers.py): a Bunker standing empty calls in a nearby Marine/Marauder the moment its base
+    is under ground threat, and the loaded unit's role becomes CONTROL_GROUP_TWO so the main army leaves it alone."""
+    from bot.army.bunkers import BunkerDefense
+
+    sc = scene_basic()
+    bunker = sc.own(U.BUNKER, (40.0, 40.0))
+    bunker._proto.cargo_space_max = 4
+    marine = sc.own(U.MARINE, (42.0, 40.0), role=UnitRole.ATTACKING)
+    sc.enemy(U.ZERGLING, (41.0, 40.0))                      # a ground threat right next to the bunker
+    ctx = _begin(sc)
+    bd = BunkerDefense(sc.ai)
+    bd.update(ctx, sc.world.units([marine]))
+    loads = [c for c in sc.ai.actions if c.unit.tag == bunker.tag and c.ability == AbilityId.LOAD_BUNKER]
+    check("bunker: a nearby Marine is called in to crew a threatened base's bunker",
+          loads and loads[0].target.tag == marine.tag, str(loads))
+    check("bunker: the loaded unit's role becomes CONTROL_GROUP_TWO",
+          marine.tag in ctx.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_TWO).tags,
+          str(ctx.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_TWO)))
+
+
+def test_bunker_ignores_a_unit_too_far_away_to_call_in():
+    """(control) a Marine well outside BUNKER_PICKUP_RANGE is not called in, even while the base is threatened."""
+    from bot.army.bunkers import BunkerDefense
+
+    sc = scene_basic()
+    bunker = sc.own(U.BUNKER, (40.0, 40.0))
+    bunker._proto.cargo_space_max = 4
+    marine = sc.own(U.MARINE, (90.0, 40.0), role=UnitRole.ATTACKING)   # 50 away - far past BUNKER_PICKUP_RANGE (10)
+    sc.enemy(U.ZERGLING, (41.0, 40.0))
+    ctx = _begin(sc)
+    bd = BunkerDefense(sc.ai)
+    bd.update(ctx, sc.world.units([marine]))
+    loads = [c for c in sc.ai.actions if c.ability == AbilityId.LOAD_BUNKER]
+    check("bunker: a Marine too far away is left where it is", not loads, str(loads))
+    check("bunker: ...and keeps its own role",
+          marine.tag not in ctx.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_TWO).tags)
+
+
+def test_bunker_empties_once_the_base_is_safe_again():
+    """BunkerDefense: a crewed Bunker is unloaded, and its passengers' role goes back to ATTACKING, once nothing
+    threatens its base any more."""
+    from bot.army.bunkers import BunkerDefense
+
+    sc = scene_basic()
+    bunker = sc.own(U.BUNKER, (40.0, 40.0))
+    passenger = sc.own(U.MARINE, (40.0, 40.0))
+    ctx = _begin(sc)
+    ctx.mediator.assign_role(tag=passenger.tag, role=UnitRole.CONTROL_GROUP_TWO)
+    bunker._proto.cargo_space_max = 4
+    bunker._proto.cargo_space_taken = 1
+    bunker._proto.passengers.add(tag=passenger.tag)
+    bd = BunkerDefense(sc.ai)
+    bd.crewed[bunker.tag] = {passenger.tag}
+    bd.update(ctx, sc.world.units([]))                      # nothing threatening nearby
+    unloads = [c for c in sc.ai.actions if c.unit.tag == bunker.tag and c.ability == AbilityId.UNLOADALL_BUNKER]
+    check("bunker: it is unloaded once the base is safe again", bool(unloads), str(unloads))
+    check("bunker: the unloaded unit's role goes back to ATTACKING",
+          passenger.tag in ctx.mediator.get_units_from_role(role=UnitRole.ATTACKING).tags,
+          str(ctx.mediator.get_units_from_role(role=UnitRole.ATTACKING)))
+    check("bunker: it is no longer tracked as crewed", bd.crewed.get(bunker.tag) == set(), str(bd.crewed))
+
+
 def main():
     tests = [v for k, v in globals().items() if k.startswith("test_")]
     only = sys.argv[1:]

@@ -55,6 +55,7 @@ class SmoothBrainBot(Sc2Bridge, AresBot):
         self.repair_walks = {}                       # (SCV tag, target tag) -> (when measured, length of the ground walk there)
         self.repair_backoff = {}                     # target tag -> until when nobody is looked for to repair it
         self.turret_backoff = {}                     # townhall tag -> until when no turret is tried for its mineral line again (see macro.build_turrets)
+        self.bunker_backoff = {}                     # townhall tag -> until when no Bunker is tried for it again (see macro.build_bunkers)
         self.worker_assigned_to_follow = {}          # lists workers assigned to follow objects (used to prevent Planetary Fortress rushes)
         self.cyclone_upgrade_next_look = 0.0          # game time before which the Factory Tech Labs are not asked again what they can research (see custom_utils.research_cyclone_upgrade)
         self.oracle_fleeing = set()                  # tags of workers that dodged an Oracle and stay out of its range instead of going back to mining (see worker_micro.avoid_oracles)

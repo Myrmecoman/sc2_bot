@@ -172,6 +172,7 @@ BANK_MINERALS = 1000           # "piling up": this much unspent...
 BANK_GAS = 350                 # ...and this much gas, for the buildings that make gas units (a Factory, a Starport)
 END_GAME_SUPPLY = 100          # ...late in the game: at least this much supply used
 TURRET_BASE_RADIUS = 15.0      # a turret this close to a townhall belongs to its base
+BUNKER_BASES = 2               # only our closest-to-home bases (main, natural) get a Bunker - not every expansion
 # a mech-led army (army_advisor.mech_focus: against Protoss, whose units pick Marines up too easily) has the Factory for its core and a
 # smaller bio part: ONE Barracks for the first two bases (then Barracks, Factory, Starport, and a second Factory once a third base is up),
 # more Barracks only as the bases come
@@ -246,6 +247,24 @@ async def build_turrets(self : BotAI):
             return
 
 
+async def build_bunkers(self : BotAI):
+    """One Bunker at each of our closest BUNKER_BASES bases to home (main and natural, normally) - needs only a
+    Barracks. Standing empty most of the game; crewed reactively with nearby bio units once that base is under
+    ground threat, and emptied again once it is safe (BunkerDefense, army/bunkers.py - this only builds the shell)."""
+    if self.townhalls.amount == 0 or self.tech_requirement_progress(UnitTypeId.BUNKER) < 1:
+        return
+    if self.already_pending(UnitTypeId.BUNKER) > 0 or not self.can_afford(UnitTypeId.BUNKER):
+        return
+    bases = sorted(self.townhalls, key=lambda cc: cc.position.distance_to(self.start_location))[:BUNKER_BASES]
+    for cc in bases:
+        if self.bunker_backoff.get(cc.tag, 0.0) > self.time:
+            continue
+        if self.structures(UnitTypeId.BUNKER).closer_than(TURRET_BASE_RADIUS, cc).amount < 1:
+            self.bunker_backoff[cc.tag] = self.time + 4.0
+            await smart_build_behind_mineral(self, UnitTypeId.BUNKER, townhalls=Units([cc], self))
+            return
+
+
 async def macro(self : BotAI):
 
     cancel_building(self)
@@ -265,6 +284,7 @@ async def macro(self : BotAI):
 
     await build_production_buildings(self)
     await build_turrets(self)
+    await build_bunkers(self)
 
     if self.townhalls.amount >= 3 and can_build_structure(self, UnitTypeId.ENGINEERINGBAY, None, 2):
         await smart_build_behind_mineral(self, UnitTypeId.ENGINEERINGBAY)
