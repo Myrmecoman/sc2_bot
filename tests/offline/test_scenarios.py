@@ -819,6 +819,35 @@ def test_bunker_empties_to_join_the_attack():
           passenger.tag in ctx.mediator.get_units_from_role(role=UnitRole.ATTACKING).tags)
 
 
+def test_bunker_releases_a_long_standing_one_base_all_in_precaution():
+    """ONE_BASE_ALL_IN_GRACE: army_advisor.enemy_likely_one_base has no decay of its own - it can stay True for an
+    entire game if the enemy's other bases are never scouted - and manager.py's `attacking` is a strict, sim-committed
+    flag (see _update_push_state) that does not simply mean "our army is out and visibly fighting". A real game can
+    see both hold indefinitely at once, even while the player's own army is out doing something they would call
+    attacking - so past the grace window the bunker drops the precaution on its own, regardless of `attacking`,
+    rather than hoarding a crew against an all-in that never came."""
+    from bot.army.bunkers import BunkerDefense, ONE_BASE_ALL_IN_GRACE
+
+    sc = scene_basic()
+    sc.ai.army_advisor.enemy_likely_one_base = True       # the suspicion never resolved, one way or the other
+    bunker = sc.own(U.BUNKER, (40.0, 40.0))
+    passenger = sc.own(U.MARINE, (40.0, 40.0))
+    ctx = _begin(sc)
+    ctx.mediator.assign_role(tag=passenger.tag, role=UnitRole.CONTROL_GROUP_TWO)
+    bunker._proto.cargo_space_max = 4
+    bunker._proto.cargo_space_taken = 1
+    bunker._proto.passengers.add(tag=passenger.tag)
+    bd = BunkerDefense(sc.ai)
+    bd.crewed[bunker.tag] = {passenger.tag}
+    bd.one_base_all_in_since = sc.ai.time - ONE_BASE_ALL_IN_GRACE - 1.0   # the suspicion has been live for too long
+    bd.update(ctx, sc.world.units([]), False)        # still not attacking; nothing visible threatens this base
+    unloads = [c for c in sc.ai.actions if c.unit.tag == bunker.tag and c.ability == AbilityId.UNLOADALL_BUNKER]
+    check("bunker: a stale one-base-all-in suspicion is dropped past its grace window even while not attacking",
+          bool(unloads), str(unloads))
+    check("bunker: ...and its passenger rejoins the main army",
+          passenger.tag in ctx.mediator.get_units_from_role(role=UnitRole.ATTACKING).tags)
+
+
 def test_bunker_holds_against_a_real_threat_even_while_attacking():
     """(control) a Bunker whose base is under an ACTUAL visible threat is crewed regardless of whether the main army
     is attacking elsewhere - never abandon an active defense just because the army happens to be attacking."""

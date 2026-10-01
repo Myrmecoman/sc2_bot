@@ -28,6 +28,7 @@ CHECKS = [
     ("whole bot, reaper grenade on real Ares paths", "test_reaper_grenade.py", {}, True),
     ("whole bot, SCV repairs: at most 4 per target, at most 70 walked, only near home", "test_repair_leash.py", {}, True),
     ("whole bot, workers dodge an Oracle instead of huddling under it", "test_worker_oracle.py", {}, True),
+    ("whole bot, workers flee straight away from a real threat, not blindly to the townhall", "test_worker_flee_direction.py", {}, True),
     ("whole bot, SCVs carry on past changelings and Observers", "test_worker_harmless.py", {}, True),
     ("whole bot, workers are not sent to mine at a threatened base", "test_worker_dispatch_danger.py", {}, True),
     ("whole bot, the worker-rush defense only pulls workers against a rush at home", "test_worker_rush.py", {}, True),

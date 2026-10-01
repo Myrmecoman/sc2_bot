@@ -52,9 +52,20 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   the job. Found during a full-project bug-hunt, not from a specific report.
 * **Workers dodge Oracles** (`worker_micro.py`): a worker within 7.5 of an Oracle moves straight away from it (from all of them, the nearer
   counting for more) - to walkable ground within 22 of a townhall, 6 at a time, so it is never inside the Pulsar Beam's range (5 is what
-  they keep out of) - instead of running to the townhall like from any other threat, which is where the Oracle follows them to. A worker
-  that has fled stays out, not back to mining under the Oracle, until it is more than 10 away or gone. A hallucinated Oracle moves nobody;
-  SCVs that are repairing or constructing are left alone.
+  they keep out of) - the same `point_away_from` steering a worker fleeing any other threat now uses too (see below), with its own
+  tighter constants since the Oracle follows workers to wherever they huddle. A worker that has fled stays out, not back to mining under
+  the Oracle, until it is more than 10 away or gone. A hallucinated Oracle moves nobody; SCVs that are repairing or constructing are left
+  alone.
+* **Workers flee a real combat threat straight away from it, not blindly to the nearest townhall** (`worker_micro.py`'s
+  `flee_worker_threats`): "run to the townhall" is exactly wrong when the threat is already standing AT that townhall - the most common
+  reason it counts as a threat in the first place - a worker following that order used to walk straight at the danger and then just
+  stand there getting hit once it arrived, looking frozen rather than fleeing. It now steers away from the threat the same way
+  `avoid_oracles` already does, and stays out (`threat_fleeing`, mirroring `oracle_fleeing`) until the threat is a clear margin past
+  WORKER_FLEE_RANGE or gone - without that, a worker that reaches its away-point and goes idle was handed straight back to mining by
+  `micro_worker`'s "mine somewhere, even a base that is still threatened, beats mining nowhere" fallback, walked back towards the same
+  danger, and fled again - the same frozen-looking oscillation by a different route. Found from a real-game report ("the SCVs still
+  derp and seem to panic, doing nothing" when enemies show up), not from offline testing - a static review of this exact function a
+  few turns earlier concluded it was fine, which it was not.
 * **SCVs are not afraid of what cannot hurt them** (`HARMLESS_TO_WORKERS` in `pathing/consts.py`): changelings, Observers (and larva and
   eggs) never send a worker to the townhall (`flee_worker_threats`), hold an SCV back from resuming an unattended building
   (`resume_building_construction`) or turn the scouting SCV back - they walk and float through the mineral line for minutes, and the
@@ -148,15 +159,23 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   tucked away safely with the workers). It stands empty until its base is under ground threat (`worker_micro.base_is_threatened`,
   the same check that holds workers back from a threatened base) - or, proactively, once a one-base all-in is suspected
   (`army_advisor.enemy_likely_one_base`, no need to wait for their army to actually show up first): then the nearest free
-  Marines/Marauders within 10 are called in (`AbilityId.LOAD_BUNKER`) and put in the `CONTROL_GROUP_TWO` role (Ares' own "use
-  for anything not specified" slot, the one `CONTROL_GROUP_ONE` already fills for the diversion squad) so the main army leaves
+  Marines/Marauders within 20 - from the main army OR any base-defense detachment already heading the same way (a detachment
+  answering the very threat the bunker also reacted to is a far likelier source of nearby bodies than the main army happening
+  to already stand on this specific base; the range widened from 10 once real play showed units are rarely standing right on
+  top of the bunker the instant a threat appears) - are called in (`AbilityId.LOAD_BUNKER`) and put in the `CONTROL_GROUP_TWO`
+  role (Ares' own "use for anything not specified" slot, the one `CONTROL_GROUP_ONE` already fills for the diversion squad) so
+  the main army leaves
   them alone while they are garrisoned or still walking over. It empties - crew back to `ATTACKING` - once neither is true any
   more, OR the moment the main army actually starts attacking: no point leaving a few Marines idle in a Bunker while the rest
   of the army marches off to fight, so they come along for a bigger push instead. A genuine, currently visible threat at that
   exact base always wins regardless of any of the above - the Bunker never empties into an active attack on its own base just
-  because the army happens to be attacking somewhere else. No hysteresis yet on the threat/all-in checks - a threat flickering
-  in and out of vision right at the edge of that radius would load and unload the same units repeatedly; left as a known
-  simplification rather than built speculatively.
+  because the army happens to be attacking somewhere else. The one-base-all-in precaution also times out on its own
+  (`ONE_BASE_ALL_IN_GRACE`, 180s) even if `attacking` never fires - `enemy_likely_one_base` has no decay of its own (it can
+  stay true the whole game if the enemy's other bases are never scouted) and `attacking` is a strict, sim-committed push flag,
+  not just "the army is out and visibly fighting", so without a time box a suspected all-in that never arrives could hold a
+  crew hostage indefinitely. No hysteresis yet on the threat check itself - a threat flickering in and out of vision right at
+  the edge of that radius would load and unload the same units repeatedly; left as a known simplification rather than built
+  speculatively.
 * **Missile turrets build closer to the mineral line than before** (`build_turrets`'s call to `smart_build_behind_mineral` now
   passes `near_distance=6, far_distance=9`, instead of the shared default of 9/12 that Armory/Engineering Bay/Fusion Core still
   use) - close enough to actually stand among the workers it is meant to be defending, not noticeably behind them.

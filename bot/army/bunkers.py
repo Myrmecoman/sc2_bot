@@ -7,6 +7,16 @@ genuinely, visibly threatening that exact base right now, which always wins (nev
 because the army happens to be attacking somewhere else). Building the Bunker itself is macro's job (macro.py's
 build_bunkers) - this only manages what already stands.
 
+The proactive "one-base all-in" hold is time-boxed (ONE_BASE_ALL_IN_GRACE below): enemy_likely_one_base is a live,
+undecaying read (true for as long as we have not seen a second enemy townhall - which can be the entire game, if the
+enemy really is one-basing or we simply never scout their natural) and manager.py's own `attacking` is the strict,
+sim-committed whole-army push flag (requires a maxed or grouped-and-winning army - see _update_push_state) - NOT just
+"our units are out and visibly fighting". A real game report (bunkers never unloading despite the player watching
+their own army attack) traced to exactly this: `one_base_all_in` can outlast any single push, or stay true for a game
+where `attacking` never once meets its own bar, so pending.clear() in _empty() could never run. Past the grace window
+the precaution is dropped regardless of `attacking` - the all-in either already happened (threatened catches that) or
+it did not, and either way hoarding Marines forever against one that never comes is pure loss.
+
 The crew pool is the main army AND any base-defense detachment already heading the same way (manager.py passes both
 roles in) - a detachment sent to answer the very threat that is also asking the bunker to crew is a far more likely
 source of nearby bodies than hoping the main army happens to already be standing on top of this specific base.
@@ -17,7 +27,7 @@ while it is garrisoned or walking over to load - the same trick HiddenBaseScouti
 UnitRole.CONTROL_GROUP_TWO added to manager.py's MANAGED_ROLES, or _sweep_roles would force it straight back to
 ATTACKING every step.
 """
-from typing import Dict, Set
+from typing import Dict, Optional, Set
 
 from ares.consts import UnitRole
 from sc2.ids.ability_id import AbilityId
@@ -33,12 +43,16 @@ BUNKER_CREW_RANGE = 10.0    # a base this close to a visible ground threat gets 
 BUNKER_PICKUP_RANGE = 20.0  # how far from the bunker a bio unit can be and still be called in to crew it - wider than the
                             # threat-detection range itself, since the main army holding elsewhere is the common case, not
                             # a unit already standing right on top of the bunker
+ONE_BASE_ALL_IN_GRACE = 180.0  # how long the proactive one-base-all-in hold outlasts `attacking` staying false before it is
+                                # dropped anyway (UNVERIFIED number - long enough to cover a slow one-base tech timing, short
+                                # enough that a suspicion that never pans out does not hoard Marines for the rest of the game)
 
 
 class BunkerDefense:
     def __init__(self, ai):
         self.ai = ai
         self.crewed: Dict[int, Set[int]] = {}   # bunker tag -> tags of the units we put in it (loaded or still walking over)
+        self.one_base_all_in_since: Optional[float] = None   # game time the current one_base_all_in streak started, or None
 
     def update(self, ctx: ArmyContext, army_pool: Units, attacking: bool) -> None:
         ai = self.ai
@@ -50,6 +64,12 @@ class BunkerDefense:
 
         alive = ai.units.tags
         one_base_all_in = ai.army_advisor.enemy_likely_one_base
+        if one_base_all_in:
+            if self.one_base_all_in_since is None:
+                self.one_base_all_in_since = ai.time
+            one_base_all_in = ai.time - self.one_base_all_in_since < ONE_BASE_ALL_IN_GRACE
+        else:
+            self.one_base_all_in_since = None
         taken: Set[int] = set()
         for bunker in bunkers:
             pending = self.crewed.setdefault(bunker.tag, set())
