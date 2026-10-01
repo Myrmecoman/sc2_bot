@@ -4,7 +4,7 @@ from sc2.ids.upgrade_id import UpgradeId
 from sc2.unit import Unit
 from sc2.units import Units
 from sc2.position import Point2, Point3
-from collections import Counter
+from collections import Counter, deque
 from typing import NamedTuple, Optional, Set
 from sc2.bot_ai import BotAI
 import math
@@ -83,6 +83,28 @@ def mech_supply(self : BotAI) -> MechSupply:
 def is_banking(self : BotAI) -> bool:
     """Is the money piling up, so that the price of an upgrade or a building is nothing to it?"""
     return self.minerals >= UPGRADE_BANK_MINERALS and self.vespene >= UPGRADE_BANK_GAS
+
+
+MINERAL_BANK_WINDOW = 60.0     # how far back the average income rate looks
+MINERAL_BANK_RATE = 150.0      # minerals/min growing faster than this, sustained over the window, is not being spent
+MINERAL_BANK_FLOOR = 300.0     # ...and the bank itself has to be more than just ordinary between-purchases change
+
+
+def mineral_income_outpacing_spend(self : BotAI) -> bool:
+    """True once minerals have, on average, been growing faster than MINERAL_BANK_RATE/min over the last
+    MINERAL_BANK_WINDOW seconds: production is not keeping up with income, whatever the reason (nothing left
+    affordable to queue, every producer busy, a cap reached, ...). Reads self.minerals over time rather than the
+    game's own collection_rate_minerals score stat, which the offline synthetic harness never populates."""
+    samples = self._mineral_bank_samples
+    samples.append((self.time, self.minerals))
+    while len(samples) > 1 and self.time - samples[0][0] > MINERAL_BANK_WINDOW:
+        samples.popleft()
+    oldest_time, oldest_minerals = samples[0]
+    elapsed = self.time - oldest_time
+    if elapsed < MINERAL_BANK_WINDOW * 0.5:    # not enough history yet to trust the average
+        return False
+    rate_per_min = (self.minerals - oldest_minerals) / elapsed * 60.0
+    return self.minerals >= MINERAL_BANK_FLOOR and rate_per_min >= MINERAL_BANK_RATE
 
 
 def next_mech_upgrade(self : BotAI, mech: MechSupply, banking: bool, prioritize_armor: bool, skip=()) -> Optional[UpgradeId]:

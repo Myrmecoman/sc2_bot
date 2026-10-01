@@ -88,9 +88,14 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   compete with actual unit production for money on every single step from the moment an Engineering Bay exists - a real game was seen
   where that alone stalled production to nothing. The Engineering Bay itself is unaffected: it still goes up as soon as the scouting
   calls for a turret or a detector.
-* **Production buildings**: what the number of bases calls for, never more than 6 Barracks, 2 Factories and 2 Starports, and while the bank
+* **Production buildings**: what the number of bases calls for, never more than 8 Barracks, 2 Factories and 2 Starports, and while the bank
   keeps piling up late in the game (1000+ minerals, 100+ supply used; the gas buildings also need 350+ gas) one more at a time up to
   those limits (`production_targets` in `macro.py`).
+* **Minerals growing faster than we can spend them calls for another Barracks, at any point in the game** - not only the late-game bank
+  above (`custom_utils.mineral_income_outpacing_spend`): the bank is sampled every step, and once its average growth over the last 60
+  seconds is at least 150/min (with at least 300 currently unspent, so ordinary between-purchases noise does not count), production is
+  not keeping up with income, whatever the reason - nothing affordable left to queue, every producer busy, a cap reached - so one more
+  Barracks (mineral-only production, the most direct way to spend extra minerals specifically) is added, up to the same cap as above.
 * **Add-ons** (`addons.py`): every Barracks, Factory and Starport gets a Reactor or a Tech Lab (half of the Barracks a Reactor, a Tech Lab
   on `factory_techlab_ratio` of the Factories, the Starports a Tech Lab first - counted on the buildings themselves), and a building that
   cannot get one is dealt with instead of staying bare. New buildings are placed where the add-on fits (`find_production_spot` in

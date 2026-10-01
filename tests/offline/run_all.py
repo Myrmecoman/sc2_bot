@@ -32,7 +32,7 @@ CHECKS = [
     ("whole bot, workers are not sent to mine at a threatened base", "test_worker_dispatch_danger.py", {}, True),
     ("whole bot, the worker-rush defense only pulls workers against a rush at home", "test_worker_rush.py", {}, True),
     ("scouting reactions: the rules, and the advisor's use of them", "test_reactions.py", {}, True),
-    ("whole bot, reactions in production/macro + the 6/2/2 production limits", "test_production_reactions.py", {}, True),
+    ("whole bot, reactions in production/macro + the 8/2/2 production limits", "test_production_reactions.py", {}, True),
     ("whole bot, add-ons: room, lift and land, placement, rally point at placement", "test_addons.py", {}, True),
     ("no numpy-typed points leak into orders", "np_contagion.py", {}, True),
     ("random armies vs random enemies, all races (fuzz)", "fuzz_army.py", {}, True),

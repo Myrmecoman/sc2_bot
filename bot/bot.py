@@ -1,4 +1,5 @@
 import time
+from collections import deque
 
 from bot.addons import AddonManager
 from bot.custom_utils import build_worker
@@ -75,6 +76,7 @@ class SmoothBrainBot(Sc2Bridge, AresBot):
         self.scout_attempted = False                   # only ever send one scouting worker per game
         self.build_order_critical_worker = None        # tag of the worker currently committed to the scripted build order, if any - kept safe from flee_worker_threats so the two don't fight over it
         self.gas_bank_high = False                      # sticky: are we currently sitting on so much banked vespene that building more refineries is pointless (see macro.py)
+        self._mineral_bank_samples = deque()            # (time, minerals) history for mineral_income_outpacing_spend (see custom_utils.py)
 
         self.build_order = [UnitTypeId.SUPPLYDEPOT, UnitTypeId.BARRACKS, UnitTypeId.REFINERY, UnitTypeId.ORBITALCOMMAND, UnitTypeId.COMMANDCENTER, UnitTypeId.SUPPLYDEPOT, UnitTypeId.FACTORY]
 

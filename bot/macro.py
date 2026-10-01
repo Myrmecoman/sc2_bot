@@ -1,5 +1,5 @@
 from bot.addons import ADDON_OFFSET
-from bot.custom_utils import ARMORY_MECH_SUPPLY, MECH_SUPPLY_FOR_TIER, can_build_structure, is_banking, mech_supply
+from bot.custom_utils import ARMORY_MECH_SUPPLY, MECH_SUPPLY_FOR_TIER, can_build_structure, is_banking, mech_supply, mineral_income_outpacing_spend
 from bot.custom_utils import get_safest_expansion
 from bot.custom_utils import is_supply_critical
 from bot.custom_utils import update_rally_points
@@ -165,7 +165,7 @@ def resume_building_construction(self : BotAI):
 
 
 # Production buildings: how many the number of bases calls for, how many at most, and when a bank that keeps piling up calls for more.
-MAX_BARRACKS = 6               # never more than this many of each, whatever the bank says
+MAX_BARRACKS = 8               # never more than this many of each, whatever the bank says
 MAX_FACTORIES = 2
 MAX_STARPORTS = 2
 BANK_MINERALS = 1000           # "piling up": this much unspent...
@@ -196,6 +196,11 @@ def production_targets(self : BotAI) -> dict:
     if advisor.mech_focus:
         barracks = MECH_BARRACKS_BY_BASES.get(min(bases, 4), 0)
     targets = {UnitTypeId.STARPORT: starports, UnitTypeId.FACTORY: factories, UnitTypeId.BARRACKS: barracks}
+
+    # minerals growing faster than we can spend them, at ANY point in the game (not just the late-game bank below) - one more
+    # Barracks (mineral-only production) is the most direct lever for using up extra mineral income specifically
+    if mineral_income_outpacing_spend(self):
+        targets[UnitTypeId.BARRACKS] = max(targets[UnitTypeId.BARRACKS], have[UnitTypeId.BARRACKS] + 1)
 
     if self.supply_used >= END_GAME_SUPPLY and self.minerals >= BANK_MINERALS:
         gas_banking = self.vespene >= BANK_GAS

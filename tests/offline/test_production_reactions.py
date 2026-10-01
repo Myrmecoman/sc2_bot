@@ -1,13 +1,15 @@
 """The reactions to what we scouted, in the whole bot on the real Ares hub (what production and macro actually order), and the production
-building limits: never more than 6 Barracks, 2 Factories and 2 Starports - and more of them (up to that) when the bank piles up late.
+building limits: never more than 8 Barracks, 2 Factories and 2 Starports - and more of them (up to that) when the bank piles up late, or
+(Barracks only) whenever minerals are growing faster than we can spend them, at any point in the game.
 
   raven      a Dark Shrine scouted: the Starport makes a Raven first (not a Banshee)
   tank       a Roach Warren scouted: Marines are skipped while the Factory that stands ready lacks the money for a Siege Tank
   skytoss    a Stargate scouted: the Factory stops at 2 tanks and makes Cyclones
   turrets    a Dark Shrine scouted: an Engineering Bay, then a missile turret in the mineral line
   starport   ... and the Starport is built now, not once a second base is up
-  caps       6 Barracks / 2 Factories / 2 Starports at most, the bank builds one more at a time while it piles up
+  caps       8 Barracks / 2 Factories / 2 Starports at most, the bank builds one more at a time while it piles up
   infantry_upgrades  the Engineering Bay's weapon/armor levels wait for the 3rd base
+  mineral_banking    minerals growing faster than we can spend them calls for another Barracks, not only late-game
 
 Against Protoss (a mech-led army, army_advisor.mech_focus):
   cyclones   the Factory makes Cyclones first, a Tank once three more Cyclones than 3 x tanks are out; money is held back for them
@@ -314,6 +316,51 @@ def one_base_all_in():
           A.TERRANBUILD_COMMANDCENTER in done, names(done))
 
 
+def mineral_banking():
+    """Minerals growing faster than we can spend them calls for one more Barracks (mineral-only production), at ANY
+    point in the game - not only the pre-existing late-game bank (END_GAME_SUPPLY/BANK_MINERALS, still tested above
+    via the `bank`/`caps` checks) - see custom_utils.mineral_income_outpacing_spend."""
+    Zerg = common_pb2.Zerg
+
+    def play_growing(start_minerals, step_minerals, steps, step_seconds=15.0, barracks=1):
+        logger.remove()
+        errors = []
+        logger.add(lambda m: errors.append(str(m)) if m.record["level"].no >= 40 else None, colorize=False)
+        game = build_game(Zerg)
+        cx, cy = BASES["our_main"]
+        count_barracks(game, barracks)
+        game.minerals, game.vespene = start_minerals, 100
+        bot = SmoothBrainBot()
+        loop = asyncio.new_event_loop()
+        client, proto_gi = loop.run_until_complete(start_game(game, bot))
+        bot.build_order = []
+        done = set()
+        for i in range(steps):
+            game.minerals = start_minerals + step_minerals * i
+            loop.run_until_complete(run_frame(game, bot, proto_gi, i, frames=int(step_seconds * 22.4),
+                                               supply_used=60, supply_cap=200))
+            done |= {a.ability for a in client.sent_actions}
+        assert not errors, errors[:1]
+        return bot, done
+
+    def names(done):
+        return str(sorted(a.name for a in done))
+
+    # minerals climbing by 60 every 15s = 240/min, comfortably past MINERAL_BANK_RATE (150/min), bank staying well
+    # under the late-game-only BANK_MINERALS (1000) throughout - this must be the new rule firing, not the old one
+    bot, done = play_growing(start_minerals=500, step_minerals=60, steps=5)
+    check("mineral banking: a steadily growing bank, well under the late-game threshold, still calls for another Barracks",
+          A.TERRANBUILD_BARRACKS in done, names(done))
+
+    # same bank size reached, but flat the whole time: income is not outpacing spend, so no extra Barracks from this rule
+    bot, done = play_growing(start_minerals=500, step_minerals=0, steps=5)
+    check("mineral banking (control): a flat bank calls for nothing", A.TERRANBUILD_BARRACKS not in done, names(done))
+
+    # growing just as fast, but for too short a time (one step) to trust the average yet
+    bot, done = play_growing(start_minerals=500, step_minerals=60, steps=1)
+    check("mineral banking (control): not enough history yet to call it banking", A.TERRANBUILD_BARRACKS not in done, names(done))
+
+
 def main():
     # ---- a Dark Shrine: Raven first
     def starport(shrine):
@@ -386,16 +433,18 @@ def main():
     # ---- the production buildings: caps, and the bank
     done = play(lambda g, cx, cy: (more_bases(g, 3), count_barracks(g, 5)), minerals=800)
     check("caps: four bases, five Barracks -> the sixth is built", A.TERRANBUILD_BARRACKS in done, str(sorted(a.name for a in done)))
-    done = play(lambda g, cx, cy: (more_bases(g, 3), count_barracks(g, 6)), minerals=2500, supply=(180, 200))
-    check("caps: six Barracks is the limit, whatever the bank", A.TERRANBUILD_BARRACKS not in done, str(sorted(a.name for a in done)))
+    done = play(lambda g, cx, cy: (more_bases(g, 3), count_barracks(g, 7)), minerals=2500, supply=(180, 200))
+    check("caps: seven Barracks and a big bank -> the eighth is still allowed", A.TERRANBUILD_BARRACKS in done, str(sorted(a.name for a in done)))
+    done = play(lambda g, cx, cy: (more_bases(g, 3), count_barracks(g, 8)), minerals=2500, supply=(180, 200))
+    check("caps: ...but eight Barracks is the limit, whatever the bank", A.TERRANBUILD_BARRACKS not in done, str(sorted(a.name for a in done)))
     done = play(lambda g, cx, cy: count_barracks(g, 1), minerals=500, supply=(140, 200))
     check("bank: minerals 500 - nothing piling up yet, one base keeps its one Barracks", A.TERRANBUILD_BARRACKS not in done, str(sorted(a.name for a in done)))
     done = play(lambda g, cx, cy: count_barracks(g, 1), minerals=1500, supply=(140, 200))
     check("bank: minerals 1500 late in the game -> one more Barracks", A.TERRANBUILD_BARRACKS in done, str(sorted(a.name for a in done)))
     done = play(lambda g, cx, cy: count_barracks(g, 1), minerals=1500, supply=(60, 200))
     check("bank: ... but not early in the game", A.TERRANBUILD_BARRACKS not in done, str(sorted(a.name for a in done)))
-    done = play(lambda g, cx, cy: count_barracks(g, 6), minerals=1500, supply=(140, 200))
-    check("bank: ... and never a seventh", A.TERRANBUILD_BARRACKS not in done, str(sorted(a.name for a in done)))
+    done = play(lambda g, cx, cy: count_barracks(g, 8), minerals=1500, supply=(140, 200))
+    check("bank: ... and never a ninth", A.TERRANBUILD_BARRACKS not in done, str(sorted(a.name for a in done)))
 
     def gas_bank(game, cx, cy):
         count_barracks(game, 6)
@@ -406,18 +455,19 @@ def main():
     check("bank: minerals only -> no gas buildings", A.TERRANBUILD_FACTORY not in done and A.TERRANBUILD_STARPORT not in done, str(sorted(a.name for a in done)))
 
     def full_house(game, cx, cy):
-        count_barracks(game, 6)
+        count_barracks(game, 8)
         for k in range(2):
             game.add(U.FACTORY, (cx + 14 + 4 * k, cy - 6), 1)
             game.add(U.STARPORT, (cx + 14 + 4 * k, cy + 4), 1)
     done = play(full_house, minerals=3000, gas=1000, supply=(140, 200))
-    check("caps: 6 Barracks, 2 Factories and 2 Starports - nothing more is built, whatever the bank",
+    check("caps: 8 Barracks, 2 Factories and 2 Starports - nothing more is built, whatever the bank",
           not ({A.TERRANBUILD_BARRACKS, A.TERRANBUILD_FACTORY, A.TERRANBUILD_STARPORT} & done), str(sorted(a.name for a in done)))
 
     mech()
     upgrades()
     infantry_upgrades()
     one_base_all_in()
+    mineral_banking()
 
     failed = [r for r in RESULTS if not r[1]]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
