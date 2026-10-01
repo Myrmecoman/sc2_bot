@@ -1,7 +1,11 @@
 """Basic Bunker crewing: load nearby bio units into a Bunker once its base is under ground threat - or, proactively,
 once the enemy is believed to be committing to a one-base all-in (army_advisor.enemy_likely_one_base, no need to wait
 for their army to actually show up at our door first) - and send the crew back to the main army once neither is true
-any more. Building the Bunker itself is macro's job (macro.py's build_bunkers) - this only manages what already stands.
+any more, OR once the main army is actually attacking: there is no point leaving a few Marines idle in a Bunker while
+the rest of the army marches off to fight - they come along and the push is that much bigger - UNLESS something is
+genuinely, visibly threatening that exact base right now, which always wins (never abandon an active defense just
+because the army happens to be attacking somewhere else). Building the Bunker itself is macro's job (macro.py's
+build_bunkers) - this only manages what already stands.
 
 A crewed unit gets the UnitRole.CONTROL_GROUP_TWO role (Ares' own "use for anything not specified" slot - the one
 CONTROL_GROUP_ONE already fills for the diversion squad, see manager.py) so the main army's own orders leave it alone
@@ -30,7 +34,7 @@ class BunkerDefense:
         self.ai = ai
         self.crewed: Dict[int, Set[int]] = {}   # bunker tag -> tags of the units we put in it (loaded or still walking over)
 
-    def update(self, ctx: ArmyContext, army_pool: Units) -> None:
+    def update(self, ctx: ArmyContext, army_pool: Units, attacking: bool) -> None:
         ai = self.ai
         bunkers = ai.structures(U.BUNKER).ready
         live_bunkers = {b.tag for b in bunkers}
@@ -44,7 +48,8 @@ class BunkerDefense:
         for bunker in bunkers:
             pending = self.crewed.setdefault(bunker.tag, set())
             pending &= (alive | bunker.passengers_tags)      # drop anyone who died on the way over
-            if one_base_all_in or base_is_threatened(ai, bunker.position, radius=BUNKER_CREW_RANGE):
+            threatened = base_is_threatened(ai, bunker.position, radius=BUNKER_CREW_RANGE)
+            if threatened or (one_base_all_in and not attacking):
                 taken |= self._crew(ctx, bunker, army_pool, pending, taken)
             else:
                 self._empty(ctx, bunker, pending)

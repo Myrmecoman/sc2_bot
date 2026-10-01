@@ -142,10 +142,13 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   (`army_advisor.enemy_likely_one_base`, no need to wait for their army to actually show up first): then the nearest free
   Marines/Marauders within 10 are called in (`AbilityId.LOAD_BUNKER`) and put in the `CONTROL_GROUP_TWO` role (Ares' own "use
   for anything not specified" slot, the one `CONTROL_GROUP_ONE` already fills for the diversion squad) so the main army leaves
-  them alone while they are garrisoned or still walking over. Once neither is true any more it unloads everyone at once
-  (`UNLOADALL_BUNKER`) and hands their role back to `ATTACKING`. No hysteresis yet - a threat flickering in and out of vision
-  right at the edge of that radius would load and unload the same units repeatedly; left as a known simplification rather than
-  built speculatively.
+  them alone while they are garrisoned or still walking over. It empties - crew back to `ATTACKING` - once neither is true any
+  more, OR the moment the main army actually starts attacking: no point leaving a few Marines idle in a Bunker while the rest
+  of the army marches off to fight, so they come along for a bigger push instead. A genuine, currently visible threat at that
+  exact base always wins regardless of any of the above - the Bunker never empties into an active attack on its own base just
+  because the army happens to be attacking somewhere else. No hysteresis yet on the threat/all-in checks - a threat flickering
+  in and out of vision right at the edge of that radius would load and unload the same units repeatedly; left as a known
+  simplification rather than built speculatively.
 * **Missile turrets build closer to the mineral line than before** (`build_turrets`'s call to `smart_build_behind_mineral` now
   passes `near_distance=6, far_distance=9`, instead of the shared default of 9/12 that Armory/Engineering Bay/Fusion Core still
   use) - close enough to actually stand among the workers it is meant to be defending, not noticeably behind them.

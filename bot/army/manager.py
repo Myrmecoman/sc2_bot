@@ -222,7 +222,7 @@ class ArmyManager:
 
         role = ctx.mediator.get_units_from_role
         self._guard("scouting", self.scouting.update, ctx, role(role=UnitRole.ATTACKING))
-        self._guard("bunkers", self.bunkers.update, ctx, role(role=UnitRole.ATTACKING))
+        self._guard("bunkers", self.bunkers.update, ctx, role(role=UnitRole.ATTACKING), self.attacking)
         defense_groups, escalate_to = self._guard(
             "defense", self.defense.update, ctx, role(role=UnitRole.ATTACKING), role(role=UnitRole.BASE_DEFENDER)
         ) or ([], None)

@@ -725,7 +725,7 @@ def test_bunker_crews_nearby_bio_when_the_base_is_threatened():
     sc.enemy(U.ZERGLING, (41.0, 40.0))                      # a ground threat right next to the bunker
     ctx = _begin(sc)
     bd = BunkerDefense(sc.ai)
-    bd.update(ctx, sc.world.units([marine]))
+    bd.update(ctx, sc.world.units([marine]), False)
     loads = [c for c in sc.ai.actions if c.unit.tag == bunker.tag and c.ability == AbilityId.LOAD_BUNKER]
     check("bunker: a nearby Marine is called in to crew a threatened base's bunker",
           loads and loads[0].target.tag == marine.tag, str(loads))
@@ -747,7 +747,7 @@ def test_bunker_crews_proactively_once_a_one_base_all_in_is_suspected():
     # (no enemy unit anywhere on the map - nothing visible, nothing nearby)
     ctx = _begin(sc)
     bd = BunkerDefense(sc.ai)
-    bd.update(ctx, sc.world.units([marine]))
+    bd.update(ctx, sc.world.units([marine]), False)
     loads = [c for c in sc.ai.actions if c.unit.tag == bunker.tag and c.ability == AbilityId.LOAD_BUNKER]
     check("bunker: a suspected one-base all-in crews the bunker even with nothing visible nearby",
           loads and loads[0].target.tag == marine.tag, str(loads))
@@ -764,7 +764,7 @@ def test_bunker_ignores_a_unit_too_far_away_to_call_in():
     sc.enemy(U.ZERGLING, (41.0, 40.0))
     ctx = _begin(sc)
     bd = BunkerDefense(sc.ai)
-    bd.update(ctx, sc.world.units([marine]))
+    bd.update(ctx, sc.world.units([marine]), False)
     loads = [c for c in sc.ai.actions if c.ability == AbilityId.LOAD_BUNKER]
     check("bunker: a Marine too far away is left where it is", not loads, str(loads))
     check("bunker: ...and keeps its own role",
@@ -786,13 +786,55 @@ def test_bunker_empties_once_the_base_is_safe_again():
     bunker._proto.passengers.add(tag=passenger.tag)
     bd = BunkerDefense(sc.ai)
     bd.crewed[bunker.tag] = {passenger.tag}
-    bd.update(ctx, sc.world.units([]))                      # nothing threatening nearby
+    bd.update(ctx, sc.world.units([]), False)               # nothing threatening nearby, not attacking either
     unloads = [c for c in sc.ai.actions if c.unit.tag == bunker.tag and c.ability == AbilityId.UNLOADALL_BUNKER]
     check("bunker: it is unloaded once the base is safe again", bool(unloads), str(unloads))
     check("bunker: the unloaded unit's role goes back to ATTACKING",
           passenger.tag in ctx.mediator.get_units_from_role(role=UnitRole.ATTACKING).tags,
           str(ctx.mediator.get_units_from_role(role=UnitRole.ATTACKING)))
     check("bunker: it is no longer tracked as crewed", bd.crewed.get(bunker.tag) == set(), str(bd.crewed))
+
+
+def test_bunker_empties_to_join_the_attack():
+    """No point leaving a few Marines idle in a Bunker while the rest of the army marches off to fight - once the
+    main army is actually attacking, a precautionarily-crewed Bunker (army_advisor.enemy_likely_one_base, nothing
+    actually threatening it) sends its crew along instead, for a bigger push."""
+    from bot.army.bunkers import BunkerDefense
+
+    sc = scene_basic()
+    sc.ai.army_advisor.enemy_likely_one_base = True       # would otherwise keep this bunker crewed indefinitely
+    bunker = sc.own(U.BUNKER, (40.0, 40.0))
+    passenger = sc.own(U.MARINE, (40.0, 40.0))
+    ctx = _begin(sc)
+    ctx.mediator.assign_role(tag=passenger.tag, role=UnitRole.CONTROL_GROUP_TWO)
+    bunker._proto.cargo_space_max = 4
+    bunker._proto.cargo_space_taken = 1
+    bunker._proto.passengers.add(tag=passenger.tag)
+    bd = BunkerDefense(sc.ai)
+    bd.crewed[bunker.tag] = {passenger.tag}
+    bd.update(ctx, sc.world.units([]), True)              # the army is attacking; nothing visible threatens this base
+    unloads = [c for c in sc.ai.actions if c.unit.tag == bunker.tag and c.ability == AbilityId.UNLOADALL_BUNKER]
+    check("bunker: attacking empties a precautionarily-crewed bunker", bool(unloads), str(unloads))
+    check("bunker: ...and its passenger rejoins the main army",
+          passenger.tag in ctx.mediator.get_units_from_role(role=UnitRole.ATTACKING).tags)
+
+
+def test_bunker_holds_against_a_real_threat_even_while_attacking():
+    """(control) a Bunker whose base is under an ACTUAL visible threat is crewed regardless of whether the main army
+    is attacking elsewhere - never abandon an active defense just because the army happens to be attacking."""
+    from bot.army.bunkers import BunkerDefense
+
+    sc = scene_basic()
+    bunker = sc.own(U.BUNKER, (40.0, 40.0))
+    bunker._proto.cargo_space_max = 4
+    marine = sc.own(U.MARINE, (42.0, 40.0), role=UnitRole.ATTACKING)
+    sc.enemy(U.ZERGLING, (41.0, 40.0))                     # a real, visible threat right next to the bunker
+    ctx = _begin(sc)
+    bd = BunkerDefense(sc.ai)
+    bd.update(ctx, sc.world.units([marine]), True)         # the army is attacking elsewhere
+    loads = [c for c in sc.ai.actions if c.unit.tag == bunker.tag and c.ability == AbilityId.LOAD_BUNKER]
+    check("bunker: a real threat at the door still gets crewed even while the army is off attacking",
+          loads and loads[0].target.tag == marine.tag, str(loads))
 
 
 def main():
