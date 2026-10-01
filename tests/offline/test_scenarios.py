@@ -837,6 +837,28 @@ def test_bunker_holds_against_a_real_threat_even_while_attacking():
           loads and loads[0].target.tag == marine.tag, str(loads))
 
 
+def test_diversion_target_clears_even_when_the_whole_squad_dies_in_one_step():
+    """_manage_diversion's only writer of diversion_target besides forming a squad is dissolve(), which used to be
+    gated on `squad` being non-empty - if the whole diversion squad dies in the SAME step (a simultaneous wipe, not
+    attrition one unit at a time), squad is already empty by the time this runs, dissolve() never fires, and
+    diversion_target is left stale forever - no replacement squad can ever be formed again (the re-arm check
+    requires diversion_target is None). Calls _manage_diversion directly, same precedent as BaseDefense.update()/
+    BunkerDefense.update() elsewhere in this file."""
+    from bot.army.orders import GroupOrders, Mode
+
+    sc = scene_basic()
+    ctx = _begin(sc)
+    # simulate: a squad WAS out there (diversion_target set from when it was formed) but has just been wiped out
+    # all at once - nothing is left in the CONTROL_GROUP_ONE role, yet the target was never cleared
+    sc.manager.diversion_target = Point2((150.0, 150.0))
+    sc.manager.diversion_tags = {999999}
+    main_orders = GroupOrders(label="main", mode=Mode.ATTACK, target=Point2((150.0, 150.0)), hold_point=Point2((60.0, 60.0)))
+    sc.manager._manage_diversion(ctx, sc.world.units([]), main_orders)
+    check("diversion: a stale target is cleared even when the whole squad vanished at once (not one unit at a time)",
+          sc.manager.diversion_target is None, str(sc.manager.diversion_target))
+    check("diversion: the stale tag set is cleared too", sc.manager.diversion_tags == set(), str(sc.manager.diversion_tags))
+
+
 def main():
     tests = [v for k, v in globals().items() if k.startswith("test_")]
     only = sys.argv[1:]

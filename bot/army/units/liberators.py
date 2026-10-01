@@ -58,8 +58,8 @@ class LiberatorController:
     def control(self, units: Units, orders: GroupOrders, ctx: ArmyContext) -> None:
         ctx.prefetch_near(units)
         alive = {u.tag for u in self.ai.units}      # this controller runs once per group per step - prune by DEAD units only
-        for table in (self.ag_locked_until, self.ag_zone, self.ag_first_seen, self.siege_ordered_at, self.siege_orders,
-                      self.siege_started, self.no_siege_until):
+        for table in (self.ag_locked_until, self.ag_zone, self.ag_first_seen, self.last_morph_command, self.siege_ordered_at,
+                      self.siege_orders, self.siege_started, self.no_siege_until):
             for tag in [t for t in table if t not in alive]:
                 del table[tag]
         for unit in units:

@@ -68,7 +68,7 @@ async def find_production_spot(self : BotAI, type : UnitTypeId, lines : List[Tup
 
 async def smart_build(self : BotAI, type : UnitTypeId):
 
-    if not self.can_afford(UnitTypeId.BARRACKS) or self.tech_requirement_progress(UnitTypeId.BARRACKS) != 1:
+    if not self.can_afford(type) or self.tech_requirement_progress(type) != 1:
         return False
 
     prod_structures : Units = self.structures.of_type({UnitTypeId.BARRACKS, UnitTypeId.FACTORY, UnitTypeId.STARPORT})

@@ -706,7 +706,11 @@ class ArmyManager:
             self.diversion_tags = set()
             self.diversion_target = None
 
-        if squad and (main_orders.mode != Mode.ATTACK or squad.amount < 2):
+        # not just "squad and ...": if the whole squad dies in the same step (a simultaneous wipe, not attrition one
+        # unit at a time), squad is already empty here and this must still fire - otherwise diversion_target is left
+        # stale forever (dissolve() is its only writer besides the squad being formed), and no replacement squad can
+        # ever be formed again (line further down requires diversion_target is None first)
+        if self.diversion_target is not None and (not squad or main_orders.mode != Mode.ATTACK or squad.amount < 2):
             dissolve()
             self.diversion_watch.reset()
             return None

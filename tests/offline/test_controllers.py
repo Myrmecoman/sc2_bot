@@ -326,6 +326,25 @@ def test_cyclone_always_kites_away_from_banelings():
     check("cyclone: a HOLDing cyclone still backs away from close banelings", _backs_away(c), str(c))
 
 
+def test_cyclone_does_not_cast_lock_on_instead_of_backing_off_a_baneling():
+    """Lock-On used to be tried BEFORE the baneling check ever ran, so a Cyclone with a valid lock-on target in range
+    cast it and returned - skipping the "always back away from banelings, whatever else is true" rule entirely for
+    the one step that mattered most (see _control_unit)."""
+    from bot.ares_compat import refresh_ability_cache
+    sc = mk()
+    cy = sc.own(U.CYCLONE, (60, 60), cooldown=10.0)
+    sc.ai.ability_grants[cy.tag] = {A.LOCKON_LOCKON}
+    sc.enemy(U.ROACH, (64, 60))                 # a valid, not-yet-locked Lock-On candidate within cast range
+    sc.enemy(U.BANELING, (61, 61))              # close enough to trigger kite_from_banelings
+    asyncio.run(refresh_ability_cache(sc.ai, sc.ai.units))
+    ctx = begin(sc)
+    sc.manager.cyclones.control(sc.world.units([cy]), orders(sc, local=ER.VICTORY_EMPHATIC), ctx)
+    c = cmds(sc, cy)
+    check("cyclone: does not cast Lock-On while a close baneling is in range",
+          not any(a in (A.LOCKON_LOCKON, A.LOCKONAIR_LOCKONAIR) for a, t, q in c), str(c))
+    check("cyclone: backs away from the baneling instead", _backs_away(c), str(c))
+
+
 def test_reaper_always_kites_away_from_banelings():
     sc = mk()
     r = sc.own(U.REAPER, (60, 60), cooldown=10.0)
@@ -403,6 +422,20 @@ def test_tanks_guard_exposed_liberator():
     sc.manager.tanks.control(sc.world.units([t]), orders(sc), ctx)
     c = cmds(sc, t)
     check("tank: heads for an exposed sieged liberator", any(a == A.ATTACK and abs(t_.x - 80) < 8 for a, t_, q in c if hasattr(t_, "x")), str(c))
+
+
+def test_tank_siege_since_is_pruned_once_the_tank_is_gone():
+    """siege_since (tank tag -> when it became sieged) used to only ever be cleared by observing a LIVE tank
+    unsiege - a tank that died while sieged left its entry behind forever (unlike the sibling slot_index, which IS
+    pruned by a global alive check in _assign_slots - see its own comment)."""
+    sc = mk()
+    tank = sc.own(U.SIEGETANKSIEGED, (60, 60))   # actually sieged, so _track_siege_state keeps its own entry
+    sc.manager.tanks.siege_since[tank.tag] = sc.ai.time
+    sc.manager.tanks.siege_since[999999] = sc.ai.time   # a tag belonging to no live unit - stands in for a dead tank
+    ctx = begin(sc)
+    sc.manager.tanks.control(sc.world.units([tank]), orders(sc), ctx)
+    check("tanks: a dead tank's siege_since entry is pruned", 999999 not in sc.manager.tanks.siege_since, str(sc.manager.tanks.siege_since))
+    check("tanks: a live tank's own entry is untouched", tank.tag in sc.manager.tanks.siege_since, str(sc.manager.tanks.siege_since))
 
 
 # -------------------------------------------------------------------------------------------------------- cyclones
@@ -1058,6 +1091,22 @@ def test_liberator_comes_down_when_only_units_outside_the_zone_are_near():
     ctx = begin(sc)
     sc.manager.liberators.control(sc.world.units([ag]), orders(sc), ctx)
     check("liberator: nothing in its zone -> it comes down, however near the liberator itself the enemy is", _unsieges_lib(sc, ag), str(cmds(sc, ag)))
+
+
+def test_liberator_last_morph_command_is_pruned_once_the_liberator_is_gone():
+    """last_morph_command was the one dict of the controller's eight left out of control()'s per-step dead-unit
+    pruning loop (the other seven are all pruned there) - a silent, unbounded-growth omission, not a deliberate
+    exclusion (nothing in the file explains keeping it around for a dead Liberator)."""
+    sc = mk()
+    lib = sc.own(U.LIBERATOR, (60, 60), role=UnitRole.ATTACKING)
+    sc.manager.liberators.last_morph_command[lib.tag] = sc.ai.time
+    sc.manager.liberators.last_morph_command[999999] = sc.ai.time   # stands in for a dead Liberator
+    ctx = begin(sc)
+    sc.manager.liberators.control(sc.world.units([lib]), orders(sc), ctx)
+    check("liberators: a dead liberator's last_morph_command entry is pruned",
+          999999 not in sc.manager.liberators.last_morph_command, str(sc.manager.liberators.last_morph_command))
+    check("liberators: a live liberator's own entry is untouched",
+          lib.tag in sc.manager.liberators.last_morph_command, str(sc.manager.liberators.last_morph_command))
 
 
 def test_bio_spreads_out_on_the_way_in_to_sieged_tanks():

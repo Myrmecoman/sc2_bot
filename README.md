@@ -43,6 +43,13 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   ours anywhere else (a Raven's Auto-Turret next to the enemy's mineral line) does not count: it used to, and 14 enemy drones around one
   pulled 15 SCVs across the map to attack the enemy's base. As a safety net, a worker that is attacking more than 45 from every townhall
   is sent back to mining. The army's base defense (`army/defense.py`) does not take an Auto-Turret for a base either.
+* **A worker watching a flying Command Center rush keeps the job instead of a fresh one being peeled off mining
+  every step** (`worker_micro.py`'s `prevent_PF_rush`, `worker_assigned_to_follow`): the per-step cleanup that was
+  meant to drop only a dead structure or a dead assigned worker instead compared the wrong things (a live worker's
+  tag against a `Unit` object, which can never match) and wiped every assignment every single step regardless - so
+  the "if no worker assigned, give one and remember it" logic always saw a fresh slate and picked whichever worker
+  was currently closest and still gathering, over and over, instead of the one worker it had already committed to
+  the job. Found during a full-project bug-hunt, not from a specific report.
 * **Workers dodge Oracles** (`worker_micro.py`): a worker within 7.5 of an Oracle moves straight away from it (from all of them, the nearer
   counting for more) - to walkable ground within 22 of a townhall, 6 at a time, so it is never inside the Pulsar Beam's range (5 is what
   they keep out of) - instead of running to the townhall like from any other threat, which is where the Oracle follows them to. A worker
@@ -188,6 +195,10 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   ...) that come within their weapon range + 1 while their weapon is on cooldown - shoot when ready, step back when not, without waiting
   for the danger grid (a disk of 4 around a melee unit, which flags the cell when the Zealot is already on top of the Marine) - except from
   ones much faster than they are, and they never push in with a melee unit within 10 (`MELEE_*` and `KITE_IN_MELEE_RADIUS` in `consts.py`).
+* **A Cyclone no longer casts Lock-On instead of backing off a close baneling** (`units/cyclones.py`'s `_control_unit`): the baneling
+  check used to run after the attempt to cast Lock-On, so a valid Lock-On target in range let the whole function return before the
+  "always back away from banelings, whatever else is true" rule it was sitting right next to ever ran. The baneling check now runs
+  first, unconditionally, before Lock-On is even attempted - found during a full-project bug-hunt, not from a specific report.
 * **The simulator is set up for the situation** (`Stance` in `fight.py`; its settings are undocumented, each was probed). Holding a
   position (`HOLD`, base defense) the enemy walks into us and the side with the longer reach gets the first volley; walking into a held
   position (`ATTACK`, kiting in) they get it; a meeting, or a fight that is under way, is everything in contact from the start. Units that
@@ -223,6 +234,12 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   stragglers of an army that is in a fight rush to it with an attack-move instead of steering round the fire; and new units do not walk
   across the map one by one - they wait at home until there is a wave (a fifth of the army out there, 8 to 20 supply) and go together. While
   the army is stopped on purpose (the staging point, a pause for the tail) the bio does not spread out towards the enemy's sieged tanks.
+* **The diversion squad (`CONTROL_GROUP_ONE`) can no longer get stuck disabled for the rest of the game**: `_manage_diversion`'s
+  `diversion_target` is cleared by `dissolve()`, which used to run only while the squad still had units in it - if the whole squad died
+  in the same step (a simultaneous wipe, not attrition one at a time), the squad was already empty by the time this ran, `dissolve()`
+  never fired, and `diversion_target` stayed stuck on a stale point forever (the one condition that lets a new squad form requires it to
+  be `None` first). `dissolve()` now runs whenever `diversion_target` is set and the squad is gone OR no longer qualifies, not only
+  while it still has units to release - found during a full-project bug-hunt, not from a specific report.
 * **Sieging**: tanks stay sieged while they can shoot anything, buildings included (measured edge to edge - a Hatchery can be 16 away centre
   to centre and still be in range). Liberators are ordered into Defender Mode without waiting for the game to list the morph as usable (an
   order that never takes effect is given up on after a few tries), hold it for a shooting window after it first shows up, and come down as

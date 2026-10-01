@@ -39,6 +39,11 @@ class TankController:
         if not units:
             return
         ctx.prefetch_near(units)
+        # unlike slot_index (pruned inside _assign_slots - see its own comment), nothing else ever visits a tank
+        # that died while sieged, so this is the only place left to notice it is gone and stop holding its entry
+        alive = {u.tag for u in self.ai.units}
+        for tag in [t for t in self.siege_since if t not in alive]:
+            del self.siege_since[tag]
         guard_point = self._liberator_guard_point()
         slots: Optional[List[Point2]] = None
         if not orders.aggressive:

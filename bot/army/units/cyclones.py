@@ -93,6 +93,14 @@ class CycloneController:
         if self.handle_running_lock(unit, orders, ctx) or self.repair_trip(unit, orders, ctx):
             return
 
+        # banelings: always back away, whatever else is true (see kite_from_banelings, and BioController for the details) -
+        # checked before Lock-On can even be cast: a close baneling about to detonate is not made safe to stand next to
+        # just because there is also something worth locking onto
+        close_banelings = ctx.close_banelings(unit)
+        if close_banelings:
+            kite_from_banelings(self.ai, ctx, unit, close_banelings, orders)
+            return
+
         # is_visible only means the position is in vision, not that the unit can be seen through cloak - a permanently-cloaked one
         # (an Observer) or a cloaked/burrowed one with no detector over it is reported all the same, just untargetable
         targets = [e for e in ctx.targets_near(unit) if e.can_be_attacked]
@@ -104,10 +112,7 @@ class CycloneController:
             return
 
         in_range = cy_in_attack_range(unit, targets)
-        # banelings: always back away, whatever else is true (see kite_from_banelings, and BioController for the details)
-        banelings = ctx.banelings_near(unit)
-        close_banelings = ctx.close_banelings(unit)
-        if not orders.aggressive and in_range and not close_banelings:
+        if not orders.aggressive and in_range:
             # holding: keep firing at whatever is already in range, exactly like a stationary defender would
             attack_unit(unit, cy_closest_to(unit.position, in_range))
             return
@@ -117,10 +122,7 @@ class CycloneController:
             attack_unit(unit, nearest)
             return
 
-        if close_banelings:
-            kite_from_banelings(self.ai, ctx, unit, close_banelings, orders)
-            return
-
+        banelings = ctx.banelings_near(unit)
         advance = orders.advance_result(unit)          # the fight this unit is in, judged as an advance (see BioController)
         winning = (
             advance is not None
