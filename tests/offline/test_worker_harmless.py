@@ -4,10 +4,11 @@ resume_building_construction, bot/scouting.py).
   premise    the fixture gives the changelings and the Observer a weapon, as if the game data listed one for them - the workers must not
              go by that (`can_attack_ground`), they go by what the unit is
   mining     the whole bot on the real Ares hub: one of them in the middle of the mineral line moves nobody
-  control    a Reaper in the same place still sends every worker near it to the townhall
+  control    a Reaper in the same place still sends every worker near it fleeing, straight away from it
   building   an unattended structure is resumed with a changeling next to it (and not with a Reaper next to it)
   scout      the scouting SCV does not turn back for a changeling (it does for a Reaper)"""
 import _bootstrap  # noqa: F401  (repo root on sys.path - keep this first)
+import math
 import gamefix
 import gamefix_more  # noqa: F401
 from gamefix import ANY, GROUND, LIGHT, BIO, MECH
@@ -51,9 +52,13 @@ def mining():
     reaper = env["game"].add(U.REAPER, SPOT, 4)
     near = near_workers(env, reaper)
     acts = frame(env)
-    cc = Point2(base.BASES["our_main"])
-    check("control: a Reaper in the same place still sends every worker near it to the townhall",
-          len(near) >= 6 and all(is_move(last_order(acts, w)) and Point2((last_order(acts, w).target.x, last_order(acts, w).target.y)).distance_to(cc) < 1.0 for w in near),
+
+    def target_gap(w):
+        t = last_order(acts, w).target
+        return math.hypot(t.x - reaper.pos.x, t.y - reaper.pos.y)
+
+    check("control: a Reaper in the same place still sends every worker near it fleeing, straight away from it",
+          len(near) >= 6 and all(is_move(last_order(acts, w)) and target_gap(w) > gap(w, reaper) for w in near),
           str([last_order(acts, w) for w in near][:2]))
 
 

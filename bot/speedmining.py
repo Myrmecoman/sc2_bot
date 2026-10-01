@@ -58,7 +58,9 @@ def micro_worker(self : BotAI) -> None:
     safe_townhalls = self.townhalls.ready.filter(lambda t: not base_is_threatened(self, t.position))
     idle_pool = safe_townhalls if safe_townhalls else self.townhalls.ready
     for unit in self.workers:
-        if unit.is_idle and unit.tag not in self.oracle_fleeing:       # (one that is keeping out of an Oracle's way stays where it is: worker_micro.py)
+        # (one that is keeping out of an Oracle's way, or out of a real threat's way, stays where it is: worker_micro.py -
+        # otherwise this would walk it straight back towards whatever it just fled, the moment it goes idle there)
+        if unit.is_idle and unit.tag not in self.oracle_fleeing and unit.tag not in self.threat_fleeing:
             townhall = idle_pool.closest_to(unit)
             patch = self.mineral_field.closest_to(townhall)
             unit.gather(patch)

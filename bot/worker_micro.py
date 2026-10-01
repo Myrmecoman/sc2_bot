@@ -20,6 +20,8 @@ from bot.pathing.consts import HARMLESS_TO_WORKERS
 from bot.pathing.order_utils import is_already_moving_to, segment_walkable
 
 WORKER_FLEE_RANGE = 7.0   # start pulling workers back before a fast threat like a reaper is already on top of them
+WORKER_FLEE_STEP = 6.0    # how far a fleeing worker steps away from the threat(s) each time it is sent
+WORKER_FLEE_RELEASE_MARGIN = 3.0  # stays out (not sent back to mining) until a threat is this much farther than WORKER_FLEE_RANGE, or gone
 BASE_DANGER_RANGE = 10.0  # a visible hostile ground unit this close to a base means "do not send (more) workers there yet"
 _ENEMY_WORKER_TYPES = frozenset({UnitTypeId.SCV, UnitTypeId.PROBE, UnitTypeId.DRONE, UnitTypeId.MULE})
 
@@ -183,8 +185,19 @@ def flee_worker_threats(self: BotAI, skip: Set[int] = frozenset()):
     """Pull workers away from an immediate combat threat (reaper/hellion harass etc.) instead of
     letting them keep mining and get picked off one by one - workers can't meaningfully fight
     back against most combat units, so self-preservation is the right reaction here, not
-    continuing to work as if nothing is happening."""
+    continuing to work as if nothing is happening.
+
+    Moves STRAIGHT AWAY from the nearest threat(s) (the same point_away_from steering avoid_oracles already uses
+    below), not blindly to the nearest townhall: if the threat is already standing AT that townhall - which is
+    usually exactly why it is a threat in the first place - "flee to the townhall" sent a worker straight at the
+    danger instead of away from it, and it just stood there getting hit once it arrived, looking frozen rather
+    than fleeing. Stays out (`threat_fleeing`, mirroring `oracle_fleeing`) until a threat is a clear margin farther
+    than WORKER_FLEE_RANGE or gone - without this, a worker that reaches its away-point and goes idle gets handed
+    straight back to mining by `micro_worker`'s catch-all (which falls back to "mine somewhere, even a base that is
+    still threatened, beats mining nowhere" when it is the only base there is), walks back towards the same danger,
+    and flees again - the same frozen-looking oscillation by a different route."""
     if self.worker_rushed:
+        self.threat_fleeing.clear()
         return  # worker_rush_defense already has its own dedicated worker-combat logic for that case
 
     # (Oracles are dodged, not run away from to the townhall: see avoid_oracles; changelings and Observers hurt nobody: they walk and fly
@@ -193,8 +206,11 @@ def flee_worker_threats(self: BotAI, skip: Set[int] = frozenset()):
         lambda u: u.can_attack_ground and u.type_id not in {UnitTypeId.PROBE, UnitTypeId.SCV, UnitTypeId.DRONE, UnitTypeId.ORACLE}
         and u.type_id not in HARMLESS_TO_WORKERS
     )
+    fleeing: Set[int] = self.threat_fleeing
     if threats.amount == 0:
+        fleeing.clear()
         return
+    fleeing &= {w.tag for w in self.workers}
 
     # (build_order_critical_worker is deliberately NOT exempted here (only from being re-picked for a DIFFERENT
     # task, e.g. by scout()) - early_build_order() runs earlier in the same step and keeps re-issuing its own
@@ -206,13 +222,29 @@ def flee_worker_threats(self: BotAI, skip: Set[int] = frozenset()):
     workers = [w for w in self.workers if not (w.is_repairing or w.is_constructing_scv or w.tag in skip)]
     if not workers:
         return
+    positions = [t.position for t in threats]
     # one distance table instead of a search through every threat for every worker (70 workers against a visible army is thousands of pairs)
-    gaps = cdist(np.array([w.position_tuple for w in workers]), np.array([t.position_tuple for t in threats])).min(axis=1)
-    for worker, gap in zip(workers, gaps):
-        if gap < WORKER_FLEE_RANGE:
-            safe_spot: Point2 = self.townhalls.closest_to(worker).position
+    gaps = cdist(np.array([w.position_tuple for w in workers]), np.array([t.position_tuple for t in threats]))
+    release = WORKER_FLEE_RANGE + WORKER_FLEE_RELEASE_MARGIN
+    for worker, row in zip(workers, gaps):
+        nearest = row.min()
+        if nearest < WORKER_FLEE_RANGE:
+            def ok(point: Point2, start: Point2 = worker.position) -> bool:
+                return bool(
+                    self.in_map_bounds(point) and self.in_pathing_grid(point)
+                    and self.townhalls.closest_distance_to(point) <= FLEE_HOME_RADIUS
+                    and segment_walkable(start, point, self.in_pathing_grid)
+                )
+
+            nearby = [p for p, gap in zip(positions, row) if gap < WORKER_FLEE_RANGE]
+            safe_spot = point_away_from(worker.position, nearby, WORKER_FLEE_STEP, ok)
+            if safe_spot is None:
+                safe_spot = self.townhalls.closest_to(worker).position    # nowhere clear found: head home anyway
+            fleeing.add(worker.tag)
             if not is_already_moving_to(worker, safe_spot):
                 worker.move(safe_spot)
+        elif worker.tag in fleeing and nearest >= release:
+            fleeing.discard(worker.tag)
 
 
 def worker_micro(self: BotAI):

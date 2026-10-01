@@ -3,12 +3,13 @@
   geometry   point_away_from: straight away from the threats (nearer ones count for more), the nearest free turn when that way is blocked,
              across when pulled both ways alike, nothing when everything is blocked
   dodge      the whole bot on the real Ares hub: an Oracle over the workers -> every worker within 7.5 moves straight away, to a spot more
-             than 5 from it (and not to the townhall, which is what the generic flee does - and which is right under the Oracle when it
-             floats over the base)
+             than 5 from it (not to the townhall, which is right under the Oracle when it floats over the base)
   hold       a worker that has fled stays out - no order sends it back to mining - while the Oracle is within 10 of it, and goes back
              once the Oracle is gone
   left alone an Oracle that is far away, or a hallucination, moves nobody; a repairing SCV is not pulled off its job
-  generic    (control) any other threat still sends the workers to the townhall as before"""
+  generic    (control) any other threat also sends the workers straight away from it (flee_worker_threats uses the same point_away_from
+             steering as the Oracle case now, with its own constants/trigger - not to the townhall, which used to walk a worker straight
+             at a threat that was standing right on top of it)"""
 import _bootstrap  # noqa: F401  (repo root on sys.path - keep this first)
 import asyncio, math
 from loguru import logger
@@ -187,9 +188,13 @@ def generic_flee_control():
     reaper = game.add(U.REAPER, (33.0, 28.5), 4)
     acts = frame(env)
     near = [w for w in workers if gap(w, reaper) < wm.WORKER_FLEE_RANGE]
-    cc = Point2(BASES["our_main"])
-    check("generic (control): any other threat still sends the workers to the townhall",
-          len(near) >= 6 and all(is_move(last_order(acts, w)) and Point2((last_order(acts, w).target.x, last_order(acts, w).target.y)).distance_to(cc) < 1.0 for w in near),
+
+    def target_gap(w):
+        t = last_order(acts, w).target
+        return math.hypot(t.x - reaper.pos.x, t.y - reaper.pos.y)
+
+    check("generic (control): any other threat still sends the workers fleeing, straight away from it",
+          len(near) >= 6 and all(is_move(last_order(acts, w)) and target_gap(w) > gap(w, reaper) for w in near),
           str([last_order(acts, w) for w in near][:2]))
     check("generic (control): ...and none of them is counted as dodging an Oracle", not env["bot"].oracle_fleeing, str(env["bot"].oracle_fleeing))
 

@@ -222,7 +222,12 @@ class ArmyManager:
 
         role = ctx.mediator.get_units_from_role
         self._guard("scouting", self.scouting.update, ctx, role(role=UnitRole.ATTACKING))
-        self._guard("bunkers", self.bunkers.update, ctx, role(role=UnitRole.ATTACKING), self.attacking)
+        # BASE_DEFENDER too: a detachment already being sent to answer the same threat (defense.py, one step stale
+        # here - it is reassigned below, after this) is a far more useful source of nearby crew than hoping the main
+        # army happens to already be standing next to this specific base's bunker
+        self._guard(
+            "bunkers", self.bunkers.update, ctx, role(role=UnitRole.ATTACKING) | role(role=UnitRole.BASE_DEFENDER), self.attacking
+        )
         defense_groups, escalate_to = self._guard(
             "defense", self.defense.update, ctx, role(role=UnitRole.ATTACKING), role(role=UnitRole.BASE_DEFENDER)
         ) or ([], None)

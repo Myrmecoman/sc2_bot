@@ -837,6 +837,43 @@ def test_bunker_holds_against_a_real_threat_even_while_attacking():
           loads and loads[0].target.tag == marine.tag, str(loads))
 
 
+def test_bunker_calls_in_a_base_defender_not_just_the_main_army():
+    """The crew pool is role-agnostic by type+distance alone (BunkerDefense._crew never checks role) - manager.py
+    relies on this to pass BOTH the main army AND any base-defense detachment already heading the same way, since a
+    detachment answering the very threat the bunker also reacted to is a far likelier source of nearby bodies than
+    the main army happening to already stand on this specific base."""
+    from bot.army.bunkers import BunkerDefense
+
+    sc = scene_basic()
+    bunker = sc.own(U.BUNKER, (40.0, 40.0))
+    bunker._proto.cargo_space_max = 4
+    defender = sc.own(U.MARINE, (42.0, 40.0), role=UnitRole.BASE_DEFENDER)   # not ATTACKING - a detachment, not the main army
+    sc.enemy(U.ZERGLING, (41.0, 40.0))
+    ctx = _begin(sc)
+    bd = BunkerDefense(sc.ai)
+    bd.update(ctx, sc.world.units([defender]), False)
+    loads = [c for c in sc.ai.actions if c.unit.tag == bunker.tag and c.ability == AbilityId.LOAD_BUNKER]
+    check("bunker: a BASE_DEFENDER-roled unit is called in too, not only ATTACKING ones",
+          loads and loads[0].target.tag == defender.tag, str(loads))
+
+
+def test_bunker_pickup_range_reaches_a_detachment_not_standing_right_on_it():
+    """BUNKER_PICKUP_RANGE widened from 10 to 20 - a detachment/the main army is rarely standing exactly on top of
+    the bunker's own base the instant a threat appears, so the old radius missed the common case."""
+    from bot.army.bunkers import BunkerDefense
+
+    sc = scene_basic()
+    bunker = sc.own(U.BUNKER, (40.0, 40.0))
+    bunker._proto.cargo_space_max = 4
+    marine = sc.own(U.MARINE, (55.0, 40.0), role=UnitRole.ATTACKING)   # 15 away - past the old 10 range, within the new 20
+    sc.enemy(U.ZERGLING, (41.0, 40.0))
+    ctx = _begin(sc)
+    bd = BunkerDefense(sc.ai)
+    bd.update(ctx, sc.world.units([marine]), False)
+    loads = [c for c in sc.ai.actions if c.unit.tag == bunker.tag and c.ability == AbilityId.LOAD_BUNKER]
+    check("bunker: a unit 15 away (past the old 10 range) is now called in", loads and loads[0].target.tag == marine.tag, str(loads))
+
+
 def test_diversion_target_clears_even_when_the_whole_squad_dies_in_one_step():
     """_manage_diversion's only writer of diversion_target besides forming a squad is dissolve(), which used to be
     gated on `squad` being non-empty - if the whole diversion squad dies in the SAME step (a simultaneous wipe, not

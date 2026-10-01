@@ -59,6 +59,7 @@ class SmoothBrainBot(Sc2Bridge, AresBot):
         self.worker_assigned_to_follow = {}          # lists workers assigned to follow objects (used to prevent Planetary Fortress rushes)
         self.cyclone_upgrade_next_look = 0.0          # game time before which the Factory Tech Labs are not asked again what they can research (see custom_utils.research_cyclone_upgrade)
         self.oracle_fleeing = set()                  # tags of workers that dodged an Oracle and stay out of its range instead of going back to mining (see worker_micro.avoid_oracles)
+        self.threat_fleeing = set()                  # tags of workers fleeing a real combat threat and staying out of mining until it clears (see worker_micro.flee_worker_threats)
         self.worker_assigned_to_defend = {}          # lists workers assigned to defend other workers during construction
         self.worker_assigned_to_resume_building = {} # lists workers assigned to resume the construction of a building
         self.worker_assigned_to_expand = {}          # lists workers assigned to expand /!\ not used yet
