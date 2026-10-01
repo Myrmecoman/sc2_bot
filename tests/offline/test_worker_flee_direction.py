@@ -69,8 +69,39 @@ def hold_and_release():
           f"{len(gathers)}/{len(near)}  {env['bot'].threat_fleeing}")
 
 
+def repairing_a_structure_is_fearless():
+    """repair.structure_repairers (worker_micro.py's avoid_oracles/flee_worker_threats exemption): manage_repairs
+    runs inside macro(), which runs BEFORE worker_micro() in the same step (bot.py's on_step order) - a worker
+    freshly assigned to repair a damaged STRUCTURE this very step has self.repair_jobs set synchronously, but
+    is_repairing itself only catches up on the NEXT step's observation. Without the fix, flee_worker_threats saw a
+    worker that (by its own stale is_repairing read) was not yet committed to anything, and overrode the brand new
+    repair order with a flee move THE SAME STEP - so a structure under attack, the normal reason it needs repairing
+    at all, never got a single repair tick in as long as the threat stayed close: the whole point of defending it,
+    defeated."""
+    env = start()
+    game = env["game"]
+    workers = workers_of(game)
+    cc = next(u for u in game.units_raw if u.unit_type == U.COMMANDCENTER.value)
+    cc.health = cc.health_max * 0.5                                   # badly damaged: manage_repairs wants it crewed
+    cx, cy = BASES["our_main"]
+    game.add(U.ZERGLING, (cx, cy), 4)                                 # a real threat right on top of the base
+    near = [w for w in workers if gap(w, cc) < wm.WORKER_FLEE_RANGE]
+    check("fearless: (premise) some workers start this step within flee range of the threat", len(near) >= 2, str(len(near)))
+    acts = frame(env)
+    repaired = [w for w in near if any(a.unit.tag == w.tag and a.ability == AbilityId.EFFECT_REPAIR_SCV for a in acts)]
+    check("fearless: (premise) manage_repairs actually assigns one of them to the damaged command center this step",
+          bool(repaired), str([last_order(acts, w) for w in near]))
+    check("fearless: the SAME step's flee_worker_threats does not override that order with a flee move",
+          bool(repaired) and all(last_order(acts, w).ability == AbilityId.EFFECT_REPAIR_SCV for w in repaired),
+          str([last_order(acts, w) for w in repaired]))
+    others = [w for w in near if w.tag not in {r.tag for r in repaired}]
+    check("fearless: ...while a worker not picked for repair still flees the same threat",
+          bool(others) and all(is_move(last_order(acts, w)) for w in others), str([last_order(acts, w) for w in others]))
+
+
 def main():
     hold_and_release()
+    repairing_a_structure_is_fearless()
     failed = [r for r in RESULTS if not r[1]]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
     return 1 if failed else 0
