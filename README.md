@@ -67,6 +67,15 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   are the answer to both, so a turret want an earlier rule raised (a Stargate is also "detected": it wants one for Oracles) is cancelled
   again by this last rule, same as the tank cap. Add a rule by adding a `Reaction(...)` to the table; `tests/offline/test_reactions.py`
   shows how a rule is tested.
+* **A scouted opponent still on one base well past normal expansion timing holds back our OWN further expansion**
+  (`army_composition_advisor.enemy_likely_one_base`, checked live every step - not a `reactions.py` rule, since this is about our
+  macro pace, not army composition - and read by `macro.py`'s `holding_for_enemy_all_in`): whatever the extra time bought them (an
+  all-in, cheese, or heavy tech investment), matching it with our own normal greedy pace - grabbing a 3rd, 4th base on schedule - is
+  the wrong response. Past 5:00 with still at most one enemy townhall ever confirmed (`enemy_structures` already keeps a remembered
+  structure at its last-known spot once out of vision again - buildings do not move, unlike army units, which is why
+  `EnemyTracker`/`enemy_tracker.py` has to track those itself instead - so this needs no tracking of its own), our own expansion
+  beyond the base we already have stops - only that: our own natural is still taken normally, and a mineral bank over 2000 is still
+  spent on a new base regardless, same overflow valve `holding_for_units` already uses just above it.
 * **Vehicle and ship upgrades** (`handle_upgrades`, `next_mech_upgrade` in `custom_utils.py`): bought once enough mech is out to justify them,
   by the supply of what each upgrade makes stronger - vehicle weapons by the vehicles (Hellions, Tanks, Cyclones, Thors), ship weapons by the
   ships (Vikings, Banshees, Liberators, Battlecruisers), the armor by both and the mines - and each level wants more than the one before:

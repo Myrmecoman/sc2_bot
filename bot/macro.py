@@ -311,8 +311,13 @@ async def macro(self : BotAI):
     # just sit dead, stop holding it back
     producer_idle: bool = self.structures(UnitTypeId.BARRACKS).ready.idle.amount > 0
     holding_for_units: bool = self.army_count == 0 or producer_idle
+    # a scouted opponent still sitting on one base well past normal expansion timing (army_advisor.enemy_likely_one_base)
+    # is very likely either an all-in or banking heavily on tech/cheese - matching that greed with our own, by grabbing a
+    # 3rd/4th base at the same pace as if the game were a normal long one, is the wrong response. Only beyond our OWN
+    # natural (our first expansion is still just core economy, not greed) - same mineral-bank overflow valve as the rest
+    holding_for_enemy_all_in: bool = self.townhalls.amount >= 2 and self.army_advisor.enemy_likely_one_base
 
-    if self.can_afford(UnitTypeId.COMMANDCENTER) and self.townhalls.amount < 20 and (self.already_pending(UnitTypeId.COMMANDCENTER) == 0 or self.minerals > 2000) and (not is_supply_critical(self) or self.minerals > 2000) and (not holding_for_units or self.minerals > 2000):
+    if self.can_afford(UnitTypeId.COMMANDCENTER) and self.townhalls.amount < 20 and (self.already_pending(UnitTypeId.COMMANDCENTER) == 0 or self.minerals > 2000) and (not is_supply_critical(self) or self.minerals > 2000) and (not holding_for_units or self.minerals > 2000) and (not holding_for_enemy_all_in or self.minerals > 2000):
         await build_cc(self)
 
     # get refineries count

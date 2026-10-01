@@ -258,6 +258,62 @@ def infantry_upgrades():
           str(sorted(a.name for a in done)))
 
 
+def one_base_all_in():
+    """A scouted opponent still sitting on one base well past normal expansion timing should not be matched with our
+    own normal, greedy expansion pace (army_composition_advisor.enemy_likely_one_base; macro.py's
+    holding_for_enemy_all_in, gating build_cc beyond our own natural)."""
+    Terran = common_pb2.Terran
+
+    def play_at(enemy_bases, target_time, minerals=900, gas=300):
+        logger.remove()
+        errors = []
+        logger.add(lambda m: errors.append(str(m)) if m.record["level"].no >= 40 else None, colorize=False)
+        game = build_game(Terran)
+        cx, cy = BASES["our_main"]
+        more_bases(game, 2)                                     # our own natural is already up (2 bases)
+        count_barracks(game, 1)
+        game.add(U.MARINE, (cx + 2, cy + 2), 1)                  # some army already, so holding_for_units never fires
+        game.add(U.MARINE, (cx + 3, cy + 2), 1)
+        game.add(U.COMMANDCENTER, BASES["enemy_main"], 4)        # their scouted main (the synthetic harness seeds no
+        if enemy_bases >= 2:                                     # structure there on its own - only a start location)
+            game.add(U.COMMANDCENTER, BASES["enemy_nat"], 4)     # the opponent's own second base
+        game.minerals, game.vespene = minerals, gas
+        bot = SmoothBrainBot()
+        loop = asyncio.new_event_loop()
+        client, proto_gi = loop.run_until_complete(start_game(game, bot))
+        bot.build_order = []
+        target_loop = int(target_time * 22.4)
+        loop.run_until_complete(run_frame(game, bot, proto_gi, 0, frames=target_loop - game.game_loop,
+                                           supply_used=60, supply_cap=200))
+        assert not errors, errors[:1]
+        return bot, {a.ability for a in client.sent_actions}
+
+    def names(done):
+        return str(sorted(a.name for a in done))
+
+    bot, done = play_at(enemy_bases=1, target_time=200.0)
+    check("one-base all-in: (premise) not flagged before the check window, whatever the base count",
+          bot.army_advisor.enemy_likely_one_base is False, str(bot.time))
+    check("one-base all-in: (control) so a 3rd base is still built normally that early",
+          A.TERRANBUILD_COMMANDCENTER in done, names(done))
+
+    bot, done = play_at(enemy_bases=1, target_time=320.0)
+    check("one-base all-in: flagged once well past normal expansion timing with still only one base seen",
+          bot.army_advisor.enemy_likely_one_base is True, str(bot.time))
+    check("one-base all-in: ...and our own 3rd base is held off while it holds (our own natural is untouched)",
+          A.TERRANBUILD_COMMANDCENTER not in done, names(done))
+
+    bot, done = play_at(enemy_bases=2, target_time=320.0)
+    check("one-base all-in (control): not flagged once a second enemy base is confirmed",
+          bot.army_advisor.enemy_likely_one_base is False, str(bot.time))
+    check("one-base all-in: ...and the 3rd base is built normally again",
+          A.TERRANBUILD_COMMANDCENTER in done, names(done))
+
+    bot, done = play_at(enemy_bases=1, target_time=320.0, minerals=2500)
+    check("one-base all-in: ...but a mineral bank piling up past 2000 still gets spent on it anyway",
+          A.TERRANBUILD_COMMANDCENTER in done, names(done))
+
+
 def main():
     # ---- a Dark Shrine: Raven first
     def starport(shrine):
@@ -361,6 +417,7 @@ def main():
     mech()
     upgrades()
     infantry_upgrades()
+    one_base_all_in()
 
     failed = [r for r in RESULTS if not r[1]]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")

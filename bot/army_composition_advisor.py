@@ -9,7 +9,7 @@ from sc2.units import Units
 from sc2.position import Point2
 from sc2.bot_ai import BotAI
 from typing import Dict, FrozenSet, List, Set
-from sc2.data import Race
+from sc2.data import Race, race_townhalls
 from bot.pathing.consts import DANGEROUS_STRUCTURES, SKYTOSS_TYPES
 from bot.reactions import KNOBS, REACTIONS, Scouted, react
 
@@ -83,6 +83,7 @@ class ArmyCompositionAdvisor():
 
         # useful infos
         self.zergling_rushed = False
+        self.enemy_likely_one_base = False
 
     # -------------------------------------------------------------
     # Questions macro asks
@@ -283,6 +284,19 @@ class ArmyCompositionAdvisor():
             ).amount == 0
         ):
             self.zergling_rushed = False
+
+        # ---------------------------------------------------------
+        # One-base all-in (any race) - still no second base confirmed well past when one is normally up. enemy_structures
+        # already carries a remembered (snapshot) structure at its last-known spot even once we lose vision of it again
+        # (the SC2 client does this for buildings on its own - they do not move, unlike army units, which is why
+        # EnemyTracker/enemy_tracker.py has to track those itself instead), so this is a live count, not something that
+        # needs its own persistent tracking: whatever base count we have ever confirmed stays confirmed.
+        # 300s/5:00 is well past every normal build order's natural timing - picked to avoid flagging a merely slightly
+        # late (but still normal) expansion as an all-in, not measured against real replays.
+        townhall_types = race_townhalls.get(self.bot.enemy_race)
+        self.enemy_likely_one_base = bool(
+            townhall_types and self.bot.time >= 300 and self.bot.enemy_structures.of_type(townhall_types).amount <= 1
+        )
 
         # ---------------------------------------------------------
         # Zerg
