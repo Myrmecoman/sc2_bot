@@ -11,6 +11,7 @@ building limits: never more than 8 Barracks, 2 Factories and 2 Starports - and m
   infantry_upgrades  the Engineering Bay's weapon/armor levels wait for the 3rd base
   mineral_banking    minerals growing faster than we can spend them calls for another Barracks, not only late-game
   bunkers    one Bunker each at our closest two bases to home (main, natural) - never a third, however many bases we take
+  placement  a Bunker builds in front of the townhall, not behind the mineral line; turrets build closer in now
 
 Against Protoss (a mech-led army, army_advisor.mech_focus):
   cyclones   the Factory makes Cyclones first, a Tank once three more Cyclones than 3 x tanks are out; money is held back for them
@@ -261,6 +262,59 @@ def infantry_upgrades():
           str(sorted(a.name for a in done)))
 
 
+def placement():
+    """A Bunker builds in front of the townhall - the open side, away from the mineral line - rather than tucked
+    behind the minerals like a turret (smart_build_in_front_of_base vs smart_build_behind_mineral). Turrets
+    themselves now build closer in than before (6/9 instead of 9/12)."""
+    Zerg = common_pb2.Zerg
+
+    def run(setup, race=Zerg, minerals=300, gas=0):
+        logger.remove()
+        errors = []
+        logger.add(lambda m: errors.append(str(m)) if m.record["level"].no >= 40 else None, colorize=False)
+        game = build_game(race)
+        cx, cy = BASES["our_main"]
+        setup(game, cx, cy)
+        game.minerals, game.vespene = minerals, gas
+        bot = SmoothBrainBot()
+        loop = asyncio.new_event_loop()
+        client, proto_gi = loop.run_until_complete(start_game(game, bot))
+        bot.build_order = []
+        loop.run_until_complete(run_frame(game, bot, proto_gi, 0, supply_used=60, supply_cap=200))
+        assert not errors, errors[:1]
+        return bot, client.sent_actions
+
+    def mineral_average(bot, cc):
+        mfs = bot.mineral_field.closer_than(10, cc)
+        return mfs.amount, sum(m.position.x for m in mfs) / mfs.amount, sum(m.position.y for m in mfs) / mfs.amount
+
+    bot, actions = run(lambda g, cx, cy: None, minerals=300)
+    bunker_cmd = next((a for a in actions if a.ability == A.TERRANBUILD_BUNKER), None)
+    check("placement: (premise) a bunker is actually built this step", bunker_cmd is not None,
+          str(sorted(a.ability.name for a in actions)))
+    if bunker_cmd is not None:
+        cc = bot.townhalls.first
+        n, mx, my = mineral_average(bot, cc)
+        to_minerals = (mx - cc.position.x, my - cc.position.y)
+        to_bunker = (bunker_cmd.target.x - cc.position.x, bunker_cmd.target.y - cc.position.y)
+        dot = to_minerals[0] * to_bunker[0] + to_minerals[1] * to_bunker[1]
+        check("placement: the bunker goes on the OPPOSITE side of the townhall from the mineral line (not behind it)",
+              dot < 0, f"to_minerals={to_minerals} to_bunker={to_bunker} dot={dot}")
+
+    def with_ebay(game, cx, cy):
+        game.add(U.DARKSHRINE, BASES["enemy_main"], 4)                     # triggers turrets_per_base=1 (reactions.py)
+        game.add(U.ENGINEERINGBAY, (cx - 10, cy - 12), 1)
+    bot, actions = run(with_ebay, race=common_pb2.Protoss, minerals=300)   # the dark-shrine reaction is Protoss-only
+    turret_cmd = next((a for a in actions if a.ability == A.TERRANBUILD_MISSILETURRET), None)
+    check("placement: (premise) a turret is actually built this step", turret_cmd is not None,
+          str(sorted(a.ability.name for a in actions)))
+    if turret_cmd is not None:
+        cc = bot.townhalls.first
+        dist = ((turret_cmd.target.x - cc.position.x) ** 2 + (turret_cmd.target.y - cc.position.y) ** 2) ** 0.5
+        check("placement: the turret lands close to the townhall (<= 7.5) - tighter than the old 9/12",
+              dist <= 7.5, str(dist))
+
+
 def one_base_all_in():
     """A scouted opponent still sitting on one base well past normal expansion timing should not be matched with our
     own normal, greedy expansion pace (army_composition_advisor.enemy_likely_one_base; macro.py's
@@ -504,6 +558,7 @@ def main():
     one_base_all_in()
     mineral_banking()
     bunkers()
+    placement()
 
     failed = [r for r in RESULTS if not r[1]]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")

@@ -134,15 +134,21 @@ tests/offline/               checks that need no StarCraft II, see the end of th
 | `SCOUTING` | a hidden-base sweep, protected from the rest of the army manager (`scouting.py`) |
 
 * **Basic Bunker management** (`macro.py`'s `build_bunkers`, `army/bunkers.py`'s `BunkerDefense`): one Bunker each at our closest
-  two bases to home (main and natural - never a third, however many bases we take), built the same way a missile turret is
-  (`smart_build_behind_mineral`), needing only a Barracks. It stands empty until its base is under ground threat
-  (`worker_micro.base_is_threatened`, the same check that holds workers back from a threatened base): then the nearest free
+  two bases to home (main and natural - never a third, however many bases we take), needing only a Barracks. Unlike a missile
+  turret it is built in FRONT of the townhall - the open side, away from the mineral line (`smart_build_in_front_of_base`: the
+  mineral-field average reflected through the townhall, so it stands roughly where it can actually block an approach, not
+  tucked away safely with the workers). It stands empty until its base is under ground threat (`worker_micro.base_is_threatened`,
+  the same check that holds workers back from a threatened base) - or, proactively, once a one-base all-in is suspected
+  (`army_advisor.enemy_likely_one_base`, no need to wait for their army to actually show up first): then the nearest free
   Marines/Marauders within 10 are called in (`AbilityId.LOAD_BUNKER`) and put in the `CONTROL_GROUP_TWO` role (Ares' own "use
   for anything not specified" slot, the one `CONTROL_GROUP_ONE` already fills for the diversion squad) so the main army leaves
-  them alone while they are garrisoned or still walking over. Once the base is safe again it unloads everyone at once
+  them alone while they are garrisoned or still walking over. Once neither is true any more it unloads everyone at once
   (`UNLOADALL_BUNKER`) and hands their role back to `ATTACKING`. No hysteresis yet - a threat flickering in and out of vision
   right at the edge of that radius would load and unload the same units repeatedly; left as a known simplification rather than
   built speculatively.
+* **Missile turrets build closer to the mineral line than before** (`build_turrets`'s call to `smart_build_behind_mineral` now
+  passes `near_distance=6, far_distance=9`, instead of the shared default of 9/12 that Armory/Engineering Bay/Fusion Core still
+  use) - close enough to actually stand among the workers it is meant to be defending, not noticeably behind them.
 * **Base defense holds the base's own ramp against a ground threat, rather than marching down to meet it** (`defense.py`'s
   `_hold_target`/`Positioning.hold_at_ramp`): a detachment (or, escalated, the whole army) used to be ordered straight at a threat's own
   position, whatever the terrain in between - a ground rush spotted below a base's ramp had our defenders walk down PAST the choke to

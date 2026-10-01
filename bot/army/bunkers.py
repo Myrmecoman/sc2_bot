@@ -1,6 +1,7 @@
-"""Basic Bunker crewing: load nearby bio units into a Bunker once its base is under ground threat, send them back to
-the main army once it is safe again. Building the Bunker itself is macro's job (macro.py's build_bunkers) - this only
-manages what already stands.
+"""Basic Bunker crewing: load nearby bio units into a Bunker once its base is under ground threat - or, proactively,
+once the enemy is believed to be committing to a one-base all-in (army_advisor.enemy_likely_one_base, no need to wait
+for their army to actually show up at our door first) - and send the crew back to the main army once neither is true
+any more. Building the Bunker itself is macro's job (macro.py's build_bunkers) - this only manages what already stands.
 
 A crewed unit gets the UnitRole.CONTROL_GROUP_TWO role (Ares' own "use for anything not specified" slot - the one
 CONTROL_GROUP_ONE already fills for the diversion squad, see manager.py) so the main army's own orders leave it alone
@@ -38,11 +39,12 @@ class BunkerDefense:
                 del self.crewed[tag]        # the bunker (and whoever was inside it) is gone
 
         alive = ai.units.tags
+        one_base_all_in = ai.army_advisor.enemy_likely_one_base
         taken: Set[int] = set()
         for bunker in bunkers:
             pending = self.crewed.setdefault(bunker.tag, set())
             pending &= (alive | bunker.passengers_tags)      # drop anyone who died on the way over
-            if base_is_threatened(ai, bunker.position, radius=BUNKER_CREW_RANGE):
+            if one_base_all_in or base_is_threatened(ai, bunker.position, radius=BUNKER_CREW_RANGE):
                 taken |= self._crew(ctx, bunker, army_pool, pending, taken)
             else:
                 self._empty(ctx, bunker, pending)

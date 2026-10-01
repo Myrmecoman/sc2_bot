@@ -104,7 +104,7 @@ async def smart_build(self : BotAI, type : UnitTypeId):
 
 
 HALF_OFFSET = Point2((.5, .5))
-async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId, townhalls : Units = None):
+async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId, townhalls : Units = None, near_distance: float = 9, far_distance: float = 12):
     # try all ccs (or just the given ones) and find average position of its mineral fields
     for cc in (self.townhalls.ready if townhalls is None else townhalls):
         mfs: Units = self.mineral_field.closer_than(10, cc)
@@ -119,8 +119,8 @@ async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId, townhalls 
         y = y // mfs.amount
         # try to place at a few positions
         for i in range(20):
-            position = cc.position.towards_with_random_angle(Point2((x, y)), 9, (math.pi / 3))
-            position_further = cc.position.towards_with_random_angle(Point2((x, y)), 12, (math.pi / 3))
+            position = cc.position.towards_with_random_angle(Point2((x, y)), near_distance, (math.pi / 3))
+            position_further = cc.position.towards_with_random_angle(Point2((x, y)), far_distance, (math.pi / 3))
             position = position.rounded.offset(HALF_OFFSET)
             position_further = position_further.rounded.offset(HALF_OFFSET)
             if await self.can_place_single(type, position):
@@ -130,6 +130,36 @@ async def smart_build_behind_mineral(self : BotAI, type : UnitTypeId, townhalls 
                 await self.build(type, near=position_further, max_distance=4)
                 return
         print("Could not place tech building behind mineral lines")
+
+
+async def smart_build_in_front_of_base(self : BotAI, type : UnitTypeId, townhalls : Units = None, near_distance: float = 8, far_distance: float = 10):
+    """Like smart_build_behind_mineral, but on the OPPOSITE side of the townhall from its mineral line - the open,
+    outward-facing side a Bunker actually needs to stand on to block an approach, rather than the side already safely
+    tucked away with the workers."""
+    for cc in (self.townhalls.ready if townhalls is None else townhalls):
+        mfs: Units = self.mineral_field.closer_than(10, cc)
+        if mfs.amount == 0:
+            continue
+        x = 0
+        y = 0
+        for i in mfs:
+            x += i.position.x
+            y += i.position.y
+        x = x // mfs.amount
+        y = y // mfs.amount
+        away = Point2((2 * cc.position.x - x, 2 * cc.position.y - y))   # the mineral average, reflected through the townhall
+        for i in range(20):
+            position = cc.position.towards_with_random_angle(away, near_distance, (math.pi / 3))
+            position_further = cc.position.towards_with_random_angle(away, far_distance, (math.pi / 3))
+            position = position.rounded.offset(HALF_OFFSET)
+            position_further = position_further.rounded.offset(HALF_OFFSET)
+            if await self.can_place_single(type, position):
+                await self.build(type, near=position, max_distance=4)
+                return
+            if await self.can_place_single(type, position_further):
+                await self.build(type, near=position_further, max_distance=4)
+                return
+        print("Could not place a building in front of the base")
 
 
 def cancel_building(self : BotAI):
@@ -243,14 +273,17 @@ async def build_turrets(self : BotAI):
             continue
         if self.structures(UnitTypeId.MISSILETURRET).closer_than(TURRET_BASE_RADIUS, cc).amount < per_base:
             self.turret_backoff[cc.tag] = self.time + 4.0        # (placing can fail, and the new turret takes a moment to show up)
-            await smart_build_behind_mineral(self, UnitTypeId.MISSILETURRET, townhalls=Units([cc], self))
+            # closer in than the default 9/12 - right at the mineral line, not noticeably behind it
+            await smart_build_behind_mineral(self, UnitTypeId.MISSILETURRET, townhalls=Units([cc], self), near_distance=6, far_distance=9)
             return
 
 
 async def build_bunkers(self : BotAI):
     """One Bunker at each of our closest BUNKER_BASES bases to home (main and natural, normally) - needs only a
-    Barracks. Standing empty most of the game; crewed reactively with nearby bio units once that base is under
-    ground threat, and emptied again once it is safe (BunkerDefense, army/bunkers.py - this only builds the shell)."""
+    Barracks, built in front of the townhall (the open side, away from the mineral line - a Bunker needs to stand
+    where it can actually block an approach, not tucked away safely with the workers like a turret). Standing empty
+    most of the game; crewed reactively with nearby bio units once that base is under ground threat, or proactively
+    once a one-base all-in is suspected (BunkerDefense, army/bunkers.py - this only builds the shell)."""
     if self.townhalls.amount == 0 or self.tech_requirement_progress(UnitTypeId.BUNKER) < 1:
         return
     if self.already_pending(UnitTypeId.BUNKER) > 0 or not self.can_afford(UnitTypeId.BUNKER):
@@ -261,7 +294,7 @@ async def build_bunkers(self : BotAI):
             continue
         if self.structures(UnitTypeId.BUNKER).closer_than(TURRET_BASE_RADIUS, cc).amount < 1:
             self.bunker_backoff[cc.tag] = self.time + 4.0
-            await smart_build_behind_mineral(self, UnitTypeId.BUNKER, townhalls=Units([cc], self))
+            await smart_build_in_front_of_base(self, UnitTypeId.BUNKER, townhalls=Units([cc], self))
             return
 
 

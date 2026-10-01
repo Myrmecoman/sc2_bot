@@ -734,6 +734,25 @@ def test_bunker_crews_nearby_bio_when_the_base_is_threatened():
           str(ctx.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_TWO)))
 
 
+def test_bunker_crews_proactively_once_a_one_base_all_in_is_suspected():
+    """A suspected one-base all-in (army_advisor.enemy_likely_one_base) crews the Bunker on its own - no need to wait
+    for the enemy's army to actually show up at our door first (base_is_threatened needs a VISIBLE unit nearby)."""
+    from bot.army.bunkers import BunkerDefense
+
+    sc = scene_basic()
+    sc.ai.army_advisor.enemy_likely_one_base = True
+    bunker = sc.own(U.BUNKER, (40.0, 40.0))
+    bunker._proto.cargo_space_max = 4
+    marine = sc.own(U.MARINE, (42.0, 40.0), role=UnitRole.ATTACKING)
+    # (no enemy unit anywhere on the map - nothing visible, nothing nearby)
+    ctx = _begin(sc)
+    bd = BunkerDefense(sc.ai)
+    bd.update(ctx, sc.world.units([marine]))
+    loads = [c for c in sc.ai.actions if c.unit.tag == bunker.tag and c.ability == AbilityId.LOAD_BUNKER]
+    check("bunker: a suspected one-base all-in crews the bunker even with nothing visible nearby",
+          loads and loads[0].target.tag == marine.tag, str(loads))
+
+
 def test_bunker_ignores_a_unit_too_far_away_to_call_in():
     """(control) a Marine well outside BUNKER_PICKUP_RANGE is not called in, even while the base is threatened."""
     from bot.army.bunkers import BunkerDefense
