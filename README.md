@@ -140,8 +140,9 @@ tests/offline/               checks that need no StarCraft II, see the end of th
 | `HARASSING` | Cyclones on a raid against Protoss (`units/cyclone_raid.py`) |
 | `SCOUTING` | a hidden-base sweep, protected from the rest of the army manager (`scouting.py`) |
 
-* **Basic Bunker management** (`macro.py`'s `build_bunkers`, `army/bunkers.py`'s `BunkerDefense`): one Bunker each at our closest
-  two bases to home (main and natural - never a third, however many bases we take), needing only a Barracks. Unlike a missile
+* **Basic Bunker management** (`macro.py`'s `build_bunkers`, `army/bunkers.py`'s `BunkerDefense`): one Bunker at every base
+  EXCEPT the main - never at the spawn itself, only from the second base onwards, with no cap on how many further bases get
+  one - needing only a Barracks. Unlike a missile
   turret it is built in FRONT of the townhall - the open side, away from the mineral line (`smart_build_in_front_of_base`: the
   mineral-field average reflected through the townhall, so it stands roughly where it can actually block an approach, not
   tucked away safely with the workers). It stands empty until its base is under ground threat (`worker_micro.base_is_threatened`,

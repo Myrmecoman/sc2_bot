@@ -202,7 +202,6 @@ BANK_MINERALS = 1000           # "piling up": this much unspent...
 BANK_GAS = 350                 # ...and this much gas, for the buildings that make gas units (a Factory, a Starport)
 END_GAME_SUPPLY = 100          # ...late in the game: at least this much supply used
 TURRET_BASE_RADIUS = 15.0      # a turret this close to a townhall belongs to its base
-BUNKER_BASES = 2               # only our closest-to-home bases (main, natural) get a Bunker - not every expansion
 # a mech-led army (army_advisor.mech_focus: against Protoss, whose units pick Marines up too easily) has the Factory for its core and a
 # smaller bio part: ONE Barracks for the first two bases (then Barracks, Factory, Starport, and a second Factory once a third base is up),
 # more Barracks only as the bases come
@@ -279,16 +278,18 @@ async def build_turrets(self : BotAI):
 
 
 async def build_bunkers(self : BotAI):
-    """One Bunker at each of our closest BUNKER_BASES bases to home (main and natural, normally) - needs only a
-    Barracks, built in front of the townhall (the open side, away from the mineral line - a Bunker needs to stand
-    where it can actually block an approach, not tucked away safely with the workers like a turret). Standing empty
-    most of the game; crewed reactively with nearby bio units once that base is under ground threat, or proactively
-    once a one-base all-in is suspected (BunkerDefense, army/bunkers.py - this only builds the shell)."""
+    """A Bunker at every base EXCEPT the main - never at the spawn itself, only from the second base onwards - needs
+    only a Barracks, built in front of the townhall (the open side, away from the mineral line - a Bunker needs to
+    stand where it can actually block an approach, not tucked away safely with the workers like a turret). Standing
+    empty most of the game; crewed reactively with nearby bio units once that base is under ground threat, or
+    proactively once a one-base all-in is suspected (BunkerDefense, army/bunkers.py - this only builds the shell)."""
     if self.townhalls.amount == 0 or self.tech_requirement_progress(UnitTypeId.BUNKER) < 1:
         return
     if self.already_pending(UnitTypeId.BUNKER) > 0 or not self.can_afford(UnitTypeId.BUNKER):
         return
-    bases = sorted(self.townhalls, key=lambda cc: cc.position.distance_to(self.start_location))[:BUNKER_BASES]
+    # [0] is always the main: it is the closest townhall to start_location by definition (it sits right on it) -
+    # every other base, however many there are, is a candidate; no cap, unlike turrets (never every expansion there)
+    bases = sorted(self.townhalls, key=lambda cc: cc.position.distance_to(self.start_location))[1:]
     for cc in bases:
         if self.bunker_backoff.get(cc.tag, 0.0) > self.time:
             continue

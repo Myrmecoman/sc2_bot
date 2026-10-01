@@ -288,12 +288,15 @@ def placement():
         mfs = bot.mineral_field.closer_than(10, cc)
         return mfs.amount, sum(m.position.x for m in mfs) / mfs.amount, sum(m.position.y for m in mfs) / mfs.amount
 
-    bot, actions = run(lambda g, cx, cy: None, minerals=300)
+    def with_natural(game, cx, cy):
+        more_bases(game, 1)                 # a Bunker is never built at the main (see bunkers()) - needs a natural
+        game.add_base_resources("our_nat")
+    bot, actions = run(with_natural, minerals=600, gas=300)
     bunker_cmd = next((a for a in actions if a.ability == A.TERRANBUILD_BUNKER), None)
     check("placement: (premise) a bunker is actually built this step", bunker_cmd is not None,
           str(sorted(a.ability.name for a in actions)))
     if bunker_cmd is not None:
-        cc = bot.townhalls.first
+        cc = bot.townhalls.furthest_to(bot.start_location)   # the natural, not the main
         n, mx, my = mineral_average(bot, cc)
         to_minerals = (mx - cc.position.x, my - cc.position.y)
         to_bunker = (bunker_cmd.target.x - cc.position.x, bunker_cmd.target.y - cc.position.y)
@@ -417,36 +420,44 @@ def mineral_banking():
 
 
 def bunkers():
-    """One Bunker each at our closest two bases to home (main, natural) - build_bunkers in macro.py. Needs only a
-    Barracks; never a third one, however many bases we have or how much money is sitting around."""
+    """A Bunker at every base EXCEPT the main - never at the spawn itself, only from the second base onwards, with
+    no cap on how many further bases get one (build_bunkers in macro.py). Needs only a Barracks."""
     Zerg = common_pb2.Zerg
 
     def names(done):
         return str(sorted(a.name for a in done))
 
-    done = play(lambda g, cx, cy: None, race=Zerg, minerals=200)
-    check("bunkers: one base, a Barracks up, enough minerals -> a Bunker is started",
-          A.TERRANBUILD_BUNKER in done, names(done))
-    done = play(lambda g, cx, cy: None, race=Zerg, minerals=50)
-    check("bunkers (control): not without enough minerals", A.TERRANBUILD_BUNKER not in done, names(done))
+    done = play(lambda g, cx, cy: None, race=Zerg, minerals=600)
+    check("bunkers: one base (the main) only -> no Bunker, however much money is sitting around",
+          A.TERRANBUILD_BUNKER not in done, names(done))
 
     def with_natural(game, cx, cy):
         more_bases(game, 1)                                               # our own natural
         game.add_base_resources("our_nat")                                 # smart_build_behind_mineral needs minerals
-        game.add(U.BUNKER, (cx + 2, cy + 2), 1)                            # the main already has one (close - not also
-    done = play(with_natural, race=Zerg, minerals=600, gas=300)            # within TURRET_BASE_RADIUS of the natural)
-                                                                            # (600: two bases also want a 2nd Barracks/Factory this step)
-    check("bunkers: the main already has one -> the natural gets one next",
+    done = play(with_natural, race=Zerg, minerals=600, gas=300)            # (600: two bases also want a 2nd Barracks/Factory this step)
+    check("bunkers: a natural exists -> it gets a Bunker (the main never does, so there is no other candidate)",
+          A.TERRANBUILD_BUNKER in done, names(done))
+    done = play(with_natural, race=Zerg, minerals=50)
+    check("bunkers (control): ...but not without enough minerals", A.TERRANBUILD_BUNKER not in done, names(done))
+
+    def with_third_base(game, cx, cy):
+        more_bases(game, 2)                                               # natural AND a third base
+        game.add_base_resources("our_nat")
+        nx, ny = BASES["our_nat"]
+        game.add(U.BUNKER, (nx + 2, ny + 2), 1)                           # the natural already has one
+    done = play(with_third_base, race=Zerg, minerals=2000)
+    check("bunkers: the natural already has one and a third base exists -> the third gets one too (no cap)",
           A.TERRANBUILD_BUNKER in done, names(done))
 
-    def both_bases_done(game, cx, cy):
-        more_bases(game, 3)                                               # natural AND a third base
+    def every_other_base_done(game, cx, cy):
+        more_bases(game, 2)                                               # natural AND a third base
         game.add_base_resources("our_nat")
-        game.add(U.BUNKER, (cx + 2, cy + 2), 1)                           # main
         nx, ny = BASES["our_nat"]
         game.add(U.BUNKER, (nx + 2, ny + 2), 1)                           # natural
-    done = play(both_bases_done, race=Zerg, minerals=2000)
-    check("bunkers: main and natural both have one -> no third, whatever the bank or the base count",
+        tx, ty = BASES["our_third"]
+        game.add(U.BUNKER, (tx + 2, ty + 2), 1)                           # third
+    done = play(every_other_base_done, race=Zerg, minerals=5000)
+    check("bunkers: every OTHER base already has one -> the main still never gets one, whatever the bank",
           A.TERRANBUILD_BUNKER not in done, names(done))
 
 
