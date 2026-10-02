@@ -242,8 +242,12 @@ def production_targets(self : BotAI) -> dict:
     targets = {UnitTypeId.STARPORT: starports, UnitTypeId.FACTORY: factories, UnitTypeId.BARRACKS: barracks}
 
     # minerals growing faster than we can spend them, at ANY point in the game (not just the late-game bank below) - one more
-    # Barracks (mineral-only production) is the most direct lever for using up extra mineral income specifically
-    if mineral_income_outpacing_spend(self):
+    # Barracks (mineral-only production) is the most direct lever for using up extra mineral income specifically. NOT while the
+    # scripted opening still has the natural's Command Center ahead of it: that bank is the CC's money (the script waits on the
+    # Barracks, then the Orbital, then on 400 minerals, so the minerals pile up on purpose), and an extra Barracks bought out of it
+    # put a 2nd Barracks up before the natural (the opening gives up on its own after BUILD_ORDER_TIMEOUT, so this cannot hold forever)
+    outpacing = mineral_income_outpacing_spend(self)            # (sampled every step either way: its window is ready when the opening is done)
+    if outpacing and UnitTypeId.COMMANDCENTER not in self.build_order:
         targets[UnitTypeId.BARRACKS] = max(targets[UnitTypeId.BARRACKS], have[UnitTypeId.BARRACKS] + 1)
 
     if self.supply_used >= END_GAME_SUPPLY and self.minerals >= BANK_MINERALS:

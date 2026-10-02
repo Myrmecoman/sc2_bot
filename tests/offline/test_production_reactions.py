@@ -425,7 +425,7 @@ def mineral_banking():
     via the `bank`/`caps` checks) - see custom_utils.mineral_income_outpacing_spend."""
     Zerg = common_pb2.Zerg
 
-    def play_growing(start_minerals, step_minerals, steps, step_seconds=15.0, barracks=1):
+    def play_growing(start_minerals, step_minerals, steps, step_seconds=15.0, barracks=1, build_order=()):
         logger.remove()
         errors = []
         logger.add(lambda m: errors.append(str(m)) if m.record["level"].no >= 40 else None, colorize=False)
@@ -436,7 +436,7 @@ def mineral_banking():
         bot = SmoothBrainBot()
         loop = asyncio.new_event_loop()
         client, proto_gi = loop.run_until_complete(start_game(game, bot))
-        bot.build_order = []
+        bot.build_order = list(build_order)
         done = set()
         for i in range(steps):
             game.minerals = start_minerals + step_minerals * i
@@ -462,6 +462,15 @@ def mineral_banking():
     # growing just as fast, but for too short a time (one step) to trust the average yet
     bot, done = play_growing(start_minerals=500, step_minerals=60, steps=1)
     check("mineral banking (control): not enough history yet to call it banking", A.TERRANBUILD_BARRACKS not in done, names(done))
+
+    # the opening's natural: 300 -> 380 over three 15s steps is 160/min (past the 150 rate) while staying under the 400 the scripted
+    # Command Center costs - the bank is that CC's money, not spare, so no extra Barracks may be bought out of it
+    bot, done = play_growing(start_minerals=300, step_minerals=40, steps=3, build_order=[U.COMMANDCENTER])
+    check("mineral banking: while the scripted opening still has the natural's Command Center ahead, the bank is its money - no 2nd Barracks",
+          A.TERRANBUILD_BARRACKS not in done and A.TERRANBUILD_COMMANDCENTER not in done, names(done))
+    bot, done = play_growing(start_minerals=300, step_minerals=40, steps=3)
+    check("mineral banking (control): the very same bank with the opening done (nothing scripted left) does call for one",
+          A.TERRANBUILD_BARRACKS in done, names(done))
 
 
 def bunkers():

@@ -122,6 +122,9 @@ tests/offline/               checks that need no StarCraft II, see the end of th
   seconds is at least 150/min (with at least 300 currently unspent, so ordinary between-purchases noise does not count), production is
   not keeping up with income, whatever the reason - nothing affordable left to queue, every producer busy, a cap reached - so one more
   Barracks (mineral-only production, the most direct way to spend extra minerals specifically) is added, up to the same cap as above.
+  Not while the scripted opening (`bot.build_order`) still has the natural's Command Center ahead of it: that bank is the CC's money (the
+  script waits on the Barracks, the Orbital and then on 400 minerals, so the minerals pile up on purpose), and the extra Barracks bought
+  out of it was going up BEFORE the natural. The opening gives up on its own after `BUILD_ORDER_TIMEOUT`, so this cannot hold forever.
 * **Add-ons** (`addons.py`): every Barracks, Factory and Starport gets a Reactor or a Tech Lab (half of the Barracks a Reactor, a Tech Lab
   on `factory_techlab_ratio` of the Factories, the Starports a Tech Lab first - counted on the buildings themselves), and a building that
   cannot get one is dealt with instead of staying bare. New buildings are placed where the add-on fits (`find_production_spot` in
